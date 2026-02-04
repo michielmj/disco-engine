@@ -1,0 +1,38 @@
+from __future__ import annotations
+
+"""Envelope definitions for disco routing."""
+
+from dataclasses import dataclass, field
+from typing import Final, Any, Dict
+
+
+@dataclass(slots=True)
+class EventEnvelope:
+    """Container for event payloads destined for a simulation process."""
+
+    repid: str
+    sender_node: str
+    sender_simproc: str
+    target_node: str
+    target_simproc: str
+    epoch: float
+    data: any
+    headers: Dict[str, int | float| str | bool | None] = field(default_factory=dict)
+
+    kind: Final[str] = "event"
+
+
+@dataclass(slots=True)
+class PromiseEnvelope:
+    """Container for promise messages destined for a simulation process."""
+
+    repid: str
+    sender_node: str
+    sender_simproc: str
+    target_node: str
+    target_simproc: str
+    seqnr: int
+    epoch: float
+    num_events: int
+
+    kind: Final[str] = "promise"

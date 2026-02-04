@@ -1,0 +1,6 @@
+[project]
+name = "my-model"
+description = "A Disco simulation model."
+
+[project.entry-points."disco.models"]
+my_model = "plugin:model_package"
