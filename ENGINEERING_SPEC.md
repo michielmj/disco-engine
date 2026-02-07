@@ -4169,10 +4169,6 @@ Client unit tests should focus on:
 
 Tests should use fakes for `Cluster` and `ExperimentStore` and avoid requiring a live ZooKeeper instance.
 
-
----
-# Appendices
-
 ## 16. Test Run
 
 ### 16.1 Purpose
@@ -4269,6 +4265,158 @@ Unlike the distributed Worker, `TestRun` does not attempt to recover:
 - threading/locking concerns
 
 Over time, the Worker should follow the same deterministic “node order” and per-node seed policy as `TestRun` so that a failing distributed run can be reproduced locally with minimal differences.
+
+## 17. Command line interface
+
+### 17.1 Goals
+
+The Disco CLI provides a stable and extensible command-line interface for operating Disco services and running control-plane
+actions (e.g. starting a server, queueing experiments, querying cluster state). The design goals are:
+
+- **Pydantic v2 compatible**: all CLI inputs are validated with `BaseModel.model_validate(...)`.
+- **Low dependency risk**: avoid third-party argparse/Pydantic glue that may lag behind Pydantic releases.
+- **Single source of truth**: CLI flags and help text are derived from the Pydantic command models.
+- **Extensible**: adding new subcommands (e.g. client actions) should be a small, local change.
+
+The CLI intentionally does **not** expose the full `AppSettings` surface as flags. Instead, runtime configuration comes from
+`get_settings(...)` (env, dotenv, secrets, config file, defaults), while the CLI focuses on top-level operational actions.
+
+---
+
+### 17.2 Entry points
+
+Disco exposes two primary CLI entry points:
+
+1. **Module entry point**: `python -m disco ...`
+   - Implemented in `src/disco/__main__.py`.
+   - Provides subcommands (e.g. `disco server ...`).
+
+2. **Console script**: `disco-server ...`
+   - Implemented in `src/disco/cli/server.py` (or a thin `server_entry.py` wrapper).
+   - Starts a Server directly with `ServerCommand`.
+
+The console script is registered via `pyproject.toml`:
+
+```
+[project.scripts]
+disco-server = "disco.cli.server:main"
+```
+
+---
+
+### 17.3 Command models
+
+Each subcommand is described by a Pydantic model. The model defines:
+
+- Field names → CLI flag names (snake_case → `--kebab-case`)
+- Types → parsing behavior and validation
+- Defaults/Optionals → required/optional flags
+- `Field(description=...)` → help text
+
+Example (simplified):
+
+```
+class ServerCommand(BaseModel):
+    group: str = Field(description="The group for the Server to run in.")
+    workers: Optional[int] = Field(None, description="Number of workers to start.")
+    ports: Optional[list[int]] = Field(None, description="Ports to run servers on.")
+    bind_host: Optional[IPvAnyAddress] = Field(None, description="Bind host.")
+    grace_s: Optional[int] = Field(None, description="Grace duration for shutdown.")
+    orchestrator: bool = Field(True, description="Disable orchestrator if false.")
+    config_file: Optional[str] = Field(None, description="Optional Disco config file (toml/yaml).")
+    loglevel: Optional[Literal["CRITICAL","ERROR","WARNING","INFO","DEBUG",...]] = Field(
+        None, description="Logging level override."
+    )
+```
+
+---
+
+### 17.4 Argparse generation from Pydantic models
+
+Disco uses the standard library `argparse` for argument parsing, but builds parsers **generically** from Pydantic model
+definitions using `disco.cli.argparse_model.add_model_to_parser(...)`.
+
+This function:
+
+- Iterates over `model.model_fields`.
+- Creates argparse arguments from annotations and defaults.
+- Uses `Field(description=...)` for `--help` text.
+- Parses values conservatively (strings for complex Pydantic types) and relies on `model_validate(...)` for final validation.
+
+Supported patterns:
+
+- `Optional[T]`: optional argument
+- `bool`: `--flag` / `--no-flag` via `BooleanOptionalAction`
+- `list[T]`: space-separated values via `nargs="*"`
+- `Literal[...]`: `choices=...` in argparse (plus Pydantic validation)
+- Pydantic types (e.g. `IPvAnyAddress`): parsed as `str`, validated by Pydantic
+
+Parsing flow:
+
+1. `argparse` parses CLI → produces a namespace.
+2. `vars(namespace)` is validated by Pydantic: `CommandModel.model_validate(vars(ns))`.
+3. The validated model is passed to the command handler.
+
+This approach keeps CLI behavior aligned with command model changes, while maintaining compatibility with Pydantic v2.
+
+---
+
+### 17.5 Server command
+
+The `server` command wires CLI inputs into the `Server` supervisor:
+
+- Settings are loaded through `get_settings(config_file=..., **overrides)`.
+- CLI log level (if provided) is applied as a settings override, preserving the settings precedence rules.
+- The Server is created and started:
+
+```
+server = Server(
+    settings=settings,
+    workers=command.workers,
+    ports=command.ports,
+    bind_host=str(command.bind_host) if command.bind_host is not None else None,
+    group=command.group,
+    grace_s=command.grace_s,
+    orchestrator=command.orchestrator,
+)
+server.start()
+```
+
+The Server itself is responsible for Kubernetes-friendly process supervision and for configuring multi-process logging in the
+parent process (see Chapter 13).
+
+---
+
+### 17.6 Extending the CLI
+
+To add a new CLI action (e.g. client operations such as queueing experiments):
+
+1. Create a new Pydantic command model, e.g. `QueueCommand`.
+2. Implement a handler function `handle_queue(command: QueueCommand)`.
+3. Register a new subparser in `disco.__main__.py` (or a dedicated `cli/main.py` if introduced later) using
+   `add_model_to_parser(sub.add_parser("queue"), QueueCommand)`.
+4. In `main()`, dispatch to `handle_queue(...)`.
+
+Because command models are responsible for help text and validation, extending the CLI typically requires only local,
+mechanical changes.
+
+---
+
+### 17.7 Testing
+
+CLI behavior is tested under `tests/cli/`:
+
+- `tests/cli/test_argparse_model.py` verifies parser generation from models:
+  required flags, list parsing, boolean toggles, Literal choices.
+- `tests/cli/test_cli_entrypoints.py` verifies entrypoints call the correct handlers for:
+  - `disco server ...`
+  - `disco-server ...`
+
+The CLI tests mock command handlers to avoid starting real worker processes or connecting to ZooKeeper.
+
+
+---
+# Appendices
 
 ## A. Naming conventions
 

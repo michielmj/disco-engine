@@ -20,7 +20,6 @@ dependencies = [
   "pandas~=2.3",
   "pydantic~=2.12",
   "pydantic-settings~=2.12",
-  "pydantic-argparse~=0.10",
   "kazoo~=2.10",
   "python-graphblas~=2025.2",
   "SQLAlchemy~=2.0",
@@ -118,3 +117,4 @@ check_untyped_defs = true
 
 [project.scripts]
 disco-server = "disco.cli.server:main"
+disco = "disco.__main__:main"

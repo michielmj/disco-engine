@@ -149,7 +149,7 @@ class GrpcSettings(BaseModel):
 class ZookeeperSettings(BaseModel):
     hosts: str = Field("localhost:2181", description="Comma-separated host:port pairs for Zookeeper ensemble.")
     chroot: str | None = Field(default=None, description="Optional chroot path, e.g. /disco.")
-    default_group: str = Field("default", description="Default logical group / namespace used in the app.")
+    default_group: str = Field("disco", description="Default logical group / namespace used in the app.")
     session_timeout_s: float = Field(10.0, description="Zookeeper session timeout in seconds.")
     connection_timeout_s: float = Field(5.0, description="Initial connection timeout in seconds.")
     max_retries: int = Field(5, description="Maximum number of retry attempts for failed operations.")
