@@ -114,3 +114,7 @@ module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = true
+
+[project.scripts]
+disco-server = "disco.cli.server:main"
+disco = "disco.__main__:main"

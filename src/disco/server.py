@@ -22,14 +22,27 @@ from multiprocessing import cpu_count
 from multiprocessing.process import BaseProcess
 from multiprocessing.queues import Queue as MPQueue
 from typing import Dict, List, Mapping, Optional, Sequence, Any
+import logging
+from tools import mp_logging
 
 from disco.cluster import Cluster
 from disco.config import AppSettings, ConfigError
 from disco.worker import Worker, WorkerState
 
+logger = mp_logging.getLogger(__name__)  # optional, but handy
+
 
 _SINGLETON_LOCK = threading.Lock()
 _SERVER_RUNNING = False
+
+
+def _parse_log_level(level: str) -> int:
+    mapping = logging.getLevelNamesMapping()
+    lvl = mapping.get(level.upper())
+    if isinstance(lvl, int):
+        return lvl
+    raise ConfigError(f"Invalid logging.level={level!r}. Expected one of: "
+                      f"{sorted({k for k,v in mapping.items() if isinstance(v,int) and isinstance(k,str)})}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,8 +174,14 @@ def _worker_main(
     settings: AppSettings,
     group: Optional[str],
     name: Optional[str],
+    log_queue: Any,
 ) -> None:
     """Worker process entrypoint (must create its own Cluster client)."""
+    mp_logging.configure_worker(log_queue)  # ✅ worker-side queue handler
+
+    wlog = mp_logging.getLogger(__name__)
+    wlog.info("Worker starting: %s", address)
+
     with Cluster.make_cluster(zookeeper_settings=settings.zookeeper, group=group) as cluster:
         worker = Worker(
             address=address,
@@ -174,10 +193,16 @@ def _worker_main(
         )
         worker.run_forever()
 
+    wlog.info("Worker exiting: %s", address)
 
-def _orchestrator_process_entry(stop_event: Any) -> None:
+
+def _orchestrator_process_entry(stop_event: Any, log_queue: Any) -> None:
     """Placeholder orchestrator: start, wait for stop_event, exit cleanly."""
+    mp_logging.configure_worker(log_queue)
+    olog = mp_logging.getLogger(__name__)
+    olog.info("Orchestrator placeholder started")
     stop_event.wait()
+    olog.info("Orchestrator placeholder exiting")
 
 
 def _force_kill(proc: BaseProcess) -> None:
@@ -270,46 +295,55 @@ class Server:
             event_queues[spec.address] = ctx.Queue()
             promise_queues[spec.address] = ctx.Queue()
 
-        with Cluster.make_cluster(zookeeper_settings=self._settings.zookeeper, group=self._group) as cluster:
-            self._cluster = cluster
-            self._install_signal_handlers()
+        log_level = _parse_log_level(self._settings.logging.level)
+        with mp_logging.setup_logging(level=log_level) as log_cfg:
+            logger.info("Server starting with %d workers", len(self._worker_specs))
 
-            if self._start_orchestrator:
-                stop_event = ctx.Event()
-                self._orchestrator_stop = stop_event
-                self._orchestrator_proc = ctx.Process(
-                    name="orchestrator",
-                    target=_orchestrator_process_entry,
-                    args=(stop_event,),
-                    daemon=False,
-                )
-                self._orchestrator_proc.start()
+            with Cluster.make_cluster(zookeeper_settings=self._settings.zookeeper, group=self._group) as cluster:
+                self._cluster = cluster
+                self._install_signal_handlers()
 
-            for spec in self._worker_specs:
-                proc = ctx.Process(
-                    name=spec.name,
-                    target=_worker_main,
-                    args=(
-                        spec.address,
-                        event_queues,
-                        promise_queues,
-                        self._settings,
-                        self._group,
-                        spec.name,
-                    ),
-                    daemon=False,
-                )
-                proc.start()
-                self._worker_procs[spec.address] = proc
+                if self._start_orchestrator:
+                    stop_event = ctx.Event()
+                    self._orchestrator_stop = stop_event
+                    self._orchestrator_proc = ctx.Process(
+                        name="orchestrator",
+                        target=_orchestrator_process_entry,
+                        args=(stop_event, log_cfg.queue),  # ✅ pass queue
+                        daemon=False,
+                    )
+                    self._orchestrator_proc.start()
 
-            try:
-                self._join_workers_forever()
-            finally:
-                if self._orchestrator_stop is not None:
-                    self._orchestrator_stop.set()
-                if self._orchestrator_proc is not None:
-                    self._orchestrator_proc.join(timeout=5.0)
-                self._cluster = None
+                for spec in self._worker_specs:
+                    proc = ctx.Process(
+                        name=spec.name,
+                        target=_worker_main,
+                        args=(
+                            spec.address,
+                            event_queues,
+                            promise_queues,
+                            self._settings,
+                            self._group,
+                            spec.name,
+                            log_cfg.queue,  # ✅ pass queue
+                        ),
+                        daemon=False,
+                    )
+                    proc.start()
+                    self._worker_procs[spec.address] = proc
+
+                try:
+                    self._join_workers_forever()
+                finally:
+                    logger.info("Server stopping")
+
+                    if self._orchestrator_stop is not None:
+                        self._orchestrator_stop.set()
+                    if self._orchestrator_proc is not None:
+                        self._orchestrator_proc.join(timeout=5.0)
+                    self._cluster = None
+
+            logger.info("Server exited cleanly")
 
     def _install_signal_handlers(self) -> None:
         def handler(_signum: int, _frame: object) -> None:
