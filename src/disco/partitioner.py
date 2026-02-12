@@ -44,13 +44,14 @@ class SimplePartitioner:
             raise ValueError("Graph has no labels attached (graph.label_matrix is None)")
 
         # Validate NODE_TYPE label type
-        if NODE_TYPE not in self._graph.label_type_vectors:
-            raise KeyError(f"Label type {NODE_TYPE!r} not found in graph.label_type_vectors")
+
+        if NODE_TYPE not in self._graph.label_indices_by_type:
+            raise KeyError(f"Label type {NODE_TYPE !r} not found in graph.label_type_vectors")
 
         # Validate all distinct label types exist (per node type)
         for node_type, nts in self._spec.node_types.items():
             for lt in nts.distinct_nodes:
-                if lt not in self._graph.label_type_vectors:
+                if lt not in self._graph.label_indices_by_type:
                     raise KeyError(
                         f"Label type {lt!r} (distinct_nodes for node_type {node_type!r}) "
                         f"not found in graph.label_type_vectors"

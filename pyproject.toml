@@ -35,6 +35,7 @@ requires = [
   "pybind11>=2.11",
   "numpy>=2.0",
   "setuptools-scm>=8",
+  "psycopg2>=",
 ]
 build-backend = "scikit_build_core.build"
 
@@ -62,6 +63,7 @@ dev = [
   "pybind11-stubgen>=2.5",
   "twine>=5",
   "grpcio-tools>=1.60",
+  "psycopg[binary]>=3.3"
 ]
 
 [tool.pytest.ini_options]

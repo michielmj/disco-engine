@@ -39,7 +39,7 @@ class SimProcGraphData:
     graph: Graph
     node_table: Table
     edge_table: Table
-    layer_id: int
+    layer_idx: int
     node_mask: Optional[Vector]
 
     def outbound_edge_data(
@@ -56,7 +56,7 @@ class SimProcGraphData:
                 session=session,
                 edge_table=self.edge_table,
                 columns=columns,
-                layer_id=self.layer_id,
+                layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
             )
 
@@ -74,7 +74,7 @@ class SimProcGraphData:
                 session=session,
                 edge_table=self.edge_table,
                 columns=columns,
-                layer_id=self.layer_id,
+                layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
             )
 
@@ -83,7 +83,7 @@ class SimProcGraphData:
             return get_outbound_map(
                 graph=self.graph,
                 session=session,
-                layer_id=self.layer_id,
+                layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
             )
 
@@ -92,7 +92,7 @@ class SimProcGraphData:
             return get_inbound_map(
                 graph=self.graph,
                 session=session,
-                layer_id=self.layer_id,
+                layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
             )
 
@@ -106,7 +106,7 @@ class GraphData:
       - Session lifecycle (SessionManager)
       - node_table (from OrmBundle.node_tables via node_type)
       - edge table selection by simproc name (OrmBundle.edge_tables_by_simproc + default fallback)
-      - simproc_name -> layer_id mapping (from Model.spec.simprocs)
+      - simproc_name -> layer_idx mapping (from Model.spec.simprocs)
       - node assignment mask (partitioning.assignment_vector)
     """
     session_manager: SessionManager
@@ -179,7 +179,7 @@ class GraphData:
 
     def simproc(self, simproc_name: str) -> SimProcGraphData:
         try:
-            layer_id = self.layer_id_by_simproc[simproc_name]
+            layer_idx = self.layer_id_by_simproc[simproc_name]
         except KeyError as exc:
             raise KeyError(f"Unknown simproc {simproc_name!r} (not in model.spec.simprocs)") from exc
 
@@ -188,6 +188,6 @@ class GraphData:
             graph=self.graph,
             node_table=self.node_table,
             edge_table=self.edge_table_for(simproc_name),
-            layer_id=layer_id,
+            layer_idx=layer_idx,
             node_mask=self.node_mask,
         )

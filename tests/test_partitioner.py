@@ -7,8 +7,8 @@ from typing import Dict, List, Tuple
 import graphblas as gb
 import pytest
 
-from disco.graph.core import Graph
-from disco.partitioner import NODE_TYPE, SimplePartitioner
+from disco.graph import Graph
+from disco.partitioner import SimplePartitioner, NODE_TYPE
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,12 +81,13 @@ def _make_graph_two_node_types_same_region() -> Graph:
 
     label_matrix = gb.Matrix.from_coo(I, J, X, nrows=num_vertices, ncols=3, dtype=bool)
 
-    label_type_vectors: Dict[str, gb.Vector] = {
-        NODE_TYPE: _bool_vec_true_at(3, [0, 1]),
-        "region": _bool_vec_true_at(3, [2]),
-    }
+    # label_type_vectors: Dict[str, gb.Vector] = {
+    #     NODE_TYPE: _bool_vec_true_at(3, [0, 1]),
+    #     "region": _bool_vec_true_at(3, [2]),
+    # }
 
-    g.set_labels(label_matrix=label_matrix, label_meta=label_meta, label_type_vectors=label_type_vectors)
+    # g.set_labels(label_matrix=label_matrix, label_meta=label_meta, label_type_vectors=label_type_vectors)
+    g.set_labels(label_matrix=label_matrix, label_meta=label_meta)
     return g
 
 
@@ -158,8 +159,9 @@ def test_simple_partitioner_requires_label_types_in_graph() -> None:
     # Minimal labels with only region type vector (missing NODE_TYPE)
     label_meta = {0: ("region", "north")}
     label_matrix = gb.Matrix.from_coo([0], [0], [True], nrows=num_vertices, ncols=1, dtype=bool)
-    label_type_vectors = {"region": _bool_vec_true_at(1, [0])}
-    g.set_labels(label_matrix=label_matrix, label_meta=label_meta, label_type_vectors=label_type_vectors)
+    # label_type_vectors = {"region": _bool_vec_true_at(1, [0])}
+    # g.set_labels(label_matrix=label_matrix, label_meta=label_meta, label_type_vectors=label_type_vectors)
+    g.set_labels(label_matrix=label_matrix, label_meta=label_meta)
 
     model = _make_model_distinct_region_for_a_and_b()
 

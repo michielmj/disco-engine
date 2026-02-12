@@ -23,35 +23,155 @@ from .schema import (
 # Scenario management
 # ---------------------------------------------------------------------------
 
-
 def create_scenario(
-    session: Session,
-    scenario_id: str,
-    *,
-    base_scenario_id: Optional[str] = None,
-    description: Optional[str] = None,
+        session: Session,
+        scenario_id: str,
+        vertex_keys: np.ndarray,
+        *,
+        description: Optional[str] = None,
+        replace: bool = False,
+        chunk_size: int = 10_000,
 ) -> str:
     """
-    Insert a new scenario row into graph.scenarios and return its scenario_id.
+    Create a scenario and populate graph.vertices for it.
 
-    Assumes the graph.scenarios table has at least:
-        - scenario_id (str, primary or unique key)
-        - created_at (datetime)
-        - base_scenario_id (optional str, FK to scenarios.scenario_id)
-        - description (optional str)
+    Parameters
+    ----------
+    session:
+        SQLAlchemy ORM Session.
+    scenario_id:
+        External scenario identifier (string). Used everywhere in the system.
+    vertex_keys:
+        1D NumPy array (or array-like) of vertex keys.
+        Position i corresponds to vertex index i (0..V-1).
+    description:
+        Optional human-readable description.
+    replace:
+        Flag prompting the scenario to be deleted first if it already exists.
+    chunk_size:
+        Number of vertices to insert per batch into graph.vertices.
+
+    Returns
+    -------
+    str
+        The scenario_id that was created.
+
+    Notes
+    -----
+    - This function does NOT commit. The caller is responsible for committing
+      or rolling back on the session.
+    - Raises ValueError if the scenario already exists.
     """
-    now = datetime.utcnow()
 
+    # ------------------------------------------------------------------
+    # Uniqueness check
+    # ------------------------------------------------------------------
+    existing = session.execute(
+        select(scenarios.c.scenario_id).where(
+            scenarios.c.scenario_id == scenario_id
+        )
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        if replace:
+            delete_scenario(session, scenario_id)
+        else:
+            raise ValueError(f"Scenario {scenario_id!r} already exists in graph.scenarios")
+
+    # ------------------------------------------------------------------
+    # Insert scenario row
+    # ------------------------------------------------------------------
+    now = datetime.utcnow()
     session.execute(
         insert(scenarios).values(
             scenario_id=scenario_id,
             created_at=now,
-            base_scenario_id=base_scenario_id,
             description=description,
         )
     )
-    # We treat `scenario_id` (string) as the external identifier everywhere
+
+    # ------------------------------------------------------------------
+    # Insert vertices in chunks
+    # ------------------------------------------------------------------
+    keys_arr = np.asarray(vertex_keys)
+    if keys_arr.ndim != 1:
+        raise ValueError("vertex_keys must be a 1D array of keys")
+
+    num_vertices = int(keys_arr.shape[0])
+
+    if num_vertices == 0:
+        # No vertices to insert; nothing more to do
+        return scenario_id
+
+    for start in range(0, num_vertices, chunk_size):
+        end = min(start + chunk_size, num_vertices)
+        rows = [
+            {
+                "scenario_id": scenario_id,
+                "index": int(i),
+                "key": str(keys_arr[i]),
+            }
+            for i in range(start, end)
+        ]
+        session.execute(insert(vertices), rows)
+
     return scenario_id
+
+
+from sqlalchemy import delete
+from sqlalchemy.orm import Session
+
+from .schema import (
+    scenarios,
+    vertices,
+    edges,
+    labels,
+    vertex_labels,
+    vertex_masks,
+)
+
+
+def delete_scenario(session: Session, scenario_id: str) -> None:
+    """
+    Delete a scenario and all associated graph data from the database.
+
+    This removes, in order:
+
+      - graph.vertex_masks
+      - graph.vertex_labels
+      - graph.edges
+      - graph.labels
+      - graph.vertices
+      - graph.scenarios
+
+    for the given scenario_id.
+
+    Transaction boundaries (commit/rollback) are handled by the caller's
+    session management (e.g. SessionManager).
+    """
+    sid = str(scenario_id)
+
+    # Children that depend on vertices / labels / scenarios
+    session.execute(
+        delete(vertex_masks).where(vertex_masks.c.scenario_id == sid)
+    )
+    session.execute(
+        delete(vertex_labels).where(vertex_labels.c.scenario_id == sid)
+    )
+    session.execute(
+        delete(edges).where(edges.c.scenario_id == sid)
+    )
+    session.execute(
+        delete(labels).where(labels.c.scenario_id == sid)
+    )
+    session.execute(
+        delete(vertices).where(vertices.c.scenario_id == sid)
+    )
+
+    # Finally remove the scenario itself
+    session.execute(
+        delete(scenarios).where(scenarios.c.scenario_id == sid)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +206,6 @@ def _store_edges_for_scenario(session: Session, graph: Graph) -> None:
                 "source_idx": int(r),
                 "target_idx": int(c),
                 "weight": float(v),
-                "name": f"e_{layer_idx}_{int(r)}_{int(c)}",
             }
             for r, c, v in zip(rows, cols, vals)
         ]
@@ -163,22 +282,21 @@ def _store_labels_for_scenario(session: Session, graph: Graph) -> None:
 
 
 def store_graph(
-    session: Session,
-    graph: Graph,
-    *,
-    store_edges: bool = True,
-    store_labels: bool = True,
-    # store_node_types: bool = True,
+        session: Session,
+        graph: Graph,
+        *,
+        store_edges: bool = True,
+        store_labels: bool = True,
 ) -> None:
     """
     Persist the Graph structure into the graph schema.
 
-    - By default, stores edges, labels, and node types.
-    - Use store_edges / store_labels / store_node_types flags if you want to
-      control which parts are written.
+    - By default, stores edges and labels.
+    - Use store_edges / store_labels flags if you want to control which
+      parts are written.
 
-    NOTE: This does not manage vertices or scenarios; those should be created
-    separately (e.g. via create_scenario and inserts into graph.vertices).
+    NOTE: This does not manage scenarios; those should be created via
+    create_scenario (which also populates graph.vertices).
     """
     if store_edges:
         _store_edges_for_scenario(session, graph)
@@ -207,9 +325,9 @@ def _load_num_vertices(session: Session, scenario_id: str) -> int:
 
 
 def _load_edge_layers(
-    session: Session,
-    scenario_id: str,
-    num_vertices: int,
+        session: Session,
+        scenario_id: str,
+        num_vertices: int,
 ) -> Tuple[gb.Matrix, ...]:
     """
     Load edges for a scenario and build one GraphBLAS Matrix per layer.
@@ -262,7 +380,7 @@ def _load_edge_layers(
     num_layers = len(edge_layers)
     for idx in edge_layers:
         if idx < 0 or idx >= num_layers:
-            raise ValueError('Layer indices must be contiguous.')
+            raise ValueError("Layer indices must be contiguous.")
 
     layers = tuple(edge_layers[i] for i in range(num_layers))
 
@@ -270,22 +388,19 @@ def _load_edge_layers(
 
 
 def _load_labels_for_scenario(
-    session: Session,
-    scenario_id: str,
-    num_vertices: int,
-) -> tuple[Optional[gb.Matrix], Dict[int, tuple[str, str]], Dict[str, gb.Vector]]:
+        session: Session,
+        scenario_id: str,
+        num_vertices: int,
+) -> tuple[Optional[gb.Matrix], Dict[int, tuple[str, str]]]:
     """
     Load labels and vertex_labels for a scenario and build:
 
       - label_matrix: Matrix[BOOL] of shape (num_vertices, num_labels) or None
       - label_meta: label_index -> (label_type, label_value)
-      - label_type_vectors: label_type -> Vector[BOOL] over label ids
 
     Global label ids 0..num_labels-1 are assigned based on the order of rows
     in graph.labels (sorted by id for determinism).
     """
-    import graphblas as gb  # local import to avoid cycles
-
     # Fetch all labels for this scenario
     label_rows = session.execute(
         select(labels.c.id, labels.c.type, labels.c.value).where(
@@ -295,37 +410,20 @@ def _load_labels_for_scenario(
 
     if not label_rows:
         # No labels defined
-        return None, {}, {}
+        return None, {}
 
     # Sort by DB id to get a deterministic label index order
     label_rows_sorted = sorted(label_rows, key=lambda r: int(r[0]))
 
     label_id_to_index: Dict[int, int] = {}
     label_meta: Dict[int, tuple[str, str]] = {}
-    type_to_label_indices: Dict[str, list[int]] = {}
 
     for idx, (db_id, ltype, lvalue) in enumerate(label_rows_sorted):
         db_id_int = int(db_id)
         label_id_to_index[db_id_int] = idx
         label_meta[idx] = (str(ltype), str(lvalue))
-        type_to_label_indices.setdefault(str(ltype), []).append(idx)
 
     num_labels = len(label_rows_sorted)
-
-    # Build label_type_vectors: type -> Vector[BOOL] over label indices
-    label_type_vectors: Dict[str, gb.Vector] = {}
-    for ltype, indices in type_to_label_indices.items():
-        if not indices:
-            continue
-        idx_arr = np.asarray(indices, dtype=np.int64)
-        val_arr = np.ones(len(indices), dtype=bool)
-        vec = gb.Vector.from_coo(
-            idx_arr,
-            val_arr,
-            gb.dtypes.BOOL,
-            size=num_labels,
-        )
-        label_type_vectors[ltype] = vec
 
     # Fetch vertex-label assignments
     vl_rows = session.execute(
@@ -335,11 +433,19 @@ def _load_labels_for_scenario(
     ).all()
 
     if not vl_rows:
-        # No assignments; return empty matrix
-        label_matrix = gb.Matrix.sparse(
-            gb.dtypes.BOOL, num_vertices, num_labels
+        # No assignments; return empty matrix for the known labels
+        empty_rows = np.empty(0, dtype=np.int64)
+        empty_cols = np.empty(0, dtype=np.int64)
+        empty_vals = np.empty(0, dtype=bool)
+
+        label_matrix = gb.Matrix.from_coo(
+            empty_rows,
+            empty_cols,
+            empty_vals,
+            nrows=num_vertices,
+            ncols=num_labels,
         )
-        return label_matrix, label_meta, label_type_vectors
+        return label_matrix, label_meta
 
     v_indices: list[int] = []
     l_indices: list[int] = []
@@ -356,10 +462,18 @@ def _load_labels_for_scenario(
         l_indices.append(lidx)
 
     if not v_indices:
-        label_matrix = gb.Matrix.sparse(
-            gb.dtypes.BOOL, num_vertices, num_labels
+        empty_rows = np.empty(0, dtype=np.int64)
+        empty_cols = np.empty(0, dtype=np.int64)
+        empty_vals = np.empty(0, dtype=bool)
+
+        label_matrix = gb.Matrix.from_coo(
+            empty_rows,
+            empty_cols,
+            empty_vals,
+            nrows=num_vertices,
+            ncols=num_labels,
         )
-        return label_matrix, label_meta, label_type_vectors
+        return label_matrix, label_meta
 
     v_arr = np.asarray(v_indices, dtype=np.int64)
     l_arr = np.asarray(l_indices, dtype=np.int64)
@@ -373,12 +487,12 @@ def _load_labels_for_scenario(
         ncols=num_labels,
     )
 
-    return label_matrix, label_meta, label_type_vectors
+    return label_matrix, label_meta
 
 
 def load_graph_for_scenario(
-    session: Session,
-    scenario_id: str,
+        session: Session,
+        scenario_id: str,
 ) -> Graph:
     """
     Load the full Graph (edges + labels) for a scenario.
@@ -386,13 +500,11 @@ def load_graph_for_scenario(
     - Vertices: inferred from graph.vertices (max index + 1).
     - Edges: from graph.edges.
     - Labels: from graph.labels and graph.vertex_labels, assembled into
-      Graph.label_matrix, Graph.label_meta, and Graph.label_type_vectors.
-    - Node types: from graph.vertices.node_type, assembled into
-      Graph.node_type_matrix and Graph.node_type_meta.
+      Graph.label_matrix and Graph.label_meta.
     """
     num_vertices = _load_num_vertices(session, scenario_id)
     edge_layers = _load_edge_layers(session, scenario_id, num_vertices)
-    label_matrix, label_meta, label_type_vectors = _load_labels_for_scenario(
+    label_matrix, label_meta = _load_labels_for_scenario(
         session, scenario_id, num_vertices
     )
 
@@ -402,5 +514,4 @@ def load_graph_for_scenario(
         scenario_id=scenario_id,
         label_matrix=label_matrix,
         label_meta=label_meta,
-        label_type_vectors=label_type_vectors,
     )

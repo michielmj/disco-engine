@@ -1,12 +1,15 @@
 # src/disco/helpers/gb.py
 from __future__ import annotations
 
+import pickle
+from functools import lru_cache
+
 import numpy as np
-import graphblas as gb
+from graphblas import Vector, Matrix, dtypes, semiring, monoid, unary, op
 import math
 
 
-def vstack_rows_from_coo(rows: list[gb.Vector], *, ncols: int | None = None) -> gb.Matrix:
+def vstack_rows_from_coo(rows: list[Vector], *, ncols: int | None = None) -> Matrix:
     m = len(rows)
     if m == 0:
         raise ValueError("no rows")
@@ -27,10 +30,10 @@ def vstack_rows_from_coo(rows: list[gb.Vector], *, ncols: int | None = None) -> 
     C = np.concatenate(c_ix) if c_ix else np.array([], dtype=np.uint64)
     V = np.concatenate(vals) if vals else np.array([], dtype=dt.np_type)
 
-    return gb.Matrix.from_coo(R, C, V, nrows=m, ncols=n, dtype=dt)
+    return Matrix.from_coo(R, C, V, nrows=m, ncols=n, dtype=dt)
 
 
-def has_self_loop(M: gb.Matrix) -> bool:
+def has_self_loop(M: Matrix) -> bool:
     if M.nrows != M.ncols:
         raise ValueError("Adjacency matrix must be square")
     diag = M.diag()  # Vector over the diagonal entries
@@ -38,7 +41,7 @@ def has_self_loop(M: gb.Matrix) -> bool:
     return diag.nvals > 0
 
 
-def matrix_has_cycle(M: gb.Matrix) -> bool:
+def matrix_has_cycle(M: Matrix) -> bool:
     """
     Return True iff the directed graph represented by adjacency matrix M
     contains a directed cycle (including self-loops).
@@ -46,46 +49,82 @@ def matrix_has_cycle(M: gb.Matrix) -> bool:
     - M is n x n (square).
     - Any non-zero entry is treated as an edge (pattern-only).
     """
-    nrows, ncols = M.nrows, M.ncols
-    if nrows != ncols:
-        raise ValueError("Adjacency matrix must be square")
-
-    n = nrows
-    if n == 0:
+    try:
+        longest_path_length(M)
+    except ValueError:
+        return True
+    else:
         return False
 
-    # Work on a boolean pattern of M
-    if M.dtype == gb.dtypes.BOOL:
-        R = M.dup()
-    else:
-        # Make everything non-zero into True
-        rows, cols, _ = M.to_coo()
-        R = gb.Matrix.sparse(gb.dtypes.BOOL, n, n)
-        if len(rows):
-            R[rows, cols] = True
 
-    # Optional quick check: immediate self-loops
-    if R.diag().nvals > 0:
-        return True
+@lru_cache(6)
+def _longest_path_length(matrix_serialized: bytes) -> Vector:
+    matrix: Matrix = pickle.loads(matrix_serialized)
+    n = matrix.nrows
+    if matrix.ncols != n:
+        raise ValueError("matrix must be square")
 
-    # R will hold paths of length in [1, L]; we repeatedly expand to [1, 2L]
-    # using boolean semiring.
-    steps = math.ceil(math.log2(n)) if n > 1 else 0
+    # Keep only real edges; important if matrix was built from_dense (explicit zeros)
+    A = matrix.select("!=", 0).apply(unary.one).new(dtype=dtypes.INT64)
 
-    for _ in range(steps):
-        # If any vertex can reach itself via a path of length <= current L, we have a cycle
-        diag = R.diag()
-        if diag.nvals > 0:
-            return True
+    # sources = nodes with indegree 0
+    indeg = A.reduce_columnwise(monoid.plus).new(dtype=dtypes.INT64)
+    v = Vector(dtypes.INT64, size=n)
+    v(mask=~indeg.S) << 0  # only sources are reachable at length 0; others are "missing" (-inf)
 
-        # Expand to include paths of length up to 2*L:
-        # R := R OR (R * R) over boolean semiring
-        R_sq = R.mxm(R, semiring=gb.semiring.lor_land)
-        R = R.eadd(R_sq, semiring=gb.semiring.lor_lor)
+    # Relax up to n-1 times (DAG longest path has at most n-1 edges)
+    for _ in range(n - 1):
+        w = v.dup()
+        v(op.max) << semiring.max_plus(v @ A)
+        if v.isequal(w):
+            return v
 
-        # Small optimization: if matrix becomes empty, no longer any paths at all
-        if R.nvals == 0:
+    raise ValueError("No convergence in n-1 iterations; graph likely has a directed cycle.")
+
+
+def longest_path_length(matrix: Matrix) -> Vector:
+    """
+    Longest path length (number of edges) ending at each vertex in a DAG,
+    where paths may start at any source (indegree == 0).
+
+    matrix[i, j] != 0 means edge i -> j. Works for dense inputs (explicit zeros)
+    because we drop zeros first.
+    """
+
+    return _longest_path_length(pickle.dumps(matrix))
+
+
+@lru_cache(6)
+def _echelon_plus_times(ser: bytes) -> Vector:
+    v, M = pickle.loads(ser)
+
+    if M.nrows != M.ncols:
+        raise ValueError("M must be square")
+    if v.size != M.nrows:
+        raise ValueError("v must have size M.nrows")
+
+    A = M.select("!=", 0).new()
+
+    e = v.dup()
+    w = v.dup()
+
+    # In a DAG, series ends after at most n-1 steps
+    for _ in range(A.nrows - 1):
+        w = semiring.plus_times(w @ A).new()   # w = wA  (next-hop accumulated demand)
+        if w.nvals == 0:
             break
+        e(op.plus) << w                         # e += w
+    else:
+        # If we didn't terminate in n-1 steps, there's likely a cycle (or zeros stored as edges)
+        raise ValueError("No termination within n-1 iterations (cycle or stored zeros?)")
 
-    # Final check (in case n == 1 or loop didn't run)
-    return R.diag().nvals > 0
+    return e
+
+
+def echelon_plus_times(v: Vector, M: Matrix) -> Vector:
+    """
+    e = v + vM + vM^2 + ... (finite for a DAG)
+    Assumes plus_times over numeric types.
+    """
+
+    return _echelon_plus_times(pickle.dumps((v, M)))

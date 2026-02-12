@@ -1,3 +1,4 @@
+# src/disco/graph/schema.py
 from __future__ import annotations
 
 from sqlalchemy import (
@@ -10,7 +11,7 @@ from sqlalchemy import (
     Float,
     DateTime,
     ForeignKey,
-    text,
+    text, ForeignKeyConstraint,
 )
 from sqlalchemy.engine import Engine
 
@@ -21,7 +22,6 @@ scenarios = Table(
     metadata,
     Column("scenario_id", String, primary_key=True),
     Column("created_at", DateTime, nullable=False),
-    Column("base_scenario_id", Integer, ForeignKey("graph.scenarios.scenario_id"), nullable=True),
     Column("description", String, nullable=True),
 )
 
@@ -40,9 +40,19 @@ edges = Table(
     metadata,
     Column("scenario_id", String, ForeignKey("graph.scenarios.scenario_id"), primary_key=True),
     Column("layer_idx", Integer, primary_key=True),
-    Column("source_idx", BigInteger, ForeignKey("graph.vertices.index"), primary_key=True),
-    Column("target_idx", BigInteger, ForeignKey("graph.vertices.index"), primary_key=True),
+    Column("source_idx", BigInteger, primary_key=True),
+    Column("target_idx", BigInteger, primary_key=True),
     Column("weight", Float, nullable=False),
+    ForeignKeyConstraint(
+        ["scenario_id", "source_idx"],
+        ["graph.vertices.scenario_id", "graph.vertices.index"],
+        name="fk_edges_source_vertex",
+    ),
+    ForeignKeyConstraint(
+        ["scenario_id", "target_idx"],
+        ["graph.vertices.scenario_id", "graph.vertices.index"],
+        name="fk_edges_target_vertex",
+    ),
     schema="graph",
 )
 
@@ -59,18 +69,28 @@ vertex_labels = Table(
     "vertex_labels",
     metadata,
     Column("scenario_id", String, ForeignKey("graph.scenarios.scenario_id"), primary_key=True),
-    Column("vertex_index", BigInteger, ForeignKey("graph.vertices.index"), primary_key=True),
+    Column("vertex_index", BigInteger, primary_key=True),
     Column("label_id", Integer, ForeignKey("graph.labels.id"), primary_key=True),
+    ForeignKeyConstraint(
+        ["scenario_id", "vertex_index"],
+        ["graph.vertices.scenario_id", "graph.vertices.index"],
+        name="fk_vertex_labels_vertex",
+    ),
     schema="graph",
 )
 
 vertex_masks = Table(
     "vertex_masks",
     metadata,
-    Column("scenario_id", String, primary_key=True),
+    Column("scenario_id", String, ForeignKey("graph.scenarios.scenario_id"), primary_key=True),
     Column("mask_id", String(36), primary_key=True),  # UUID as string
-    Column("vertex_index", BigInteger, ForeignKey("graph.vertices.index"), primary_key=True),
+    Column("vertex_index", BigInteger, primary_key=True),
     Column("updated_at", DateTime, nullable=False),
+    ForeignKeyConstraint(
+        ["scenario_id", "vertex_index"],
+        ["graph.vertices.scenario_id", "graph.vertices.index"],
+        name="fk_vertex_masks_vertex",
+    ),
     schema="graph",
 )
 
