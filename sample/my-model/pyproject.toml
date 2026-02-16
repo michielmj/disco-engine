@@ -1,6 +1,12 @@
 [project]
 name = "my-model"
 description = "A Disco simulation model."
+dependencies = [
+    "numpy~=2.3",
+    "pandas~=2.3",
+    "python-graphblas~=2025.2",
+    "disco-toolbox>=0.0.2",
+]
 
 [project.entry-points."disco.models"]
 my_model = "plugin:model_package"
