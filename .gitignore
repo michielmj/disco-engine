@@ -222,3 +222,6 @@ tmp_segments/
 
 # local scripts not to include
 scripts/
+
+# local development environment
+/docker-compose.yaml

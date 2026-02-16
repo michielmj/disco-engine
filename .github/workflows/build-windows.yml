@@ -1,8 +1,6 @@
-name: Build
+name: Build Windows
 
 on:
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -12,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14, windows-latest]
+        os: [windows-latest]
 
     steps:
       - name: Check out release tag
