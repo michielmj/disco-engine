@@ -8,6 +8,7 @@ Layered graph + scenario subsystem.
 Public API (this subpackage):
 
 - Graph                  : core in-memory graph structure (layers, labels, mask).
+- GraphMask              : graph mask object.
 - create_graph_schema    : create the graph schema/tables in a database.
 - create_scenario        : insert/register a new scenario_id row.
 - store_graph            : persist a Graph's structure (edges + labels) to the DB.
@@ -48,9 +49,11 @@ from .extract import (
     get_outbound_edge_data,
     get_outbound_map,
 )
+from .graph_mask import GraphMask
 
 __all__ = [
     "Graph",
+    "GraphMask",
     "create_graph_schema",
     "create_scenario",
     "store_graph",
