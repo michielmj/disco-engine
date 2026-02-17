@@ -45,10 +45,9 @@ def create_zk_client(settings: ZookeeperSettings) -> KazooClient:
 
     client_kwargs: dict[str, Any] = dict(
         hosts=hosts,
-        timeout=settings.session_timeout_s,
         connection_retry=conn_retry,
         command_retry=cmd_retry,
-        connection_timeout=settings.connection_timeout_s,
+        timeout=settings.connection_timeout_s,
     )
 
     # TLS support (depending on Kazoo version)
