@@ -10,10 +10,11 @@ from sqlalchemy.sql.schema import Table
 
 from disco.database import SessionManager
 from disco.model import Model, OrmBundle
-from disco.partitioning import NodeInstanceSpec
+from disco.partitioning import Partitioning, NodeInstanceSpec
 
 from disco.graph import (
     Graph,
+    GraphMask,
     get_outbound_edge_data,
     get_inbound_edge_data,
     get_outbound_map,
@@ -107,18 +108,20 @@ class GraphData:
       - node_table (from OrmBundle.node_tables via node_type)
       - edge table selection by simproc name (OrmBundle.edge_tables_by_simproc + default fallback)
       - simproc_name -> layer_idx mapping (from Model.spec.simprocs)
-      - node assignment mask (partitioning.assignment_vector)
+      - node assignment mask (from partitioning.incidence)
     """
     session_manager: SessionManager
     graph: Graph
+    partitioning: Partitioning
     orm: OrmBundle
 
     node_name: str
+    node_index: int
     node_type: str
     node_table: Table
 
     layer_id_by_simproc: Mapping[str, int]
-    node_mask: Optional[Vector]
+    node_mask: Optional[GraphMask]
 
     @classmethod
     def for_node(
@@ -127,9 +130,21 @@ class GraphData:
         session_manager: SessionManager,
         graph: Graph,
         model: Model,
-        spec: NodeInstanceSpec,
-        node_mask: Optional[Vector] = None,
+        partitioning: Partitioning,
+        node_name: str,
     ) -> "GraphData":
+        
+        try:
+            node_index = partitioning.node_indices[node_name]    
+        except KeyError as exc:
+            raise KeyError(f"Partitioning.node_indices has no entry for node_name={node_name!r}") from exc
+        spec = partitioning.node_specs[node_index]
+        
+        if graph.scenario_id == '':
+            raise ValueError(f"Graph.scenario_id must be defined.")
+        
+        node_mask = GraphMask(vector=partitioning.incidence[node_index, :].new(), scenario_id=graph.scenario_id)
+        
         try:
             node_table = model.orm.node_tables[spec.node_type]
         except KeyError as exc:
@@ -140,8 +155,10 @@ class GraphData:
         return cls(
             session_manager=session_manager,
             graph=graph,
+            partitioning=partitioning,
             orm=model.orm,
             node_name=spec.node_name,
+            node_index=node_index,
             node_type=spec.node_type,
             node_table=node_table,
             layer_id_by_simproc=layer_id_by_simproc,
