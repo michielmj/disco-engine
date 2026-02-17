@@ -183,6 +183,14 @@ class GraphData:
                 mask=mask if mask is not None else self.node_mask,
             )
 
+    @property
+    def incidence_matrix(self):
+        return self.partitioning.incidence
+
+    @property
+    def node_specs(self):
+        return self.partitioning.node_specs
+
     # Expose node-specific ORM slice
     def edge_table_for(self, simproc_name: str) -> Table:
         t = self.orm.edge_tables_by_simproc.get(simproc_name)
