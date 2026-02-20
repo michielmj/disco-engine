@@ -146,7 +146,8 @@ class TestRun:
                 session_manager=self._session_manager,
                 graph=graph_view,
                 model=self._model,
-                spec=ns,
+                partitioning=self._partitioning,
+                node_name=ns.node_name
             )
 
             rt = NodeRuntime(
