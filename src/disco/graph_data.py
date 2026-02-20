@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence, Iterable
+from typing import Any, Mapping, Optional, Sequence, Iterable, Tuple, Generator
 
+import numpy as np
 from graphblas import Matrix, Vector
 from pandas import DataFrame
 from sqlalchemy.sql.elements import ColumnElement
@@ -216,3 +217,21 @@ class GraphData:
             layer_idx=layer_idx,
             node_mask=self.node_mask,
         )
+
+    def by_node(self, vector: Vector) -> Generator[Tuple[str, Vector], None, None]:
+        if vector.size != self.incidence_matrix.ncols:
+            raise ValueError('vector.size must equal incidence_matrix.ncols')
+        
+        A = (self.incidence_matrix * vector).new()
+        indptr, col_indices, values = A.to_csr()
+
+        nonempty_rows = np.flatnonzero(np.diff(indptr))
+        
+        for i in nonempty_rows:
+            start, end = indptr[i], indptr[i + 1]
+            row_vec = Vector.from_coo(
+                col_indices[start:end],
+                values[start:end],
+                size=A.ncols
+            )
+            yield self.node_specs[i].node_name, row_vec
