@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import Iterable, Any, Dict, Protocol
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Iterable, Any, Dict, Protocol, TYPE_CHECKING
+from numpy.random import Generator
 
 from data_logger import DataLogger
 
@@ -37,7 +38,7 @@ class NodeRuntimeLike(Protocol):
         raise NotImplementedError
 
     @property
-    def seed(self) -> int:
+    def rng(self) -> Generator:
         raise NotImplementedError
 
     @property
@@ -119,8 +120,8 @@ class Node(ABC):
         return self._runtime.active_simproc_name
 
     @property
-    def seed(self) -> int:
-        return self._runtime.seed
+    def rng(self) -> Generator:
+        return self._runtime.rng
 
     def graph(self) -> Graph:
         return self._runtime.graph

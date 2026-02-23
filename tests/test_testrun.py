@@ -228,7 +228,7 @@ def test_ctor_sets_status_loaded_and_picks_repid_from_experiment_replications(pa
     assert exp.status == ExperimentStatus.LOADED
     # Repid should be the first key by insertion order (dict preserves insertion order).
     # We verify via the created NodeRuntime repid.
-    assert list(tr._nodes.values())[0].repid == "repA"  # type: ignore[attr-defined]
+    assert list(tr.nodes.values())[0].repid == "repA"  # type: ignore[attr-defined]
 
 
 def test_ctor_uses_provided_model_without_calling_load_model(monkeypatch: pytest.MonkeyPatch, patch_testrun_deps):
@@ -315,7 +315,7 @@ def test_seeds_assigned_deterministically_by_node_specs_order(patch_testrun_deps
 
     # Compare via generated state (stable within a process; you said it needn't be stable across envs).
     for spec, exp_ss in zip(part.node_specs, expected):
-        rt = tr._nodes[spec.node_name]  # type: ignore[attr-defined]
+        rt = tr.nodes[spec.node_name]  # type: ignore[attr-defined]
         got_state = rt.seed_sequence.generate_state(8)
         exp_state = exp_ss.generate_state(8)
         assert (got_state == exp_state).all()
@@ -346,7 +346,7 @@ def test_initialize_calls_nodes_in_node_specs_order_and_sets_status_initialized(
     # Verify initialize called for each node exactly once and in node_specs order.
     init_order = []
     for name in ["b", "a", "c"]:
-        rt = tr._nodes[name]  # type: ignore[attr-defined]
+        rt = tr.nodes[name]  # type: ignore[attr-defined]
         assert len(rt.initialize_calls) == 1
         assert rt.initialize_calls[0] == {"p": 1, "q": 2}
         init_order.append(name)
@@ -376,12 +376,12 @@ def test_run_initializes_if_needed_sets_status_active_and_steps_until_all_stop(p
     assert exp.status == ExperimentStatus.ACTIVE
 
     # Each runtime got initialize exactly once
-    assert tr._nodes["n1"].initialize_calls == [{"p": 1}]  # type: ignore[attr-defined]
-    assert tr._nodes["n2"].initialize_calls == [{"p": 1}]  # type: ignore[attr-defined]
+    assert tr.nodes["n1"].initialize_calls == [{"p": 1}]  # type: ignore[attr-defined]
+    assert tr.nodes["n2"].initialize_calls == [{"p": 1}]  # type: ignore[attr-defined]
 
     # For duration=10.0, our fake runner yields once for each node then stops
-    assert tr._nodes["n1"].runner_calls == [10.0]  # type: ignore[attr-defined]
-    assert tr._nodes["n2"].runner_calls == [10.0]  # type: ignore[attr-defined]
+    assert tr.nodes["n1"].runner_calls == [10.0]  # type: ignore[attr-defined]
+    assert tr.nodes["n2"].runner_calls == [10.0]  # type: ignore[attr-defined]
 
 
 def test_run_can_be_called_multiple_times_earlier_duration_is_noop_later_duration_progresses(patch_testrun_deps):
@@ -400,19 +400,19 @@ def test_run_can_be_called_multiple_times_earlier_duration_is_noop_later_duratio
 
     # First run to 5.0 => each runner yields once
     tr.run(5.0)
-    assert tr._nodes["n1"].runner_calls == [5.0]  # type: ignore[attr-defined]
-    assert tr._nodes["n2"].runner_calls == [5.0]  # type: ignore[attr-defined]
+    assert tr.nodes["n1"].runner_calls == [5.0]  # type: ignore[attr-defined]
+    assert tr.nodes["n2"].runner_calls == [5.0]  # type: ignore[attr-defined]
 
     # Earlier horizon (3.0) => fake runner returns immediately
     tr.run(3.0)
-    assert tr._nodes["n1"].runner_calls == [5.0, 3.0]  # type: ignore[attr-defined]
-    assert tr._nodes["n2"].runner_calls == [5.0, 3.0]  # type: ignore[attr-defined]
+    assert tr.nodes["n1"].runner_calls == [5.0, 3.0]  # type: ignore[attr-defined]
+    assert tr.nodes["n2"].runner_calls == [5.0, 3.0]  # type: ignore[attr-defined]
 
     # Later horizon (8.0) => yields once again for each node
     tr.run(8.0)
-    assert tr._nodes["n1"].runner_calls == [5.0, 3.0, 8.0]  # type: ignore[attr-defined]
-    assert tr._nodes["n2"].runner_calls == [5.0, 3.0, 8.0]  # type: ignore[attr-defined]
+    assert tr.nodes["n1"].runner_calls == [5.0, 3.0, 8.0]  # type: ignore[attr-defined]
+    assert tr.nodes["n2"].runner_calls == [5.0, 3.0, 8.0]  # type: ignore[attr-defined]
 
     # initialize should still have happened once per node total
-    assert len(tr._nodes["n1"].initialize_calls) == 1  # type: ignore[attr-defined]
-    assert len(tr._nodes["n2"].initialize_calls) == 1  # type: ignore[attr-defined]
+    assert len(tr.nodes["n1"].initialize_calls) == 1  # type: ignore[attr-defined]
+    assert len(tr.nodes["n2"].initialize_calls) == 1  # type: ignore[attr-defined]

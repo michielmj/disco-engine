@@ -924,7 +924,8 @@ class Worker:
                     session_manager=self._session_manager,
                     graph=graph_view,
                     model=model,
-                    spec=spec,
+                    partitioning=self._partitioning,
+                    node_name=node_name,
                 )
 
                 rt = NodeRuntime(

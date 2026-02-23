@@ -13,5 +13,4 @@ node-types:
     distinct-nodes:
     - echelon
     - location
-    self-relations: [demand, supply]
-default-edge-data-table: edges_default
+    self-relations: [[demand, supply]]

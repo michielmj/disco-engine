@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence, Iterable, Tuple, Generator
+from typing import Any, Mapping, Optional, Sequence, Iterable, Tuple, Generator, Self
 
 import numpy as np
 from graphblas import Matrix, Vector
@@ -42,13 +42,13 @@ class SimProcGraphData:
     node_table: Table
     edge_table: Table
     layer_idx: int
-    node_mask: Optional[Vector]
+    node_mask: Optional[GraphMask]
 
     def outbound_edge_data(
         self,
         columns: Sequence[ColumnElement[Any]] | Sequence[str],
         *,
-        mask: Optional[Vector] = None,
+        mask: Optional[GraphMask] = None,
     ) -> DataFrame:
         columns = list(_normalize_column_elements(columns, self.edge_table))
 
@@ -66,7 +66,7 @@ class SimProcGraphData:
         self,
         columns: Sequence[ColumnElement[Any]],
         *,
-        mask: Optional[Vector] = None,
+        mask: Optional[GraphMask] = None,
     ) -> DataFrame:
         columns = list(_normalize_column_elements(columns, self.edge_table))
 
@@ -80,22 +80,24 @@ class SimProcGraphData:
                 mask=mask if mask is not None else self.node_mask,
             )
 
-    def outbound_map(self, *, mask: Optional[Vector] = None) -> Matrix:
+    def outbound_map(self, *, mask: Optional[GraphMask] = None, weights: Optional[str] = None) -> Matrix:
         with self.session_manager.session() as session:
             return get_outbound_map(
                 graph=self.graph,
                 session=session,
                 layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
+                weights=weights
             )
 
-    def inbound_map(self, *, mask: Optional[Vector] = None) -> Matrix:
+    def inbound_map(self, *, mask: Optional[GraphMask] = None, weights: Optional[str] = None) -> Matrix:
         with self.session_manager.session() as session:
             return get_inbound_map(
                 graph=self.graph,
                 session=session,
                 layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
+                weights=weights
             )
 
 
@@ -133,7 +135,7 @@ class GraphData:
         model: Model,
         partitioning: Partitioning,
         node_name: str,
-    ) -> "GraphData":
+    ) -> Self:
         
         try:
             node_index = partitioning.node_indices[node_name]    
@@ -185,12 +187,16 @@ class GraphData:
             )
 
     @property
-    def incidence_matrix(self):
+    def incidence_matrix(self) -> Matrix:
         return self.partitioning.incidence
 
     @property
-    def node_specs(self):
+    def node_specs(self) -> Tuple[NodeInstanceSpec, ...]:
         return self.partitioning.node_specs
+
+    @property
+    def num_vertices(self) -> int:
+        return self.graph.num_vertices
 
     # Expose node-specific ORM slice
     def edge_table_for(self, simproc_name: str) -> Table:
@@ -221,12 +227,12 @@ class GraphData:
     def by_node(self, vector: Vector) -> Generator[Tuple[str, Vector], None, None]:
         if vector.size != self.incidence_matrix.ncols:
             raise ValueError('vector.size must equal incidence_matrix.ncols')
-        
+
         A = (self.incidence_matrix * vector).new()
         indptr, col_indices, values = A.to_csr()
 
         nonempty_rows = np.flatnonzero(np.diff(indptr))
-        
+
         for i in nonempty_rows:
             start, end = indptr[i], indptr[i + 1]
             row_vec = Vector.from_coo(
