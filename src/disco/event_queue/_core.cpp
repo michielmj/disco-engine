@@ -93,12 +93,6 @@ PYBIND11_MODULE(_core, m) {
             })
 
         .def(
-            "pop_all",
-            [](disco::EventQueue& q) -> py::list {
-                return events_to_py_list(q.popAll());
-            })
-
-        .def(
             "promise",
             [](disco::EventQueue& q,
                const std::string& sender_node,

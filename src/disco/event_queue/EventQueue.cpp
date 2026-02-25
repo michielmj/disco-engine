@@ -337,46 +337,22 @@ std::vector<Event> EventQueue::pop() {
     for (auto& kvp : _predecessors) {
         const auto& key = kvp.first; // SenderKey
         auto& pred = kvp.second;
-        std::vector<PredecessorEvent> events = pred->pop();
 
-        for (auto& e : events) {
-            // Transfer ownership of the Python ref from PredecessorEvent -> Event.
-            PyObject* data = e.release_data();
-            result.emplace_back(
-                key.first,          // sender_node
-                key.second,         // sender_simproc,
-                e.epoch,
-                data,
-                std::move(e.headers),
-                owned_ref
-            );
-        }
-    }
+        if (pred->getEpoch() <= _epoch) {
+            std::vector<PredecessorEvent> events = pred->pop();
 
-    tryNextEpochUnlocked();
-    return result;
-}
-
-std::vector<Event> EventQueue::popAll() {
-    std::lock_guard<std::mutex> lock(_mtx);
-
-    std::vector<Event> result;
-
-    for (auto& kvp : _predecessors) {
-        const auto& key = kvp.first; // SenderKey
-        auto& pred = kvp.second;
-        std::vector<PredecessorEvent> events = pred->popAll();
-
-        for (auto& e : events) {
-            PyObject* data = e.release_data();
-            result.emplace_back(
-                key.first,          // sender_node
-                key.second,         // sender_simproc,
-                e.epoch,
-                data,
-                std::move(e.headers),
-                owned_ref
-            );
+            for (auto& e : events) {
+                // Transfer ownership of the Python ref from PredecessorEvent -> Event.
+                PyObject* data = e.release_data();
+                result.emplace_back(
+                    key.first,          // sender_node
+                    key.second,         // sender_simproc,
+                    e.epoch,
+                    data,
+                    std::move(e.headers),
+                    owned_ref
+                );
+            }
         }
     }
 

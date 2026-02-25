@@ -99,7 +99,12 @@ class FakeGraphData:
 
 class FakeGraphDataFactory:
     @staticmethod
-    def for_node(*, session_manager: object, graph: object, model: object, spec: object) -> FakeGraphData:
+    def for_node(*,
+                 session_manager: object,
+                 graph: object,
+                 model: object,
+                 partitioning: object,
+                 node_name: object) -> FakeGraphData:
         # Explicit signature; no getattr.
         return FakeGraphData()
 

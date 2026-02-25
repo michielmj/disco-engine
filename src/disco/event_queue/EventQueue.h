@@ -77,7 +77,6 @@ public:
               std::map<std::string, std::string>& headers);
 
     std::vector<Event> pop();
-    std::vector<Event> popAll();
 
     bool promise(const std::string& sender_node,
                  const std::string& sender_simproc,

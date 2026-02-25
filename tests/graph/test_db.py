@@ -15,7 +15,8 @@ from disco.graph import (
     create_scenario,
     store_graph,
     load_graph_for_scenario,
-    get_outbound_map,  # <-- free function that uses vertex_masks
+    get_outbound_map,
+    schema,
 )
 from disco.graph.schema import vertices as vertices_table
 from disco.graph.schema import edges as edges_table
@@ -298,7 +299,7 @@ def test_store_and_load_graph_with_labels_and_mask(
 
     # Use the free function from disco.graph now that Graph
     # no longer has DB methods on the instance.
-    mat_out = get_outbound_map(session, loaded, layer_idx=0)
+    mat_out = get_outbound_map(session, loaded, layer_idx=0, values=schema.edges.c.weight)
 
     # Expect only one edge: 1 -> 2 with weight 2.0
     rows, cols, vals_out = mat_out.to_coo()

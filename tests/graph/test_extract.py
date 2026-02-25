@@ -435,8 +435,8 @@ def test_outbound_and_inbound_map() -> None:
         layers = {0: (src, tgt, wgt)}
         graph = Graph.from_edges(layers, num_vertices=3, scenario_id=scenario_id)
 
-        out_mat = get_outbound_map(session, graph, layer_idx=0)
-        in_mat = get_inbound_map(session, graph, layer_idx=0)
+        out_mat = get_outbound_map(session, graph, layer_idx=0, values=edges.c.weight)
+        in_mat = get_inbound_map(session, graph, layer_idx=0, values=edges.c.weight)
 
         # Check basic structure: non-zero entries in the right places
         rows, cols, vals = out_mat.to_coo()

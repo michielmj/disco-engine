@@ -1,47 +1,46 @@
+# CMakeLists.txt
 cmake_minimum_required(VERSION 3.18)
-project(disco LANGUAGES CXX)
-
+project(disco LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Use modern FindPython. scikit-build-core sets Python_ROOT_DIR / Python_EXECUTABLE.
+# ── Shared toolchain setup ────────────────────────────────────────────────────
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
-find_package(pybind11 CONFIG REQUIRED)
 
-# ---- disco.event_queue._core ----
-
-set(DISCO_EVENT_QUEUE_SRC
-  src/disco/event_queue/_core.cpp
-  src/disco/event_queue/EventQueue.cpp
-  src/disco/event_queue/PredecessorEventQueue.cpp
+execute_process(
+    COMMAND "${Python_EXECUTABLE}" -c "import numpy; print(numpy.get_include())"
+    OUTPUT_VARIABLE NUMPY_INCLUDE_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _numpy_missing
 )
+if(_numpy_missing)
+    message(FATAL_ERROR "NumPy not found — add numpy to build-system.requires")
+endif()
+message(STATUS "NumPy include dir: ${NUMPY_INCLUDE_DIR}")
 
-pybind11_add_module(_core MODULE ${DISCO_EVENT_QUEUE_SRC})
+find_package(pybind11 CONFIG QUIET)
+if(NOT pybind11_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(pybind11
+        GIT_REPOSITORY https://github.com/pybind/pybind11.git
+        GIT_TAG v2.12.0
+    )
+    FetchContent_MakeAvailable(pybind11)
+endif()
 
-target_include_directories(_core PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/disco/event_queue
-)
+find_program(CYTHON_EXECUTABLE NAMES cython cython3 REQUIRED)
 
-# On macOS/Linux, pybind11_add_module already links the right Python bits.
-# If you find you need explicit linkage in some environments, prefer this:
-# target_link_libraries(_core PRIVATE Python::Module)
+find_package(OpenMP COMPONENTS C)
+if(OpenMP_C_FOUND)
+    message(STATUS "OpenMP found — Cython prange targets will be parallel")
+else()
+    message(WARNING "OpenMP not found — Cython targets will be single-threaded")
+endif()
 
-# Install the extension into the Python package directory.
-install(TARGETS _core
-  LIBRARY DESTINATION disco/event_queue
-  RUNTIME DESTINATION disco/event_queue
-  ARCHIVE DESTINATION disco/event_queue
-)
+# ── Shared macros ─────────────────────────────────────────────────────────────
+include(cmake/extension_helpers.cmake)
 
-# Install the stub alongside the extension.
-install(FILES
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/disco/event_queue/_core.pyi
-  DESTINATION disco/event_queue
-)
-
-# Mark the package as typed (PEP 561)
-install(FILES
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/disco/event_queue/py.typed
-  DESTINATION disco/event_queue
-)
+# ── Subpackages ───────────────────────────────────────────────────────────────
+add_subdirectory(src/disco/event_queue)
+# add_subdirectory(src/toolbox/future_package)   ← one line to add a new one

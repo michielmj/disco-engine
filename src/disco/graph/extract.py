@@ -486,7 +486,7 @@ def get_outbound_map(
         *,
         layer_idx: int,
         mask: Optional[GraphMask] = None,
-        weights: Optional[ColumnElement[NumericType]] = None,
+        values: Optional[ColumnElement[NumericType]] = None,
 ) -> gb.Matrix:
     """
     Return a GraphBLAS Matrix for outbound edges in a given layer,
@@ -503,15 +503,15 @@ def get_outbound_map(
     eff_mask: Optional[GraphMask] = mask if mask is not None else graph.graph_mask
 
     e = edges_table
-    if weights is None:
-        weights = literal(1.)
-    elif isinstance(weights, str):
-        weights = e.c[weights]
+    if values is None:
+        values = literal(1.)
+    else:
+        ...  # TODO
 
     base = select(
         e.c.source_idx.label("src"),
         e.c.target_idx.label("tgt"),
-        weights.label("val"),
+        values.label("val"),
     ).where(
         and_(
             e.c.scenario_id == literal(graph.scenario_id),
@@ -562,7 +562,7 @@ def get_inbound_map(
         *,
         layer_idx: int,
         mask: Optional[GraphMask] = None,
-        weights: Optional[ColumnElement[NumericType]] = None,
+        values: Optional[ColumnElement[NumericType]] = None,
 ) -> gb.Matrix:
     """
     Return a GraphBLAS Matrix for inbound edges in a given layer,
@@ -578,15 +578,15 @@ def get_inbound_map(
     eff_mask: Optional[GraphMask] = mask if mask is not None else graph.graph_mask
 
     e = edges_table
-    if weights is None:
-        weights = literal(1.)
-    elif isinstance(weights, str):
-        weights = e.c[weights]
+    if values is None:
+        values = literal(1.)
+    else:
+        ...  # TODO
 
     base = select(
         e.c.source_idx.label("src"),
         e.c.target_idx.label("tgt"),
-        weights.label("val"),
+        values.label("val"),
     ).where(
         and_(
             e.c.scenario_id == literal(graph.scenario_id),

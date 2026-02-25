@@ -97,7 +97,7 @@ class SimProcGraphData:
                 session=session,
                 layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
-                weights=weights
+                values=weights
             )
 
 
