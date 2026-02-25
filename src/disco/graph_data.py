@@ -24,15 +24,22 @@ from disco.graph import (
 )
 
 
+def _normalize_column_element(
+        column: ColumnElement[Any] | str,
+        orm_table: Table
+) -> ColumnElement:
+    if isinstance(column, str):
+        return orm_table.columns[column]
+    else:
+        return orm_table.columns[column.name]
+
+
 def _normalize_column_elements(
         columns: Sequence[ColumnElement[Any]] | Sequence[str],
         orm_table: Table
 ) -> Iterable[ColumnElement]:
     for c in columns:
-        if isinstance(c, str):
-            yield orm_table.columns[c]
-        else:
-            yield orm_table.columns[c.name]
+        yield _normalize_column_element(c, orm_table)
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,24 +87,30 @@ class SimProcGraphData:
                 mask=mask if mask is not None else self.node_mask,
             )
 
-    def outbound_map(self, *, mask: Optional[GraphMask] = None, weights: Optional[str] = None) -> Matrix:
+    def outbound_map(self, *, mask: Optional[GraphMask] = None, values: Optional[ColumnElement | str] = None) -> Matrix:
+        if values is not None:
+            values = _normalize_column_element(values, self.edge_table)
+
         with self.session_manager.session() as session:
             return get_outbound_map(
                 graph=self.graph,
                 session=session,
                 layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
-                weights=weights
+                values=values
             )
 
-    def inbound_map(self, *, mask: Optional[GraphMask] = None, weights: Optional[str] = None) -> Matrix:
+    def inbound_map(self, *, mask: Optional[GraphMask] = None, values: Optional[ColumnElement | str] = None) -> Matrix:
+        if values is not None:
+            values = _normalize_column_element(values, self.edge_table)
+
         with self.session_manager.session() as session:
             return get_inbound_map(
                 graph=self.graph,
                 session=session,
                 layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
-                values=weights
+                values=values
             )
 
 
