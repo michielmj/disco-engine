@@ -2,6 +2,7 @@
 #include <map>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <pybind11/pybind11.h>
@@ -13,12 +14,54 @@ namespace py = pybind11;
 
 namespace {
 
+// Convert a Python dict {str: str|bool|int|float} -> disco::Headers.
+// bool must be checked before int: in Python, bool is a subclass of int,
+// so py::isinstance<py::bool_> must come first to avoid storing True/False as long long.
+disco::Headers headers_from_py(const py::object& headers_obj) {
+    disco::Headers headers;
+    if (headers_obj.is_none()) return headers;
+
+    for (auto& item : headers_obj.cast<py::dict>()) {
+        std::string key = item.first.cast<std::string>();
+        py::object val = py::reinterpret_borrow<py::object>(item.second);
+
+        if (py::isinstance<py::bool_>(val)) {
+            headers[key] = val.cast<bool>();
+        } else if (py::isinstance<py::int_>(val)) {
+            headers[key] = val.cast<long long>();
+        } else if (py::isinstance<py::float_>(val)) {
+            headers[key] = val.cast<double>();
+        } else if (py::isinstance<py::str>(val)) {
+            headers[key] = val.cast<std::string>();
+        } else {
+            throw std::runtime_error(
+                "Header values must be str, bool, int, or float; got: " +
+                val.attr("__class__").attr("__name__").cast<std::string>()
+            );
+        }
+    }
+    return headers;
+}
+
+// Convert disco::Headers -> Python dict, preserving the concrete Python type
+// for each variant alternative.
+py::dict headers_to_py(const disco::Headers& headers) {
+    py::dict out;
+    for (const auto& kvp : headers) {
+        py::object val = std::visit([](const auto& v) -> py::object {
+            return py::cast(v);
+        }, kvp.second);
+        out[py::str(kvp.first)] = std::move(val);
+    }
+    return out;
+}
+
 py::list events_to_py_list(std::vector<disco::Event>&& events) {
     py::list out;
     for (auto& ev : events) {
         // Transfer ownership of the owned PyObject* reference from C++ to Python.
         py::object data = py::reinterpret_steal<py::object>(ev.release_data());
-        py::dict headers = py::cast(std::move(ev.headers));
+        py::dict headers = headers_to_py(ev.headers);
 
         // Flat 5-tuple: (sender_node, sender_simproc, epoch, data, headers)
         out.append(py::make_tuple(
@@ -72,10 +115,7 @@ PYBIND11_MODULE(_core, m) {
                double epoch,
                py::object data,
                py::object headers_obj) -> bool {
-                std::map<std::string, std::string> headers;
-                if (!headers_obj.is_none()) {
-                    headers = headers_obj.cast<std::map<std::string, std::string>>();
-                }
+                disco::Headers headers = headers_from_py(headers_obj);
 
                 // Core queue will INCREF the borrowed PyObject* internally (RAII).
                 return q.push(sender_node, sender_simproc, epoch, data.ptr(), headers);

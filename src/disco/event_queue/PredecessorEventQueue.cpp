@@ -50,7 +50,7 @@ PredecessorEvent::PredecessorEvent() noexcept : epoch(0.0), data(nullptr), heade
 
 PredecessorEvent::PredecessorEvent(double epoch_,
                                    PyObject* data_,
-                                   std::map<std::string, std::string> headers_)
+                                   Headers headers_)
     : epoch(epoch_), data(data_), headers(std::move(headers_)) {
     // data_ is BORROWED -> take our own reference
     incref(data);
@@ -112,7 +112,7 @@ PredecessorEventQueue::PredecessorEventQueue()
       _next_epoch(NAN),
       _seqnr(0UL) {}
 
-bool PredecessorEventQueue::push(double epoch, PyObject* data, std::map<std::string, std::string>& headers) {
+bool PredecessorEventQueue::push(double epoch, PyObject* data, Headers& headers) {
     std::lock_guard<std::mutex> lock(_mtx);
 
     if (epoch <= _epoch) {

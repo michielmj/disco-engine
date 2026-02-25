@@ -64,7 +64,7 @@ Event::Event(std::string sender_node_,
              std::string sender_simproc_,
              double epoch_,
              PyObject* data_,
-             std::map<std::string, std::string> headers_,
+             Headers headers_,
              BorrowedRefTag)
     : sender_node(std::move(sender_node_)),
       sender_simproc(std::move(sender_simproc_)),
@@ -78,7 +78,7 @@ Event::Event(std::string sender_node_,
              std::string sender_simproc_,
              double epoch_,
              PyObject* data_,
-             std::map<std::string, std::string> headers_,
+             Headers headers_,
              OwnedRefTag) noexcept
     : sender_node(std::move(sender_node_)),
       sender_simproc(std::move(sender_simproc_)),
@@ -288,7 +288,7 @@ bool EventQueue::push(const std::string& sender_node,
                       const std::string& sender_simproc,
                       double epoch,
                       PyObject* data,
-                      std::map<std::string, std::string>& headers) {
+                      Headers& headers) {
     std::lock_guard<std::mutex> lock(_mtx);
     SenderKey key = makeKey(sender_node, sender_simproc);
 

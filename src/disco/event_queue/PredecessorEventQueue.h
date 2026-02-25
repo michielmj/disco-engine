@@ -11,6 +11,7 @@
 #include <queue>
 #include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
 // Forward declare PyObject to avoid including Python.h in a public header.
@@ -19,17 +20,20 @@ using PyObject = _object;
 
 namespace disco {
 
+using HeaderValue = std::variant<std::string, bool, long long, double>;
+using Headers = std::map<std::string, HeaderValue>;
+
 struct PredecessorEvent {
     double epoch{};
     PyObject* data{nullptr};
-    std::map<std::string, std::string> headers{};
+    Headers headers{};
 
     PredecessorEvent() noexcept;
 
     // Construct from BORROWED PyObject* (will INCREF).
     PredecessorEvent(double epoch_,
                      PyObject* data_,
-                     std::map<std::string, std::string> headers_);
+                     Headers headers_);
 
     PredecessorEvent(const PredecessorEvent& other);
     PredecessorEvent& operator=(const PredecessorEvent& other);
@@ -52,7 +56,7 @@ class PredecessorEventQueue {
 public:
     PredecessorEventQueue();
 
-    bool push(double epoch, PyObject* data, std::map<std::string, std::string>& headers);
+    bool push(double epoch, PyObject* data, Headers& headers);
 
     std::vector<PredecessorEvent> pop();
 
