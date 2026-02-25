@@ -249,3 +249,5 @@ class TestRun:
                 active.pop(pos)
 
             finished_positions.clear()
+
+        self._dlogger.close()

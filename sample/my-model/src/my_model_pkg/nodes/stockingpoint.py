@@ -52,6 +52,11 @@ class StockingPoint(Node):
             gb.Vector.from_coo(ix.array, True, size=self.data.num_vertices)
         ) for lt, ix in lead_times.groupby('lead_time')['target_index']]
 
+        # Statistics
+        self.dl_inv_pos = self.dlogger.register_periodic_stream({
+            'node': self.name
+        }, epoch_scale=1e-3, value_scale=1e-6,)
+
     def on_events(self, simproc: str, events: Iterable[Event]) -> None:
         if self.active_simproc_name == "demand":
             self.handle_demand_events(events)
@@ -60,7 +65,7 @@ class StockingPoint(Node):
 
     def handle_demand_events(self, events: Iterable[Event]):
         for event in events:
-            assert event.data is gb.Vector
+            assert isinstance(event.data, gb.Vector)
             arr = event.data[self.ixs].to_dense(0.)
             key = pickle.dumps(event.headers.get("delivery_node_idx"))
             self.orderbook.append(key=key, arr=arr)
@@ -100,6 +105,8 @@ class StockingPoint(Node):
                         epoch=self.epoch + lt,
                         data=lt_delivery
                     )
+
+        self.dl_inv_pos.record(self.epoch, self.ixs, self.inv_oh)
 
     def place_orders(self):
         sample = sample_dists(
