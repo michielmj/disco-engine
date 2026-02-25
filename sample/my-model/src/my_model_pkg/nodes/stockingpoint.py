@@ -1,4 +1,5 @@
 import pickle
+import numpy as np
 from typing import Iterable
 
 from tools.mp_logging import getLogger
@@ -31,20 +32,25 @@ class StockingPoint(Node):
 
         data = self.data.vertex_data(columns=['ip_target', 'dem_dist', 'dem_params'])
         self.ixs = data.index.array
-        self.target_ip = data['ip_target'].fillna(0).array
+
+        # Stock data
+        self.target_ip = np.asarray(data['ip_target'].fillna(0).array)
         self.inv_oh = self.target_ip.copy()
 
-        self.demand_dists = get_dists(data, 'dem_dist', 'dem_params')
-
+        # Demand data
         self.orderbook = Orderbook()
-        self.outbound = self.data.simproc('supply').outbound_map()
-        lead_times = self.data.simproc('supply').outbound_edge_data(columns=['lt_mean'])
+        self.demand_dists = get_dists(data, 'dem_dist', 'dem_params')
+        self.demand_map = self.data.simproc('demand').outbound_map()
+        self.next_order = 0.
+
+        # Supply data
+        self.supply_map = self.data.simproc('supply').outbound_map()
+        lead_times = self.data.simproc('supply').outbound_edge_data(columns=['lead_time'])
         lead_times = lead_times.reset_index('target_index', drop=False)
         self.lead_times = [(
             lt,
             gb.Vector.from_coo(ix.array, True, size=self.data.num_vertices)
-        ) for lt, ix in lead_times.groupby('lt_mean')['target_index']]
-
+        ) for lt, ix in lead_times.groupby('lead_time')['target_index']]
 
     def on_events(self, simproc: str, events: Iterable[Event]) -> None:
         if self.active_simproc_name == "demand":
@@ -60,7 +66,10 @@ class StockingPoint(Node):
             self.orderbook.append(key=key, arr=arr)
 
         self.fulfill_demand()
-        self.place_orders()
+        if self.next_order >= self.epoch:
+            self.place_orders()
+            self.next_order += 1.
+            self.wakeup(self.next_order)
 
     def handle_supply_events(self, events: Iterable[Event]):
         for event in events:
@@ -80,7 +89,7 @@ class StockingPoint(Node):
                 arr,
                 size=self.data.num_vertices
             )
-            outbound = self.data.incidence_matrix[target_node_idx, :] * self.outbound
+            outbound = self.data.incidence_matrix[target_node_idx, :] * self.supply_map
             delivery = gb.op.plus_times(fulfillment @ outbound).select('!=', 0).new()
             for lt, mask in self.lead_times:
                 lt_delivery = delivery.dup(mask=mask)
@@ -96,9 +105,19 @@ class StockingPoint(Node):
         sample = sample_dists(
             rng=self.rng,
             dists=self.demand_dists,
+            sample_indices=self.ixs,
+            num_vertices=self.data.num_vertices,
             lower=0
         )
 
-
-
-
+        order_qty = gb.op.plus_times(sample @ self.demand_map)
+        for node, order in self.data.by_node(order_qty):
+            self.send_event(
+                target_node=node,
+                target_simproc='demand',
+                epoch=self.epoch,
+                data=order,
+                headers={
+                    "delivery_node_idx": self.data.node_index
+                }
+            )

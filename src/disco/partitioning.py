@@ -451,8 +451,8 @@ class Partitioning:
             simproc_name = simproc_names_by_order[layer_idx]
             M = graph.get_matrix(layer_idx)
 
-            tmp = gb.semiring.any_pair(incidence @ M).new()   # (n_nodes x n_vertices)
-            R = gb.semiring.any_pair(tmp @ incidence.T).new()  # (n_nodes x n_nodes)
+            Q = gb.op.plus_times(incidence @ M)
+            R = gb.op.plus_times(Q @ incidence.T).select("!=", 0)
 
             r_rows, r_cols, _ = R.to_coo()
             for rr, cc in zip(r_rows.tolist(), r_cols.tolist()):

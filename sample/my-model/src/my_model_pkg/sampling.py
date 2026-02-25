@@ -8,21 +8,28 @@ from scipy.stats import distributions as scipy_dists
 def sample_dists(
         rng: Generator,
         dists: list[tuple[any, np.ndarray]],  # distribution, indices
-        sample_indices: np.ndarray = None,
+        sample_indices: np.ndarray,
+        num_vertices: int,
         round_values: bool = False,
         lower: float = -float("inf"),
         upper: float = float("inf"),
 ) -> Vector:
-    sample = Vector.from_coo(indices=sample_indices, values=np.zeros_like(sample_indices, dtype=np.dtypes.Float64DType))
+    sample = Vector.from_coo(
+        indices=sample_indices,
+        values=np.zeros_like(sample_indices, dtype=np.dtypes.Float64DType),
+        size=num_vertices
+    )
 
     for dist, indices, params in dists:
         if sample_indices is None:
             needed = indices
+            ixs = np.arange(indices.shape[0])
         else:
             needed = np.intersect1d(indices, sample_indices)
+            ixs = np.searchsorted(indices, needed)
 
         if needed.shape[0] != 0:
-            needed_params = params[:, needed]
+            needed_params = params[:, ixs]
 
             values = dist.rvs(*needed_params, random_state=rng)
             values = np.asarray(values)
@@ -35,7 +42,7 @@ def sample_dists(
             values[values < lower] = lower
             values[values > upper] = upper
 
-            sample(op.plus) << Vector.from_coo(indices=needed, values=values)
+            sample(op.plus) << Vector.from_coo(indices=needed, values=values, size=num_vertices)
 
     return sample.select('!=', 0).new()
 

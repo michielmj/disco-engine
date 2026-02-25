@@ -20,7 +20,6 @@ demand_data = Table(
     Column("scenario_id", String, nullable=False),
     Column("source_key", String, nullable=False),
     Column("target_key", String, nullable=False),
-    Column("lead_time", Float, nullable=False),
 )
 
 supply_data = Table(
@@ -29,9 +28,7 @@ supply_data = Table(
     Column("scenario_id", String, nullable=False),
     Column("source_key", String, nullable=False),
     Column("target_key", String, nullable=False),
-    Column("lt_mean", Float, nullable=False),
-    Column("lt_var", Float, nullable=False),
-    # ...
+    Column("lead_time", Float, nullable=False),
 )
 
 

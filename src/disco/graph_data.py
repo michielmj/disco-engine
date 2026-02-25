@@ -241,7 +241,7 @@ class GraphData:
         if vector.size != self.incidence_matrix.ncols:
             raise ValueError('vector.size must equal incidence_matrix.ncols')
 
-        A = (self.incidence_matrix * vector).new()
+        A = (self.incidence_matrix * vector).select('!=', 0).new()
         indptr, col_indices, values = A.to_csr()
 
         nonempty_rows = np.flatnonzero(np.diff(indptr))
