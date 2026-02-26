@@ -247,7 +247,7 @@ class Graph:
     # ------------------------------ #
 
     @property
-    def label_indices_by_type(self) -> Dict[str, np.ndarray]:
+    def label_indices_by_type(self) -> Mapping[str, np.ndarray]:
         return MappingProxyType(self._label_indices_by_type)
 
     def labels_for_type(self, label_type: str) -> Tuple[np.ndarray, Matrix]:

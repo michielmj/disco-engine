@@ -21,13 +21,13 @@ from dataclasses import dataclass
 from multiprocessing import cpu_count
 from multiprocessing.process import BaseProcess
 from multiprocessing.queues import Queue as MPQueue
-from typing import Dict, List, Mapping, Optional, Sequence, Any
+from typing import Dict, List, Mapping, Optional, Sequence, Any, cast
 import logging
 from tools import mp_logging
 
-from disco.cluster import Cluster
+from disco.cluster import Cluster, WorkerState
 from disco.config import AppSettings, ConfigError
-from disco.worker import Worker, WorkerState
+from disco.worker import Worker
 
 logger = mp_logging.getLogger(__name__)  # optional, but handy
 
@@ -72,7 +72,7 @@ def _infer_non_loopback_ipv4() -> Optional[str]:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
+            ip = cast(str, s.getsockname()[0])
             if ip and not ip.startswith("127."):
                 return ip
         finally:

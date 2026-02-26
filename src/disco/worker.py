@@ -533,10 +533,10 @@ class Worker:
         # Then events: actual simulation events.
         while True:
             try:
-                msg = self._ingress_event_queue.get_nowait()
+                msg = self._ingress_event_queue.get_nowait()  # type: ignore[assignment]
             except Empty:
                 break
-            self._deliver_ingress_event(msg)
+            self._deliver_ingress_event(cast(IPCEventMsg, msg))
 
     def _deliver_ingress_event(self, msg: IPCEventMsg) -> None:
         """
@@ -698,7 +698,7 @@ class Worker:
             new_assignment = None
         else:
             new_assignment = Assignment(
-                expid=cast(str, desired.expid),
+                expid=desired.expid,
                 repid=cast(str, desired.repid),
                 partition=cast(int, desired.partition),
             )
@@ -869,7 +869,7 @@ class Worker:
             return False
 
         partitioning = self._partitioning
-        node_specs = self._node_specs
+        node_specs = cast(Dict[str, NodeInstanceSpec], self._node_specs)
 
         # --- Model (load once per worker) ---
         # If model cannot load, that is typically worker-fatal because model is a fixed package.

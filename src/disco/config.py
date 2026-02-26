@@ -45,12 +45,12 @@ def _load_toml(path: Path) -> dict[str, Any]:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ConfigError(f"Config file {path} did not parse into a dict")
-    return cast(dict[str, Any], data)
+    return data
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     try:
-        import yaml  # type: ignore[import-not-found]
+        import yaml  # type: ignore[import-untyped]
     except Exception as e:
         raise ConfigError(
             f"YAML config file selected ({path}), but PyYAML is not installed. "

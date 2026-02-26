@@ -38,7 +38,7 @@ def has_self_loop(M: Matrix) -> bool:
         raise ValueError("Adjacency matrix must be square")
     diag = M.diag()  # Vector over the diagonal entries
     # Non-zero diagonal entries mean self loops
-    return diag.nvals > 0
+    return bool(diag.nvals > 0)
 
 
 def matrix_has_cycle(M: Matrix) -> bool:

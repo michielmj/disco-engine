@@ -94,11 +94,11 @@ class ExperimentStore:
                 *,
                 force_mode: Literal["raise", "release", "consume"] = "raise",
                 ) -> Submission:
-        return cast(self.metastore.dequeue(
+        return cast(Submission, self.metastore.dequeue(
             SUBMISSIONS_QUEUE,
             timeout=timeout,
             force_mode=force_mode
-        ), Submission)
+        ))
 
     # -----------------------------
     # Atomic updates (worker-safe)

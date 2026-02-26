@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from multiprocessing import Queue
 from multiprocessing.shared_memory import SharedMemory
-from typing import Mapping, Callable
+from typing import Any, Mapping, Callable
 
 from ..cluster import Cluster
 from ..envelopes import EventEnvelope, PromiseEnvelope
@@ -20,7 +20,7 @@ class IPCTransport(Transport):
         event_queues: Mapping[str, Queue[IPCEventMsg]],
         promise_queues: Mapping[str, Queue[IPCPromiseMsg]],
         large_payload_threshold: int = 64 * 1024,
-        serializer: Callable[[any], tuple[bytes, str]] | None = None  # data -> packed_data, protocol
+        serializer: Callable[[Any], tuple[bytes, str]] | None = None  # data -> packed_data, protocol
     ) -> None:
         self._cluster = cluster
         self._event_queues = event_queues
@@ -108,7 +108,7 @@ class IPCTransport(Transport):
         queue.put(msg)
 
 
-def _default_serializer(value: any) -> tuple[bytes, str]:
+def _default_serializer(value: Any) -> tuple[bytes, str]:
     """
     Default serializer used when none is provided.
     """

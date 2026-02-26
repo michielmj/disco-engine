@@ -96,8 +96,8 @@ class Node(ABC):
             target_node: str,
             target_simproc: str,
             epoch: float,
-            data: any,
-            headers: dict[str, int | float | str | bool | None] = None
+            data: Any,
+            headers: dict[str, int | float | str | bool | None] | None = None
     ):
         self._runtime.send_event(
             target_node=target_node,
