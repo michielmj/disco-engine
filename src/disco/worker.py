@@ -826,7 +826,7 @@ class Worker:
         scenario_id = experiment.scenario_id
         if self._graph is None or self._graph_scenario_id != scenario_id:
             try:
-                with self._session_manager.session as session:
+                with self._session_manager.session() as session:
                     self._graph = load_graph_for_scenario(session, scenario_id)
                 self._graph_scenario_id = scenario_id
                 # graph change invalidates partitioning cache

@@ -17,7 +17,7 @@ class EventEnvelope:
     target_simproc: str
     epoch: float
     data: Any
-    headers: Dict[str, int | float| str | bool | None] = field(default_factory=dict)
+    headers: Dict[str, str] = field(default_factory=dict)
 
     kind: Final[str] = "event"
 

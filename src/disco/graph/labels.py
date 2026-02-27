@@ -14,7 +14,7 @@ from .core import Graph
 
 def ensure_label(
     session: Session,
-    scenario_id: int,
+    scenario_id: str,
     label_type: str,
     label_value: str,
 ) -> int:
@@ -46,7 +46,7 @@ def ensure_label(
 
 def assign_label_to_vertices(
     session: Session,
-    scenario_id: int,
+    scenario_id: str,
     vertex_indices: Iterable[int],
     label_id: int,
 ) -> None:
@@ -67,7 +67,7 @@ def assign_label_to_vertices(
 
 def get_vertex_indices_for_label(
     session: Session,
-    scenario_id: int,
+    scenario_id: str,
     label_type: str,
     label_value: str,
 ) -> List[int]:

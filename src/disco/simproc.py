@@ -44,7 +44,7 @@ These are the basic properties of simprocs:
 
 import dataclasses
 from heapq import heappush, heappop
-from typing import Any, Dict, Tuple, Callable, Iterable, Set
+from typing import Any, Dict, Tuple, Callable, Iterable, Set, cast
 
 from tools.ctypes import MAX_UINT32
 
@@ -155,7 +155,7 @@ class SimProc:
         # cache events
         event_inbox = []
         while self._queue.epoch <= self._next_epoch and not self._queue.empty:
-            event_inbox += [Event(n, s, e, d, h) for n, s, e, d, h in self._queue.pop()]
+            event_inbox += [Event(n, s, e, d, cast(Dict[str, str], h)) for n, s, e, d, h in self._queue.pop()]
 
         # Possibility 1: there are predecessors and the queue's epoch is greater than or equal to next_epoch
         # Possibility 2: there are predecessors and the queue's next epoch is greater than next epoch (wakeup)
@@ -413,7 +413,7 @@ class SimProc:
             target_simproc=target_simproc,
             epoch=epoch,
             data=data,
-            headers=headers
+            headers=headers or {}
         )]
 
     def wakeup(self, epoch: float, hard: bool = False):
@@ -528,7 +528,7 @@ class SimProc:
                 f"event sender: {sender_node}/{sender_simproc}"
             )
 
-        return self._queue.push(sender_node, sender_simproc, epoch, data, headers)
+        return self._queue.push(sender_node, sender_simproc, epoch, data, cast(Dict[str, "str | bool | int | float"], headers))
 
     def receive_promise(
         self, sender_node: str, sender_simproc: str, seqnr: int, epoch: float, num_events: int
