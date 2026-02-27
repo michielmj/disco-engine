@@ -3,7 +3,7 @@ from __future__ import annotations
 """In-process transport that routes to local NodeRuntimes."""
 
 from dataclasses import dataclass
-from typing import Mapping, Optional
+from typing import Mapping
 
 from ..envelopes import EventEnvelope, PromiseEnvelope
 from ..runtime import NodeRuntime
