@@ -88,6 +88,9 @@ class FakeDataLogger:
     def __init__(self, **kwargs: Any) -> None:
         self.kwargs = kwargs
 
+    def close(self):
+        pass
+
 
 class FakeModel:
     pass
