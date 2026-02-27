@@ -115,7 +115,6 @@ class FakeStore:
         self._queue: list[FakeSubmission | None] = []
         self.load_map: dict[str, FakeExperiment] = {}
         self.selected: list[tuple[str, str]] = []
-        self.seeds: list[tuple[str, str, int]] = []
         self.assigned: list[tuple[str, str, list[str]]] = []
         self.failed_exc: list[tuple[str, str, dict[str, Any], bool]] = []
         self.failed_status: list[tuple[str, str, Any]] = []
@@ -134,9 +133,6 @@ class FakeStore:
     def select_partitioning(self, expid: str, partitioning_id: str) -> None:
         self.selected.append((expid, partitioning_id))
         self.load_map[expid].selected_partitioning = partitioning_id
-
-    def ensure_replication_seeds(self, expid: str, repid: str, num_partitions: int) -> None:
-        self.seeds.append((expid, repid, num_partitions))
 
     def assign_partitions(self, expid: str, repid: str, assignments: list[str]) -> FakeExperiment:
         self.assigned.append((expid, repid, list(assignments)))
@@ -306,7 +302,6 @@ def test_handle_submission_consumes_before_launch_and_starts_thread(
     orch._handle_submission(entity=entity)  # type: ignore[arg-type]
 
     # Assert: assignment happened, entity consumed, and a launch thread was started.
-    assert fake_store.seeds == [("exp1", "rep1", 2)]
     assert fake_store.assigned == [("exp1", "rep1", ["w1", "w2"])]
     assert entity.consumed is True
     assert len(orch._launch_threads) == 1

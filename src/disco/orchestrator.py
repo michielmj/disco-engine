@@ -170,9 +170,6 @@ class Orchestrator:
         # Number of partitions for the selected scheme.
         num_partitions = int(Partitioning.load_metadata(self._cluster.meta, partitioning_id)["num_partitions"])
 
-        # Seeds are created/ensured after partitioning selection.
-        self._store.ensure_replication_seeds(expid, repid, num_partitions)
-
         # Decide which workers will run which partitions (all-at-once).
         assignments = self._await_full_assignment_plan(expid=expid, num_partitions=num_partitions)
         if self._stop.is_set():
