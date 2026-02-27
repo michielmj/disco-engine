@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence, Iterable, Tuple, Generator, Self
+from typing import Any, Mapping, Optional, Sequence, Iterable, Tuple, Generator, Self, cast
 
 import numpy as np
 from graphblas import Matrix, Vector
@@ -31,7 +31,7 @@ def _normalize_column_element(
     if isinstance(column, str):
         return orm_table.columns[column]
     else:
-        return orm_table.columns[column.name]
+        return cast(ColumnElement[Any], orm_table.columns[column.name])
 
 
 def _normalize_column_elements(

@@ -50,7 +50,7 @@ def _load_toml(path: Path) -> dict[str, Any]:
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     try:
-        import yaml  # type: ignore[import-untyped]
+        import yaml
     except Exception as e:
         raise ConfigError(
             f"YAML config file selected ({path}), but PyYAML is not installed. "
@@ -234,7 +234,7 @@ class DatabaseSettings(BaseModel):
 
 
 class DataLoggerSettings(BaseModel):
-    path: DirectoryPath = Field(".", description="Location for storing data logger files.")
+    path: DirectoryPath = Field(Path("."), description="Location for storing data logger files.")
     ring_bytes: int = Field(1 << 27, description="Ring buffer size (default=128 MB)")
     rotate_bytes: int = Field(256 << 20, description="Segment file size (default=256 MB)")
     zstd_level: int = Field(1, description="ZSTD Compression level (default=1)")

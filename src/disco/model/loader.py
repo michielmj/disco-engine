@@ -9,7 +9,7 @@ from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
 from typing import Any, Dict, Iterator, Optional
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from disco.database import DbHandle
 from disco.exceptions import DiscoRuntimeError

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from data_logger import DataLogger
-from numpy.random import SeedSequence, Generator, default_rng
+from numpy.random import SeedSequence, Generator as NpGenerator, default_rng
 
 from .exceptions import DiscoRuntimeError
 from .graph import Graph
@@ -173,7 +173,7 @@ class NodeRuntime(NodeRuntimeLike):
         return self._dlogger
 
     @property
-    def rng(self) -> Generator:
+    def rng(self) -> NpGenerator:
         return self._rng
 
     def send_event(
@@ -294,7 +294,7 @@ class NodeRuntime(NodeRuntimeLike):
         self._node.initialize(**kwargs)
         self._status = NodeStatus.INITIALIZED
 
-    def runner(self, duration: float) -> Generator:
+    def runner(self, duration: float) -> Generator[None, None, None]:
         """
         Called by the Worker runner in ACTIVE state.
         """

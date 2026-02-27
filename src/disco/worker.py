@@ -188,7 +188,7 @@ class Worker:
 
         # Router and data logger (exist for worker lifetime, but dlogger is per-run).
         self._router: Router
-        self._dlogger: DataLogger
+        self._dlogger: DataLogger | None = None
 
         # Cached experiment and expid (to avoid reloading between replications of same exp).
         self._experiment: Experiment | None = None
@@ -892,13 +892,13 @@ class Worker:
         # Failure here is treated as worker-fatal (no catch) because it undermines observability and persistence.
         dl = self._settings.data_logger
         dl_path = Path(dl.path) / str(assignment.expid) / str(assignment.repid) / str(assignment.partition)
-        self._dlogger = DataLogger(
+        dlogger = DataLogger(
             segments_dir=dl_path,
             ring_bytes=dl.ring_bytes,
             rotate_bytes=dl.rotate_bytes,
             zstd_level=dl.zstd_level,
         )
-        dlogger = self._dlogger
+        self._dlogger = dlogger
 
         # --- NodeRuntimes + initialize ---
         seed_sequence = experiment.replications[assignment.repid].get_seed_sequence(assignment.partition)
