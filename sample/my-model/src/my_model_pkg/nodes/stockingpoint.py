@@ -67,7 +67,7 @@ class StockingPoint(Node):
         for event in events:
             assert isinstance(event.data, gb.Vector)
             arr = event.data[self.ixs].to_dense(0.)
-            key = pickle.dumps(event.headers.get("delivery_node_idx"))
+            key = pickle.dumps(int(event.headers.get("delivery_node_idx")))
             self.orderbook.append(key=key, arr=arr)
 
         self.fulfill_demand()
@@ -125,6 +125,6 @@ class StockingPoint(Node):
                 epoch=self.epoch,
                 data=order,
                 headers={
-                    "delivery_node_idx": self.data.node_index
+                    "delivery_node_idx": str(self.data.node_index)
                 }
             )
