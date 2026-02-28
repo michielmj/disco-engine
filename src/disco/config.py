@@ -45,12 +45,12 @@ def _load_toml(path: Path) -> dict[str, Any]:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ConfigError(f"Config file {path} did not parse into a dict")
-    return cast(dict[str, Any], data)
+    return data
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     try:
-        import yaml  # type: ignore[import-not-found]
+        import yaml
     except Exception as e:
         raise ConfigError(
             f"YAML config file selected ({path}), but PyYAML is not installed. "
@@ -234,7 +234,7 @@ class DatabaseSettings(BaseModel):
 
 
 class DataLoggerSettings(BaseModel):
-    path: DirectoryPath = Field(".", description="Location for storing data logger files.")
+    path: DirectoryPath = Field(Path("."), description="Location for storing data logger files.")
     ring_bytes: int = Field(1 << 27, description="Ring buffer size (default=128 MB)")
     rotate_bytes: int = Field(256 << 20, description="Segment file size (default=256 MB)")
     zstd_level: int = Field(1, description="ZSTD Compression level (default=1)")

@@ -1,7 +1,7 @@
 # src/disco/graph/core.py
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple, List, Sequence, Mapping
+from typing import Dict, Optional, Tuple, List, Sequence, Mapping, cast
 from types import MappingProxyType
 
 import numpy as np
@@ -247,7 +247,7 @@ class Graph:
     # ------------------------------ #
 
     @property
-    def label_indices_by_type(self) -> Dict[str, np.ndarray]:
+    def label_indices_by_type(self) -> Mapping[str, np.ndarray]:
         return MappingProxyType(self._label_indices_by_type)
 
     def labels_for_type(self, label_type: str) -> Tuple[np.ndarray, Matrix]:
@@ -309,7 +309,7 @@ class Graph:
             raise IndexError(f"label_id {label_id} out of range [0, {self._num_labels})")
         idxs, _ = self._label_matrix[:, int(label_id)].select("!=", 0).new().to_coo()
 
-        return idxs
+        return cast(np.ndarray, idxs)
 
     # ------------------------------ #
     # Incrementally adding labels

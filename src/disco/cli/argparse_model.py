@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any, Iterable, Optional, Sequence, Tuple, Type, Union, get_args, get_origin
+from typing import Any, Iterable, Optional, Sequence, Tuple, Type, Union, cast, get_args, get_origin
 
 from pydantic import BaseModel
 
@@ -35,10 +35,10 @@ def _is_literal(tp: Any) -> tuple[bool, Tuple[Any, ...]]:
     return False, ()
 
 
-def _python_type_for_argparse(tp: Any) -> type | None:
+def _python_type_for_argparse(tp: Any) -> type:
     # We let Pydantic validate complex types (IPvAnyAddress, etc.) from strings.
     if tp in (str, int, float):
-        return tp
+        return cast(type, tp)
     return str
 
 

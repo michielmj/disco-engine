@@ -188,7 +188,7 @@ class Worker:
 
         # Router and data logger (exist for worker lifetime, but dlogger is per-run).
         self._router: Router
-        self._dlogger: DataLogger
+        self._dlogger: DataLogger | None = None
 
         # Cached experiment and expid (to avoid reloading between replications of same exp).
         self._experiment: Experiment | None = None
@@ -533,10 +533,10 @@ class Worker:
         # Then events: actual simulation events.
         while True:
             try:
-                msg = self._ingress_event_queue.get_nowait()
+                msg = self._ingress_event_queue.get_nowait()  # type: ignore[assignment]
             except Empty:
                 break
-            self._deliver_ingress_event(msg)
+            self._deliver_ingress_event(cast(IPCEventMsg, msg))
 
     def _deliver_ingress_event(self, msg: IPCEventMsg) -> None:
         """
@@ -698,7 +698,7 @@ class Worker:
             new_assignment = None
         else:
             new_assignment = Assignment(
-                expid=cast(str, desired.expid),
+                expid=desired.expid,
                 repid=cast(str, desired.repid),
                 partition=cast(int, desired.partition),
             )
@@ -826,7 +826,7 @@ class Worker:
         scenario_id = experiment.scenario_id
         if self._graph is None or self._graph_scenario_id != scenario_id:
             try:
-                with self._session_manager.session as session:
+                with self._session_manager.session() as session:
                     self._graph = load_graph_for_scenario(session, scenario_id)
                 self._graph_scenario_id = scenario_id
                 # graph change invalidates partitioning cache
@@ -869,7 +869,7 @@ class Worker:
             return False
 
         partitioning = self._partitioning
-        node_specs = self._node_specs
+        node_specs = cast(Dict[str, NodeInstanceSpec], self._node_specs)
 
         # --- Model (load once per worker) ---
         # If model cannot load, that is typically worker-fatal because model is a fixed package.
@@ -892,13 +892,13 @@ class Worker:
         # Failure here is treated as worker-fatal (no catch) because it undermines observability and persistence.
         dl = self._settings.data_logger
         dl_path = Path(dl.path) / str(assignment.expid) / str(assignment.repid) / str(assignment.partition)
-        self._dlogger = DataLogger(
+        dlogger = DataLogger(
             segments_dir=dl_path,
             ring_bytes=dl.ring_bytes,
             rotate_bytes=dl.rotate_bytes,
             zstd_level=dl.zstd_level,
         )
-        dlogger = self._dlogger
+        self._dlogger = dlogger
 
         # --- NodeRuntimes + initialize ---
         seed_sequence = experiment.replications[assignment.repid].get_seed_sequence(assignment.partition)

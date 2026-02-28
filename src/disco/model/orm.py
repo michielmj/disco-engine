@@ -46,7 +46,7 @@ from typing import Iterable, Mapping, Optional, Sequence, Set, cast
 
 import sqlalchemy as sa
 from sqlalchemy import MetaData, Table
-from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine import Connection, Engine, Inspector
 from sqlalchemy.sql.schema import Column
 from sqlalchemy.sql.sqltypes import String, Text, Unicode
 
@@ -183,7 +183,7 @@ def load_metadata_from_provider(provider_ref: str) -> MetaData:
 # -----------------------------
 
 
-def _inspector(conn_or_engine: Engine | Connection) -> sa.inspect:
+def _inspector(conn_or_engine: Engine | Connection) -> Inspector:
     return sa.inspect(conn_or_engine)
 
 

@@ -44,7 +44,7 @@ These are the basic properties of simprocs:
 
 import dataclasses
 from heapq import heappush, heappop
-from typing import Any, Dict, Tuple, Callable, Iterable, Set
+from typing import Any, Dict, Tuple, Callable, Iterable, Set, cast
 
 from tools.ctypes import MAX_UINT32
 
@@ -115,9 +115,9 @@ class SimProc:
         # epoch 0 is a hard wakeup by default to ensure a the first invocation of the event_handler
         self._wakeup_points = [0.0]
         self._hard_wakeup = {0.0: True}
-        self._event_outbox = []
+        self._event_outbox: list[EventEnvelope] = []
         self._epoch = -1.0
-        self._next_epoch = 0.0
+        self._next_epoch: float | None = 0.0
 
         # Predecessors are registered in the EventGraph's EventController
         self._queue = EventQueue()
@@ -155,7 +155,7 @@ class SimProc:
         # cache events
         event_inbox = []
         while self._queue.epoch <= self._next_epoch and not self._queue.empty:
-            event_inbox += [Event(n, s, e, d, h) for n, s, e, d, h in self._queue.pop()]
+            event_inbox += [Event(n, s, e, d, cast(Dict[str, str], h)) for n, s, e, d, h in self._queue.pop()]
 
         # Possibility 1: there are predecessors and the queue's epoch is greater than or equal to next_epoch
         # Possibility 2: there are predecessors and the queue's next epoch is greater than next epoch (wakeup)
@@ -379,7 +379,7 @@ class SimProc:
         self._event_outbox = []
 
     def send_event(
-        self, target_node: str, target_simproc: str, epoch: float, data: any, headers: Dict[str, str] = None
+        self, target_node: str, target_simproc: str, epoch: float, data: Any, headers: Dict[str, str] | None = None
     ):
         """
         Send the events that are collected in the simproc' outbox
@@ -413,7 +413,7 @@ class SimProc:
             target_simproc=target_simproc,
             epoch=epoch,
             data=data,
-            headers=headers
+            headers=headers or {}
         )]
 
     def wakeup(self, epoch: float, hard: bool = False):
@@ -464,12 +464,13 @@ class SimProc:
         return self._number
 
     @property
-    def next_wakeup(self) -> float:
+    def next_wakeup(self) -> float | None:
         """
         Time of next wake-up. None if unset.
         """
         if self._wakeup_points:
             return self._wakeup_points[0]
+        return None
 
     @property
     def hard_wakeup(self):
@@ -483,7 +484,7 @@ class SimProc:
             return self._hard_wakeup[epoch]
 
     @property
-    def epoch(self):
+    def epoch(self) -> float:
         """
         Time of current epoch.
         :return:
@@ -508,7 +509,7 @@ class SimProc:
         return self._queue.waiting_for
 
     def receive_event(
-        self, sender_node: str, sender_simproc: str, epoch: float, data: Any, headers: Dict[str, str] = None
+        self, sender_node: str, sender_simproc: str, epoch: float, data: Any, headers: Dict[str, str] | None = None
     ) -> bool:
         """
         Receive an event. Called from the node_controller. Originates from try_next_epoch on a predecessor.
@@ -527,7 +528,7 @@ class SimProc:
                 f"event sender: {sender_node}/{sender_simproc}"
             )
 
-        return self._queue.push(sender_node, sender_simproc, epoch, data, headers)
+        return self._queue.push(sender_node, sender_simproc, epoch, data, cast(Dict[str, "str | bool | int | float"], headers))
 
     def receive_promise(
         self, sender_node: str, sender_simproc: str, seqnr: int, epoch: float, num_events: int

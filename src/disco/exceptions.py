@@ -51,10 +51,10 @@ class ExcDict:
                     if not v:
                         continue
                     merged.setdefault(k, [])
-                    merged[k].extend(v)  # type: ignore[union-attr]
+                    merged[k].extend(v)
                 else:
                     merged.setdefault(k, [])
-                    merged[k].append(v)  # type: ignore[union-attr]
+                    merged[k].append(v)
 
         if desc_lines:
             merged[self.description_key] = "\n".join(desc_lines)
@@ -116,7 +116,7 @@ def _canon_value(v: Any) -> Any:
         canon_items = [x for x in canon_items if not (isinstance(x, str) and x == "")]
         # sort if comparable; else keep stable order by string repr
         try:
-            return tuple(sorted(canon_items))  # type: ignore[type-var]
+            return tuple(sorted(canon_items))
         except TypeError:
             return tuple(sorted(canon_items, key=lambda x: repr(x)))
     return v
