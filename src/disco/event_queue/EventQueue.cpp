@@ -308,9 +308,9 @@ bool EventQueue::push(const std::string& sender_node,
 
 bool EventQueue::promise(const std::string& sender_node,
                         const std::string& sender_simproc,
-                         unsigned long seqnr,
+                         uint64_t seqnr,
                          double epoch,
-                         unsigned long num_events) {
+                         uint64_t num_events) {
     std::lock_guard<std::mutex> lock(_mtx);
 
     SenderKey key = makeKey(sender_node, sender_simproc);

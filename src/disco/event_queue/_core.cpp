@@ -1,4 +1,5 @@
 #include <cmath>
+#include <cstdint>
 #include <map>
 #include <string>
 #include <utility>
@@ -114,9 +115,9 @@ PYBIND11_MODULE(_core, m) {
             [](disco::EventQueue& q,
                const std::string& sender_node,
                const std::string& sender_simproc,
-               unsigned long seqnr,
+               uint64_t seqnr,
                double epoch,
-               unsigned long num_events) -> bool {
+               uint64_t num_events) -> bool {
                 return q.promise(sender_node, sender_simproc, seqnr, epoch, num_events);
             },
             py::arg("sender_node"),

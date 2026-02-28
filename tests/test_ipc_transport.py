@@ -260,7 +260,12 @@ def test_ipc_receiver_large_event_unlinks_shm() -> None:
     assert node.events[0].target_node == "beta"
     assert node.events[0].data == payload
 
-    # SharedMemory should have been unlinked by the receiver
+    # On POSIX the receiver's unlink() removes the name even while our fd is
+    # still open.  On Windows unlink() is a no-op; the mapping persists until
+    # every handle is closed, so close our own handle first.
+    shm.close()
+
+    # SharedMemory should have been unlinked/destroyed by the receiver
     try:
         SharedMemory(name=shm.name)
     except FileNotFoundError:
