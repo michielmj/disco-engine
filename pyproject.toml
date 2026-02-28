@@ -39,7 +39,8 @@ dev = [
   "pybind11-stubgen>=2.5",
   "twine>=5",
   "grpcio-tools>=1.60",
-  "psycopg[binary]>=3.3"
+  "psycopg[binary]>=3.3",
+  "types-PyYAML>=6.0"
 ]
 
 [build-system]
