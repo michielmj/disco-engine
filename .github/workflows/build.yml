@@ -9,6 +9,7 @@ jobs:
   build-wheels:
     name: Build wheels (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +31,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build wheels
+        timeout-minutes: 75
         run: |
           python -m pip install -U pip cibuildwheel
           python -m cibuildwheel --output-dir wheelhouse
