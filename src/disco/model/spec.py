@@ -29,6 +29,10 @@ class SimProcSpec(BaseModel):
         s = v.strip()
         if not s:
             raise ValueError("edge-data-table may not be empty/whitespace")
+        if s.lower().startswith("graph_"):
+            raise ValueError(
+                "edge-data-table may not start with 'graph_' (reserved for graph infrastructure tables)"
+            )
         return s
 
 
@@ -73,6 +77,10 @@ class NodeTypeSpec(BaseModel):
         s = v.strip()
         if not s:
             raise ValueError("node-data-table may not be empty/whitespace")
+        if s.lower().startswith("graph_"):
+            raise ValueError(
+                "node-data-table may not start with 'graph_' (reserved for graph infrastructure tables)"
+            )
         return s
 
     # noinspection PyNestedDecorators
@@ -248,6 +256,10 @@ class ModelSpec(BaseModel):
         s = v.strip()
         if not s:
             raise ValueError("default-edge-data-table may not be empty/whitespace")
+        if s.lower().startswith("graph_"):
+            raise ValueError(
+                "default-edge-data-table may not start with 'graph_' (reserved for graph infrastructure tables)"
+            )
         return s
 
     # noinspection PyNestedDecorators

@@ -80,36 +80,21 @@ def _populate_vertices_and_edges(
     """
     Insert a small mapping of indices->keys and structural edges:
 
-      vertices (scenario_id, index, key, node_type):
-        (S1, 0, "A", "test")
-        (S1, 1, "B", "test")
-        (S1, 2, "C", "test")
+      graph_vertices (scenario_id, index, key):
+        (S1, 0, "A")
+        (S1, 1, "B")
+        (S1, 2, "C")
 
-      edges (scenario_id, layer_idx=0, source_idx, target_idx, weight):
+      graph_edges (scenario_id, layer_idx=0, source_idx, target_idx, weight):
         (S1, 0, 0 -> 1, weight=1.5)
         (S1, 0, 1 -> 2, weight=2.5)
     """
     session.execute(
         insert(vertices),
         [
-            {
-                "scenario_id": scenario_id,
-                "index": 0,
-                "key": "A",
-                "node_type": "test",  # <-- required by current schema
-            },
-            {
-                "scenario_id": scenario_id,
-                "index": 1,
-                "key": "B",
-                "node_type": "test",
-            },
-            {
-                "scenario_id": scenario_id,
-                "index": 2,
-                "key": "C",
-                "node_type": "test",
-            },
+            {"scenario_id": scenario_id, "index": 0, "key": "A"},
+            {"scenario_id": scenario_id, "index": 1, "key": "B"},
+            {"scenario_id": scenario_id, "index": 2, "key": "C"},
         ],
     )
 
@@ -122,7 +107,6 @@ def _populate_vertices_and_edges(
                 "source_idx": 0,
                 "target_idx": 1,
                 "weight": 1.5,
-                "name": "e_0_0_1",
             },
             {
                 "scenario_id": scenario_id,
@@ -130,7 +114,6 @@ def _populate_vertices_and_edges(
                 "source_idx": 1,
                 "target_idx": 2,
                 "weight": 2.5,
-                "name": "e_0_1_2",
             },
         ],
     )
@@ -143,17 +126,11 @@ def engine_session_and_model_tables() -> Iterator[
     Helper generator for tests.
 
     - Creates in-memory SQLite engine
-    - Applies schema_translate_map so "graph" schema is stripped
-    - Creates graph schema (scenarios, vertices, edges, ...)
+    - Creates graph tables (graph_scenarios, graph_vertices, graph_edges, ...)
     - Creates key-based model node/edge tables
     """
-    # Base in-memory SQLite engine
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
 
-    # IMPORTANT: strip the "graph" schema for SQLite
-    engine = engine.execution_options(schema_translate_map={"graph": None})
-
-    # Now all DDL/DML using schema="graph" becomes plain tables in "main"
     create_graph_schema(engine)
 
     node_data, edge_data = _create_model_tables(engine)

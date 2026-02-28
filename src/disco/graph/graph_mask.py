@@ -42,7 +42,7 @@ class GraphMask:
     # ------------------------------------------------------------------ #
     def ensure_persisted(self, session: Session) -> None:
         """
-        Ensure the mask is present in graph.vertex_masks.
+        Ensure the mask is present in graph_vertex_masks.
 
         - If it's not stored yet:
             - Write (scenario_id, mask_id, vertex_index, updated_at) rows.
@@ -88,7 +88,7 @@ class GraphMask:
     # ------------------------------------------------------------------ #
     def _write_full(self, session: Session) -> None:
         """
-        Write the full contents of this mask into graph.vertex_masks.
+        Write the full contents of this mask into graph_vertex_masks.
 
         Strategy:
         - DELETE any existing rows for (scenario_id, mask_id).

@@ -109,6 +109,32 @@ class OrmBundle:
 
 
 # -----------------------------
+# Helpers: reserved prefix guard
+# -----------------------------
+
+
+def _check_no_graph_prefix_tables(md: MetaData) -> None:
+    """
+    Raise ModelOrmValidationError if any table in *md* has a name (or
+    unqualified name) that starts with ``graph_``.
+
+    This guards against model providers accidentally defining tables that
+    collide with the graph infrastructure namespace.
+    """
+    reserved = [
+        name
+        for name in md.tables
+        if name.lower().startswith("graph_") or name.lower().split(".")[-1].startswith("graph_")
+    ]
+    if reserved:
+        raise ModelOrmValidationError(
+            "Model ORM metadata must not define tables whose name starts with 'graph_' "
+            "(reserved for graph infrastructure). "
+            f"Found: {sorted(reserved)}"
+        )
+
+
+# -----------------------------
 # Helpers: python ref importing
 # -----------------------------
 
@@ -400,6 +426,7 @@ def build_orm_bundle(
 
     if provider_ref:
         md = load_metadata_from_provider(provider_ref)
+        _check_no_graph_prefix_tables(md)
         ddl_available = True
 
         # Ensure provider metadata contains all referenced tables
@@ -412,6 +439,7 @@ def build_orm_bundle(
 
         conn_or_engine = normalize_db_handle(db)
         md = reflect_tables(conn_or_engine, required_names, schema=schema)
+        _check_no_graph_prefix_tables(md)
         ddl_available = False
 
     # Resolve tables from md

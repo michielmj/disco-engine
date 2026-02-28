@@ -131,3 +131,81 @@ def test_modelspec_default_edge_data_table_blank_rejected():
     d["default-edge-data-table"] = "   "
     with pytest.raises(ValidationError):
         ModelSpec.model_validate(d)
+
+
+# ---------------------------------------------------------------------------
+# graph_ prefix rejection
+# ---------------------------------------------------------------------------
+
+
+def test_modelspec_node_data_table_graph_prefix_rejected():
+    d = _base_model_dict_list_simprocs()
+    d["node-types"]["Warehouse"]["node-data-table"] = "graph_nodes"
+    with pytest.raises(ValidationError):
+        ModelSpec.model_validate(d)
+
+
+def test_modelspec_default_edge_data_table_graph_prefix_rejected():
+    d = _base_model_dict_list_simprocs()
+    d["default-edge-data-table"] = "graph_edges"
+    with pytest.raises(ValidationError):
+        ModelSpec.model_validate(d)
+
+
+def test_modelspec_simproc_edge_data_table_graph_prefix_rejected():
+    d = _base_model_dict_map_simprocs()
+    d["simprocs"]["demand"]["edge-data-table"] = "graph_demand_edges"
+    with pytest.raises(ValidationError):
+        ModelSpec.model_validate(d)
+
+
+# Standard infrastructure table names (graph_ prefix, exact names)
+
+def test_modelspec_node_data_table_graph_scenarios_rejected():
+    d = _base_model_dict_list_simprocs()
+    d["node-types"]["Warehouse"]["node-data-table"] = "graph_scenarios"
+    with pytest.raises(ValidationError):
+        ModelSpec.model_validate(d)
+
+
+def test_modelspec_node_data_table_graph_vertices_rejected():
+    d = _base_model_dict_list_simprocs()
+    d["node-types"]["Warehouse"]["node-data-table"] = "graph_vertices"
+    with pytest.raises(ValidationError):
+        ModelSpec.model_validate(d)
+
+
+def test_modelspec_default_edge_data_table_graph_edges_rejected():
+    d = _base_model_dict_list_simprocs()
+    d["default-edge-data-table"] = "graph_edges"
+    with pytest.raises(ValidationError):
+        ModelSpec.model_validate(d)
+
+
+def test_modelspec_node_data_table_graph_labels_rejected():
+    d = _base_model_dict_list_simprocs()
+    d["node-types"]["Warehouse"]["node-data-table"] = "graph_labels"
+    with pytest.raises(ValidationError):
+        ModelSpec.model_validate(d)
+
+
+def test_modelspec_node_data_table_graph_vertex_labels_rejected():
+    d = _base_model_dict_list_simprocs()
+    d["node-types"]["Warehouse"]["node-data-table"] = "graph_vertex_labels"
+    with pytest.raises(ValidationError):
+        ModelSpec.model_validate(d)
+
+
+def test_modelspec_node_data_table_graph_vertex_masks_rejected():
+    d = _base_model_dict_list_simprocs()
+    d["node-types"]["Warehouse"]["node-data-table"] = "graph_vertex_masks"
+    with pytest.raises(ValidationError):
+        ModelSpec.model_validate(d)
+
+
+def test_modelspec_graph_prefix_case_insensitive_rejected():
+    # Validation is case-insensitive: GRAPH_nodes should also be rejected
+    d = _base_model_dict_list_simprocs()
+    d["node-types"]["Warehouse"]["node-data-table"] = "GRAPH_nodes"
+    with pytest.raises(ValidationError):
+        ModelSpec.model_validate(d)
