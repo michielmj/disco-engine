@@ -11,7 +11,6 @@
 #include <queue>
 #include <stdexcept>
 #include <string>
-#include <variant>
 #include <vector>
 
 // Forward declare PyObject to avoid including Python.h in a public header.
@@ -20,8 +19,7 @@ using PyObject = _object;
 
 namespace disco {
 
-using HeaderValue = std::variant<std::string, bool, long long, double>;
-using Headers = std::map<std::string, HeaderValue>;
+using Headers = std::map<std::string, std::string>;
 
 struct PredecessorEvent {
     double epoch{};

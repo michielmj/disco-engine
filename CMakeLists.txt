@@ -5,6 +5,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# ── macOS minimum deployment target ───────────────────────────────────────────
+# std::variant (used in Headers) requires macOS 10.14+; 10.15 is a safe baseline.
+if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum macOS deployment version")
+endif()
+
 # ── Shared toolchain setup ────────────────────────────────────────────────────
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 
