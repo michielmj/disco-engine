@@ -40,7 +40,8 @@ dev = [
   "twine>=5",
   "grpcio-tools>=1.60",
   "psycopg[binary]>=3.3",
-  "types-PyYAML>=6.0"
+  "types-PyYAML>=6.0",
+  "pytest-timeout>=2.3"
 ]
 
 [build-system]
@@ -97,7 +98,7 @@ PIP_PREFER_BINARY = "1"
 archs = ["AMD64"]
 
 [tool.cibuildwheel.windows.environment]
-CMAKE_GENERATOR = "Visual Studio 17 2022"
+CMAKE_GENERATOR = "Ninja"
 PIP_ONLY_BINARY = "numpy,pyarrow,llvmlite,numba,scipy"
 PIP_PREFER_BINARY = "1"
 
@@ -105,6 +106,8 @@ PIP_PREFER_BINARY = "1"
 minversion = "7.0"
 addopts = "-q --import-mode=importlib"
 testpaths = ["tests"]
+timeout = 60
+timeout_method = "thread"
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
