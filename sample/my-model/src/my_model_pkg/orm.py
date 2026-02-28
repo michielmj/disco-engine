@@ -9,7 +9,7 @@ stockingpoint_data = Table(
     Column("key", String, nullable=False),
     Column("echelon", Integer, nullable=False),
     Column("location", String, nullable=False),
-    Column("ip_target", Float, nullable=False),
+    Column("ip_target", Float, nullable=True),
     Column("dem_dist", String, nullable=True),
     Column("dem_params", JSON, nullable=True),
 )

@@ -110,7 +110,7 @@ PredecessorEventQueue::PredecessorEventQueue()
       _events(),
       _epoch(-1.0),
       _next_epoch(NAN),
-      _seqnr(0UL) {}
+      _seqnr(UINT64_C(0)) {}
 
 bool PredecessorEventQueue::push(double epoch, PyObject* data, Headers& headers) {
     std::lock_guard<std::mutex> lock(_mtx);
@@ -169,7 +169,7 @@ bool PredecessorEventQueue::_increment(double epoch) {
     return false;
 }
 
-double PredecessorEventQueue::epochBefore(unsigned long seqnr) {
+double PredecessorEventQueue::epochBefore(uint64_t seqnr) {
     auto it = _epochs.lower_bound(seqnr);
     if (it == _epochs.begin()) {
         return -1.0;
@@ -178,7 +178,7 @@ double PredecessorEventQueue::epochBefore(unsigned long seqnr) {
     return it->second;
 }
 
-double PredecessorEventQueue::epochAfter(unsigned long seqnr) {
+double PredecessorEventQueue::epochAfter(uint64_t seqnr) {
     auto it = _epochs.upper_bound(seqnr);
     if (it == _epochs.end()) {
         return INFINITY;
@@ -194,29 +194,29 @@ bool PredecessorEventQueue::tryNextEpoch() {
 bool PredecessorEventQueue::_tryNextEpoch() {
     bool updated = false;
 
-    if (_epoch == -1.0 && _num_events.find(1UL) != _num_events.end() && _epochs[1UL] > 0.0) {
+    if (_epoch == -1.0 && _num_events.find(UINT64_C(1)) != _num_events.end() && _epochs[UINT64_C(1)] > 0.0) {
         _epoch = 0.0;
         updated = true;
     }
 
-    unsigned long try_seqnr = _seqnr + 1UL;
+    uint64_t try_seqnr = _seqnr + UINT64_C(1);
 
     while ((_events.empty() || _events.top().epoch > _epoch) &&
            (_num_events.find(try_seqnr) != _num_events.end())) {
 
         const double try_epoch = _epochs.find(try_seqnr)->second;
-        const unsigned long num_events = _num_events.find(try_seqnr)->second;
+        const uint64_t num_events = _num_events.find(try_seqnr)->second;
 
         auto it_cnt = _event_count.find(try_epoch);
         if (it_cnt == _event_count.end()) {
             // promise() should have created an entry (possibly 0).
             break;
         }
-        const unsigned long event_count = it_cnt->second;
+        const uint64_t event_count = it_cnt->second;
 
         if (event_count == num_events) {
             // clean up current epoch metadata
-            if (_seqnr > 0UL) {
+            if (_seqnr > UINT64_C(0)) {
                 _event_count.erase(try_epoch);
                 _num_events.erase(_seqnr);
                 _epochs.erase(_seqnr);
@@ -227,7 +227,7 @@ bool PredecessorEventQueue::_tryNextEpoch() {
             _epoch = try_epoch;
 
             // update next epoch
-            auto it_epoch = _epochs.find(try_seqnr + 1UL);
+            auto it_epoch = _epochs.find(try_seqnr + UINT64_C(1));
             if (it_epoch != _epochs.end()) {
                 _next_epoch = it_epoch->second;
             } else {
@@ -244,7 +244,7 @@ bool PredecessorEventQueue::_tryNextEpoch() {
     return updated;
 }
 
-bool PredecessorEventQueue::promise(unsigned long seqnr, double epoch, unsigned long num_events) {
+bool PredecessorEventQueue::promise(uint64_t seqnr, double epoch, uint64_t num_events) {
     std::lock_guard<std::mutex> lock(_mtx);
 
     if (seqnr <= _seqnr) {
@@ -280,7 +280,7 @@ bool PredecessorEventQueue::promise(unsigned long seqnr, double epoch, unsigned 
         throw std::runtime_error("More events received than promised.");
     }
 
-    if (seqnr == _seqnr + 1UL) {
+    if (seqnr == _seqnr + UINT64_C(1)) {
         _next_epoch = epoch;
         _tryNextEpoch();
         return true;
@@ -305,7 +305,7 @@ bool PredecessorEventQueue::empty() const {
 
 bool PredecessorEventQueue::waitingForPromise() const {
     std::lock_guard<std::mutex> lock(_mtx);
-    return _num_events.find(_seqnr + 1UL) == _num_events.end();
+    return _num_events.find(_seqnr + UINT64_C(1)) == _num_events.end();
 }
 
 bool PredecessorEventQueue::waitingForEvents() const {
