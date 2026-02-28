@@ -29,7 +29,7 @@ struct Event {
     std::string sender_simproc;
     double epoch;
     PyObject* data;
-    std::map<std::string, std::string> headers;
+    Headers headers;
 
     Event() noexcept;
 
@@ -38,7 +38,7 @@ struct Event {
           std::string sender_simproc_,
           double epoch_,
           PyObject* data_,
-          std::map<std::string, std::string> headers_,
+          Headers headers_,
           BorrowedRefTag);
 
     // Construct from an OWNED PyObject* (no INCREF).
@@ -46,7 +46,7 @@ struct Event {
           std::string sender_simproc_,
           double epoch_,
           PyObject* data_,
-          std::map<std::string, std::string> headers_,
+          Headers headers_,
           OwnedRefTag) noexcept;
 
     Event(const Event& other);
@@ -74,16 +74,15 @@ public:
               const std::string& sender_simproc,
               double epoch,
               PyObject* data,
-              std::map<std::string, std::string>& headers);
+              Headers& headers);
 
     std::vector<Event> pop();
-    std::vector<Event> popAll();
 
     bool promise(const std::string& sender_node,
                  const std::string& sender_simproc,
-                 unsigned long seqnr,
+                 uint64_t seqnr,
                  double epoch,
-                 unsigned long num_events);
+                 uint64_t num_events);
 
     bool tryNextEpoch();
 

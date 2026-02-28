@@ -25,12 +25,16 @@ class FakeGrpcSettings:
 class FakeZookeeperSettings:
     default_group: str = "default"
 
+@dataclass(slots=True)
+class FakeLoggingSettings:
+    level: str = "DEBUG"
 
 @dataclass(slots=True)
 class FakeAppSettings:
     grace_s: int = 10
     grpc: FakeGrpcSettings = field(default_factory=FakeGrpcSettings)
     zookeeper: FakeZookeeperSettings = field(default_factory=FakeZookeeperSettings)
+    logging: FakeLoggingSettings = field(default_factory=FakeLoggingSettings)
 
 
 # ---------------------------------------------------------------------------

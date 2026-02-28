@@ -1,0 +1,16 @@
+name: my-model
+version: '1.0'
+orm: "my_model_pkg.orm:get_metadata"
+simprocs:
+  demand:
+    edge-data-table: demand_data
+  supply:
+    edge-data-table: supply_data
+node-types:
+  StockingPoint:
+    class: my_model_pkg.nodes:StockingPoint
+    node-data-table: stockingpoint_data
+    distinct-nodes:
+    - echelon
+    - location
+    self-relations: [[demand, supply]]

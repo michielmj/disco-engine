@@ -2,9 +2,10 @@ from __future__ import annotations
 
 """IPC transport for sending envelopes to peer processes."""
 
+import sys
 from multiprocessing import Queue
 from multiprocessing.shared_memory import SharedMemory
-from typing import Mapping, Callable
+from typing import Any, Mapping, Callable
 
 from ..cluster import Cluster
 from ..envelopes import EventEnvelope, PromiseEnvelope
@@ -20,13 +21,27 @@ class IPCTransport(Transport):
         event_queues: Mapping[str, Queue[IPCEventMsg]],
         promise_queues: Mapping[str, Queue[IPCPromiseMsg]],
         large_payload_threshold: int = 64 * 1024,
-        serializer: Callable[[any], tuple[bytes, str]] | None = None  # data -> packed_data, protocol
+        serializer: Callable[[Any], tuple[bytes, str]] | None = None  # data -> packed_data, protocol
     ) -> None:
         self._cluster = cluster
         self._event_queues = event_queues
         self._promise_queues = promise_queues
         self._large_payload_threshold = large_payload_threshold
         self._serializer = _default_serializer if serializer is None else serializer
+        # On Windows, named shared memory has no filesystem persistence: the OS
+        # destroys the mapping as soon as all handles are closed.  We keep the
+        # sender's handle alive here so the receiver can open the mapping by
+        # name.  On POSIX the name persists in /dev/shm until unlink() is
+        # called, so we can close() the fd immediately after enqueueing.
+        self._open_shm: dict[str, SharedMemory] = {}
+
+    def __del__(self) -> None:
+        for shm in self._open_shm.values():
+            try:
+                shm.close()
+            except Exception:
+                pass
+        self._open_shm.clear()
 
     def handles_node(self, repid: str, node: str) -> bool:
         addr = self._cluster.address_book.get((repid, node))
@@ -86,11 +101,20 @@ class IPCTransport(Transport):
                     size=len(data),
                 )
                 queue.put(msg)
-            finally:
-                # We *don't* unlink here; that is receiver's job. But if we failed
-                # before putting the message on the queue, we should unlink.
-                # So we can optionally track success and only unlink on early failure.
-                pass
+            except Exception:
+                shm.close()
+                shm.unlink()
+                raise
+
+            if sys.platform == 'win32':
+                # Windows: keep the sender's handle open so the receiver can
+                # open the mapping by name.  Released via __del__ (or when the
+                # receiver signals completion through an external mechanism).
+                self._open_shm[shm.name] = shm
+            else:
+                # POSIX: the name persists in /dev/shm until the receiver
+                # calls unlink(); releasing the fd here is safe.
+                shm.close()
 
     def send_promise(self, envelope: PromiseEnvelope) -> None:
         addr = self._cluster.address_book[(envelope.repid, envelope.target_node)]
@@ -108,7 +132,7 @@ class IPCTransport(Transport):
         queue.put(msg)
 
 
-def _default_serializer(value: any) -> tuple[bytes, str]:
+def _default_serializer(value: Any) -> tuple[bytes, str]:
     """
     Default serializer used when none is provided.
     """

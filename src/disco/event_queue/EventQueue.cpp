@@ -64,7 +64,7 @@ Event::Event(std::string sender_node_,
              std::string sender_simproc_,
              double epoch_,
              PyObject* data_,
-             std::map<std::string, std::string> headers_,
+             Headers headers_,
              BorrowedRefTag)
     : sender_node(std::move(sender_node_)),
       sender_simproc(std::move(sender_simproc_)),
@@ -78,7 +78,7 @@ Event::Event(std::string sender_node_,
              std::string sender_simproc_,
              double epoch_,
              PyObject* data_,
-             std::map<std::string, std::string> headers_,
+             Headers headers_,
              OwnedRefTag) noexcept
     : sender_node(std::move(sender_node_)),
       sender_simproc(std::move(sender_simproc_)),
@@ -288,7 +288,7 @@ bool EventQueue::push(const std::string& sender_node,
                       const std::string& sender_simproc,
                       double epoch,
                       PyObject* data,
-                      std::map<std::string, std::string>& headers) {
+                      Headers& headers) {
     std::lock_guard<std::mutex> lock(_mtx);
     SenderKey key = makeKey(sender_node, sender_simproc);
 
@@ -308,9 +308,9 @@ bool EventQueue::push(const std::string& sender_node,
 
 bool EventQueue::promise(const std::string& sender_node,
                         const std::string& sender_simproc,
-                         unsigned long seqnr,
+                         uint64_t seqnr,
                          double epoch,
-                         unsigned long num_events) {
+                         uint64_t num_events) {
     std::lock_guard<std::mutex> lock(_mtx);
 
     SenderKey key = makeKey(sender_node, sender_simproc);
@@ -337,46 +337,22 @@ std::vector<Event> EventQueue::pop() {
     for (auto& kvp : _predecessors) {
         const auto& key = kvp.first; // SenderKey
         auto& pred = kvp.second;
-        std::vector<PredecessorEvent> events = pred->pop();
 
-        for (auto& e : events) {
-            // Transfer ownership of the Python ref from PredecessorEvent -> Event.
-            PyObject* data = e.release_data();
-            result.emplace_back(
-                key.first,          // sender_node
-                key.second,         // sender_simproc,
-                e.epoch,
-                data,
-                std::move(e.headers),
-                owned_ref
-            );
-        }
-    }
+        if (pred->getEpoch() <= _epoch) {
+            std::vector<PredecessorEvent> events = pred->pop();
 
-    tryNextEpochUnlocked();
-    return result;
-}
-
-std::vector<Event> EventQueue::popAll() {
-    std::lock_guard<std::mutex> lock(_mtx);
-
-    std::vector<Event> result;
-
-    for (auto& kvp : _predecessors) {
-        const auto& key = kvp.first; // SenderKey
-        auto& pred = kvp.second;
-        std::vector<PredecessorEvent> events = pred->popAll();
-
-        for (auto& e : events) {
-            PyObject* data = e.release_data();
-            result.emplace_back(
-                key.first,          // sender_node
-                key.second,         // sender_simproc,
-                e.epoch,
-                data,
-                std::move(e.headers),
-                owned_ref
-            );
+            for (auto& e : events) {
+                // Transfer ownership of the Python ref from PredecessorEvent -> Event.
+                PyObject* data = e.release_data();
+                result.emplace_back(
+                    key.first,          // sender_node
+                    key.second,         // sender_simproc,
+                    e.epoch,
+                    data,
+                    std::move(e.headers),
+                    owned_ref
+                );
+            }
         }
     }
 

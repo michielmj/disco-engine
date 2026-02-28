@@ -3,7 +3,7 @@ from __future__ import annotations
 """In-process transport that routes to local NodeRuntimes."""
 
 from dataclasses import dataclass
-from typing import Mapping, Optional
+from typing import Mapping
 
 from ..envelopes import EventEnvelope, PromiseEnvelope
 from ..runtime import NodeRuntime
@@ -14,7 +14,7 @@ from .base import Transport
 class InProcessTransport(Transport):
     """Deliver envelopes to NodeControllers registered in the same process."""
 
-    nodes: Optional[Mapping[str, NodeRuntime]] = None
+    nodes: Mapping[str, NodeRuntime]
 
     def handles_node(self, repid: str, node: str) -> bool:
         if node not in self.nodes:

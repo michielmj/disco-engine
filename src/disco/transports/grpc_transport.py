@@ -31,7 +31,7 @@ NodeController queues on the receiving Worker.
 
 from dataclasses import dataclass
 import time
-from typing import Callable, Dict, Iterable, Optional
+from typing import Any, Callable, Dict, Iterable, Optional
 
 import grpc
 
@@ -79,7 +79,7 @@ class GrpcTransport(Transport):
         cluster: Cluster,
         settings: GrpcSettings,
         *,
-        serializer: Callable[[any], tuple[bytes, str]] | None = None,  # data -> packed_data, protocol
+        serializer: Callable[[Any], tuple[bytes, str]] | None = None,  # data -> packed_data, protocol
         # Optional injection points to ease testing or customization:
         channel_factory: Optional[Callable[[str, GrpcSettings], grpc.Channel]] = None,
         stub_factory: Optional[
@@ -329,7 +329,7 @@ def _default_stub_factory(channel: grpc.Channel) -> transport_pb2_grpc.DiscoTran
     return transport_pb2_grpc.DiscoTransportStub(channel)
 
 
-def _default_serializer(value: any) -> tuple[bytes, str]:
+def _default_serializer(value: Any) -> tuple[bytes, str]:
     """
     Default serializer used when none is provided.
     """

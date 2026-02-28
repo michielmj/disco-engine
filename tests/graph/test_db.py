@@ -1,11 +1,12 @@
 # tests/graph/test_db.py
+# tests/graph/test_db.py
 from typing import Iterator
 
 import numpy as np
 import graphblas as gb
 from graphblas import Vector
 import pytest
-from sqlalchemy import create_engine, insert
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from disco.graph import (
@@ -14,7 +15,8 @@ from disco.graph import (
     create_scenario,
     store_graph,
     load_graph_for_scenario,
-    get_outbound_map,  # <-- free function that uses vertex_masks
+    get_outbound_map,
+    schema,
 )
 from disco.graph.schema import vertices as vertices_table
 from disco.graph.schema import edges as edges_table
@@ -25,15 +27,10 @@ from disco.graph.schema import vertex_masks as vertex_masks_table
 def engine_and_session_factory() -> Iterator[tuple[object, sessionmaker]]:
     """
     Fixture that provides an in-memory SQLite engine and a sessionmaker.
-    For SQLite we strip the 'graph' schema via schema_translate_map.
     """
-    # Base in-memory engine
-    base_engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
 
-    # For SQLite, drop the 'graph' schema (graph.<table> -> <table>)
-    engine = base_engine.execution_options(schema_translate_map={"graph": None})
-
-    # Create schema (tables) in the in-memory database
+    # Create graph tables (graph_scenarios, graph_vertices, etc.) in the in-memory database
     create_graph_schema(engine)
 
     SessionLocal = sessionmaker(bind=engine, future=True)
@@ -45,35 +42,139 @@ def engine_and_session_factory() -> Iterator[tuple[object, sessionmaker]]:
 
 def _create_scenario_with_vertices(session: Session, num_vertices: int) -> str:
     """
-    Helper to create a scenario and populate graph.vertices with
-    vertex indices 0..num_vertices-1.
-
-    NOTE: This matches the current graph.vertices schema, which
-    uses 'index', 'key', and 'node_type'.
+    Helper to create a scenario and populate graph_vertices with
+    vertex indices 0..num_vertices-1 via create_scenario.
     """
-    scenario_id = create_scenario(
+    scenario_id = "roundtrip_test"
+    vertex_keys = np.array([f"v{i}" for i in range(num_vertices)], dtype=object)
+
+    create_scenario(
         session,
-        scenario_id="roundtrip_test",
-        base_scenario_id=None,
+        scenario_id=scenario_id,
+        vertex_keys=vertex_keys,
         description="Roundtrip store/load test",
     )
-
-    rows = []
-    for i in range(num_vertices):
-        rows.append(
-            {
-                "scenario_id": scenario_id,
-                "index": i,
-                "key": f"v{i}",
-            }
-        )
-
-    session.execute(insert(vertices_table), rows)
     session.commit()
     return scenario_id
 
 
-def test_store_and_load_graph_with_labels_mask_and_node_types(
+# ---------------------------------------------------------------------------
+# create_scenario tests
+# ---------------------------------------------------------------------------
+
+
+def test_create_scenario_inserts_vertices(
+    engine_and_session_factory: tuple[object, sessionmaker]
+) -> None:
+    _, SessionLocal = engine_and_session_factory
+    session: Session = SessionLocal()
+
+    num_vertices = 5
+    scenario_id = "scenario_create_test"
+    vertex_keys = np.array([f"k{i}" for i in range(num_vertices)], dtype=object)
+
+    create_scenario(
+        session,
+        scenario_id=scenario_id,
+        vertex_keys=vertex_keys,
+        description="Create scenario test",
+        chunk_size=2,  # force multiple chunks even for small N
+    )
+
+    rows = session.execute(
+        select(vertices_table.c.index, vertices_table.c.key)
+        .where(vertices_table.c.scenario_id == scenario_id)
+        .order_by(vertices_table.c.index)
+    ).all()
+
+    assert len(rows) == num_vertices
+    for i, (idx, key) in enumerate(rows):
+        assert idx == i
+        assert key == vertex_keys[i]
+
+    session.close()
+
+
+def test_create_scenario_duplicate_raises(
+    engine_and_session_factory: tuple[object, sessionmaker]
+) -> None:
+    _, SessionLocal = engine_and_session_factory
+    session: Session = SessionLocal()
+
+    scenario_id = "dup_scenario"
+    keys1 = np.array(["a", "b", "c"], dtype=object)
+    keys2 = np.array(["x", "y"], dtype=object)
+
+    # First creation succeeds
+    create_scenario(
+        session,
+        scenario_id=scenario_id,
+        vertex_keys=keys1,
+        description="First creation",
+    )
+
+    # Second creation with same scenario_id must raise
+    with pytest.raises(ValueError):
+        create_scenario(
+            session,
+            scenario_id=scenario_id,
+            vertex_keys=keys2,
+            description="Second creation (should fail)",
+        )
+
+    # Ensure vertex rows are still only for the first creation
+    rows = session.execute(
+        select(vertices_table.c.index, vertices_table.c.key).where(
+            vertices_table.c.scenario_id == scenario_id
+        )
+    ).all()
+    assert len(rows) == len(keys1)
+
+    session.close()
+
+
+def test_create_scenario_chunked_insert_large(
+    engine_and_session_factory: tuple[object, sessionmaker]
+) -> None:
+    """
+    Sanity-check that chunked inserts work for larger numbers of vertices.
+    """
+    _, SessionLocal = engine_and_session_factory
+    session: Session = SessionLocal()
+
+    num_vertices = 25
+    scenario_id = "chunk_test"
+    vertex_keys = np.array([f"node_{i}" for i in range(num_vertices)], dtype=object)
+
+    # Use small chunk_size so we definitely hit multiple chunks
+    create_scenario(
+        session,
+        scenario_id=scenario_id,
+        vertex_keys=vertex_keys,
+        description="Chunked insert test",
+        chunk_size=7,
+    )
+
+    rows = session.execute(
+        select(vertices_table.c.index, vertices_table.c.key)
+        .where(vertices_table.c.scenario_id == scenario_id)
+        .order_by(vertices_table.c.index)
+    ).all()
+
+    assert len(rows) == num_vertices
+    for i, (idx, key) in enumerate(rows):
+        assert idx == i
+        assert key == vertex_keys[i]
+
+    session.close()
+
+
+# ---------------------------------------------------------------------------
+# Graph roundtrip (edges + labels + mask)
+# ---------------------------------------------------------------------------
+
+
+def test_store_and_load_graph_with_labels_and_mask(
     engine_and_session_factory: tuple[object, sessionmaker]
 ) -> None:
     _, SessionLocal = engine_and_session_factory
@@ -124,16 +225,12 @@ def test_store_and_load_graph_with_labels_mask_and_node_types(
         2: ("type1", "C"),
     }
 
-    type1_vec = Vector.from_coo([0, 2], [True, True], size=3)
-    type2_vec = Vector.from_coo([1], [True], size=3)
-    label_type_vectors = {"type1": type1_vec, "type2": type2_vec}
-
-    graph.set_labels(label_matrix, label_meta, label_type_vectors)
+    graph.set_labels(label_matrix, label_meta)
 
     # ------------------------------------------------------------------
     # Set a mask (vertices 1 and 2)
     # NOTE: mask is NOT persisted by store_graph/load_graph,
-    #       but will be used in DB queries via vertex_masks.
+    #       but will be used in DB queries via graph_vertex_masks.
     # ------------------------------------------------------------------
     mask_vec = Vector.from_coo([1, 2], [True, True], size=num_vertices)
     graph.set_mask(mask_vec)
@@ -173,17 +270,15 @@ def test_store_and_load_graph_with_labels_mask_and_node_types(
     # Meta should match
     assert loaded.label_meta == label_meta
 
-    # Label-based mask by label id: label 0 -> vertices 0 and 3
-    mask_label0 = loaded.get_vertex_mask_for_label_id(0)
-    idx0, vals0 = mask_label0.to_coo()
-    assert set(idx0.tolist()) == {0, 3}
-    assert set(vals0.tolist()) == {True}
+    # Vertices that have label id 0: vertices 0 and 3
+    verts_for_label0 = loaded.get_vertices_for_label(0)
+    assert set(verts_for_label0.tolist()) == {0, 3}
 
-    # Label-based mask by type: "type1" -> vertices {0,2,3}
-    mask_type1 = loaded.get_vertex_mask_for_label_type("type1")
-    idx1, vals1 = mask_type1.to_coo()
-    assert set(idx1.tolist()) == {0, 2, 3}
-    assert set(vals1.tolist()) == {True}
+    # Per-type metadata should be reconstructed correctly:
+    # For "type1", we expect indices 0 ("A") and 2 ("C")
+    type1_mapping = loaded.label_value_to_index("type1")
+    assert type1_mapping["A"] == 0
+    assert type1_mapping["C"] == 2
 
     # ------------------------------------------------------------------
     # Mask + outbound map via DB (vertex_masks join)
@@ -196,7 +291,7 @@ def test_store_and_load_graph_with_labels_mask_and_node_types(
 
     # Use the free function from disco.graph now that Graph
     # no longer has DB methods on the instance.
-    mat_out = get_outbound_map(session, loaded, layer_idx=0)
+    mat_out = get_outbound_map(session, loaded, layer_idx=0, values=schema.edges.c.weight)
 
     # Expect only one edge: 1 -> 2 with weight 2.0
     rows, cols, vals_out = mat_out.to_coo()

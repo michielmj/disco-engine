@@ -46,7 +46,7 @@ from typing import Iterable, Mapping, Optional, Sequence, Set, cast
 
 import sqlalchemy as sa
 from sqlalchemy import MetaData, Table
-from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine import Connection, Engine, Inspector
 from sqlalchemy.sql.schema import Column
 from sqlalchemy.sql.sqltypes import String, Text, Unicode
 
@@ -106,6 +106,32 @@ class OrmBundle:
     required_table_names: Set[str]                   # all required table names (no schema prefix)
 
     ddl_available: bool
+
+
+# -----------------------------
+# Helpers: reserved prefix guard
+# -----------------------------
+
+
+def _check_no_graph_prefix_tables(md: MetaData) -> None:
+    """
+    Raise ModelOrmValidationError if any table in *md* has a name (or
+    unqualified name) that starts with ``graph_``.
+
+    This guards against model providers accidentally defining tables that
+    collide with the graph infrastructure namespace.
+    """
+    reserved = [
+        name
+        for name in md.tables
+        if name.lower().startswith("graph_") or name.lower().split(".")[-1].startswith("graph_")
+    ]
+    if reserved:
+        raise ModelOrmValidationError(
+            "Model ORM metadata must not define tables whose name starts with 'graph_' "
+            "(reserved for graph infrastructure). "
+            f"Found: {sorted(reserved)}"
+        )
 
 
 # -----------------------------
@@ -183,7 +209,7 @@ def load_metadata_from_provider(provider_ref: str) -> MetaData:
 # -----------------------------
 
 
-def _inspector(conn_or_engine: Engine | Connection) -> sa.inspect:
+def _inspector(conn_or_engine: Engine | Connection) -> Inspector:
     return sa.inspect(conn_or_engine)
 
 
@@ -400,6 +426,7 @@ def build_orm_bundle(
 
     if provider_ref:
         md = load_metadata_from_provider(provider_ref)
+        _check_no_graph_prefix_tables(md)
         ddl_available = True
 
         # Ensure provider metadata contains all referenced tables
@@ -412,6 +439,7 @@ def build_orm_bundle(
 
         conn_or_engine = normalize_db_handle(db)
         md = reflect_tables(conn_or_engine, required_names, schema=schema)
+        _check_no_graph_prefix_tables(md)
         ddl_available = False
 
     # Resolve tables from md

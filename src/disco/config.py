@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any, Literal, Optional, cast
 import contextvars
 
-from pydantic import BaseModel, Field, PostgresDsn, DirectoryPath
+from pydantic import BaseModel, Field, DirectoryPath, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import PydanticBaseSettingsSource
+from sqlalchemy.engine import URL
 
 
 class ConfigError(RuntimeError):
@@ -44,12 +45,12 @@ def _load_toml(path: Path) -> dict[str, Any]:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ConfigError(f"Config file {path} did not parse into a dict")
-    return cast(dict[str, Any], data)
+    return data
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     try:
-        import yaml  # type: ignore[import-not-found]
+        import yaml
     except Exception as e:
         raise ConfigError(
             f"YAML config file selected ({path}), but PyYAML is not installed. "
@@ -121,7 +122,7 @@ class GrpcSettings(BaseModel):
     bind_host: str | None = Field(
         default=None,
         description=(
-            "Address used for worker gRPC endpoints and worker addresses (host:port). "
+            "Address used for worker gRPC endpoints and worker addresses (host). "
             "Should be routable in-cluster (e.g. Pod IP). "
             "If None, Server will attempt to infer a non-loopback IP."
         ),
@@ -130,12 +131,17 @@ class GrpcSettings(BaseModel):
     max_workers: int = Field(10, description="Maximum number of worker threads for the gRPC server.")
     grace_s: float = Field(60.0, description="Grace period in seconds for server shutdown.")
 
-    max_send_message_bytes: int | None = Field(default=None, description="Maximum send message size in bytes (None = default).")
-    max_receive_message_bytes: int | None = Field(default=None, description="Maximum receive message size in bytes (None = default).")
+    max_send_message_bytes: int | None = Field(default=None, description="Maximum send message size in bytes (None ="
+                                                                         "default).")
+    max_receive_message_bytes: int | None = Field(default=None, description="Maximum receive message size in bytes ("
+                                                                            "None = default).")
 
-    keepalive_time_s: float | None = Field(default=None, description="Time between keepalive pings in seconds (None = disabled).")
-    keepalive_timeout_s: float | None = Field(default=None, description="Timeout for keepalive pings in seconds (None = default).")
-    keepalive_permit_without_calls: bool = Field(False, description="Allow keepalive pings even when there are no active calls.")
+    keepalive_time_s: float | None = Field(default=None, description="Time between keepalive pings in seconds (None = "
+                                                                     "disabled).")
+    keepalive_timeout_s: float | None = Field(default=None, description="Timeout for keepalive pings in seconds (None "
+                                                                        "= default).")
+    keepalive_permit_without_calls: bool = Field(False, description="Allow keepalive pings even when there are no "
+                                                                    "active calls.")
 
     compression: Literal["none", "gzip"] = Field("none", description="Compression algorithm for gRPC calls.")
 
@@ -143,14 +149,15 @@ class GrpcSettings(BaseModel):
         default_factory=lambda: [0.05, 0.15, 0.5, 1.0, 2.0],
         description="Backoff sequence for promise retries in seconds.",
     )
-    promise_retry_max_window_s: float = Field(3.0, description="Maximum time window for promise delivery retries in seconds.")
+    promise_retry_max_window_s: float = Field(3.0, description="Maximum time window for promise delivery retries in "
+                                                               "seconds.")
 
 
 class ZookeeperSettings(BaseModel):
     hosts: str = Field("localhost:2181", description="Comma-separated host:port pairs for Zookeeper ensemble.")
     chroot: str | None = Field(default=None, description="Optional chroot path, e.g. /disco.")
     default_group: str = Field("disco", description="Default logical group / namespace used in the app.")
-    session_timeout_s: float = Field(10.0, description="Zookeeper session timeout in seconds.")
+    # session_timeout_s: float = Field(10.0, description="Zookeeper session timeout in seconds.")
     connection_timeout_s: float = Field(5.0, description="Initial connection timeout in seconds.")
     max_retries: int = Field(5, description="Maximum number of retry attempts for failed operations.")
     retry_delay_s: float = Field(1.0, description="Delay between retries in seconds.")
@@ -162,32 +169,92 @@ class ZookeeperSettings(BaseModel):
     client_key: str | None = Field(default=None, description="Path to client private key for mutual TLS.")
 
 
+Dialect = Literal["postgresql", "sqlite"]
+PostgresDriver = Literal["psycopg", "psycopg2", "asyncpg"]
+SqliteDriver = Literal["pysqlite", "aiosqlite"]
+
+
 class DatabaseSettings(BaseModel):
-    url: PostgresDsn = Field(
-        cast(PostgresDsn, "postgresql+psycopg://user:password@localhost:5432/disco"),
-        description="SQLAlchemy-style database URL.",
+    """
+    SQLAlchemy database configuration.
+
+    Preference order:
+    1) If `url` is set, use it as-is.
+    2) Otherwise build a SQLAlchemy URL from the components.
+
+    Designed to work well with .env and docker-compose.
+    """
+
+    # Dialect / driver
+    dialect: Dialect = Field("postgresql", description="Database dialect.")
+    driver: str | None = Field(
+        "psycopg",
+        description="Driver name, e.g. psycopg/psycopg2/asyncpg for Postgres, pysqlite for SQLite.",
     )
+
+    # Connection components (used for Postgres)
+    host: str = Field("localhost", description="Database host.")
+    port: int = Field(5432, description="Database port.")
+    database: str = Field("disco", description="Database name.")
+    username: str | None = Field("user", description="Database username.")
+    password: SecretStr | None = Field(default=None, description="Database password (prefer secrets_dir).")
+
+    # SQLite file path (used when dialect == sqlite)
+    sqlite_path: Path | None = Field(
+        default=None,
+        description="Path to SQLite file. If None, uses an in-memory DB.",
+    )
+
+    # Optional schema (mainly for Postgres)
+    default_schema: str | None = Field(
+        default=None,
+        description="Optional default schema (e.g. 'public' or 'disco').",
+    )
+
+    # Pooling (mostly for Postgres; SQLite often ignores/limits pooling)
     pool_size: int = 10
     max_overflow: int = 20
+    pool_pre_ping: bool = True
+
+    def sqlalchemy_url(self) -> URL:
+        if self.dialect == "sqlite":
+            if self.sqlite_path is None:
+                return URL.create("sqlite+pysqlite", database=":memory:")
+            return URL.create("sqlite+pysqlite", database=str(self.sqlite_path))
+
+        driver_suffix = f"+{self.driver}" if self.driver else ""
+        return URL.create(
+            drivername=f"{self.dialect}{driver_suffix}",
+            username=self.username,
+            password=self.password.get_secret_value() if self.password else None,
+            host=self.host,
+            port=self.port,
+            database=self.database,
+        )
 
 
 class DataLoggerSettings(BaseModel):
-    path: DirectoryPath = Field(".", description="Location for storing data logger files.")
+    path: DirectoryPath = Field(Path("."), description="Location for storing data logger files.")
     ring_bytes: int = Field(1 << 27, description="Ring buffer size (default=128 MB)")
     rotate_bytes: int = Field(256 << 20, description="Segment file size (default=256 MB)")
     zstd_level: int = Field(1, description="ZSTD Compression level (default=1)")
 
 
 class ModelSettings(BaseModel):
-    plugin: Optional[str] = Field(None, description="...")
-    package: Optional[str] = Field(None, description="...")
-    path: Optional[DirectoryPath] = Field(None, description="...")  # fix your trailing comma issue if present in your file
-    dev_import_root: Optional[DirectoryPath] = Field(None, description="...")
+    plugin: str | None = Field('my-model', description="...")
+    package: str | None = Field(None, description="...")
+    path: DirectoryPath | None = Field(None, description="...")
+    dev_import_root: DirectoryPath | None = Field(None, description="...")
     model_yml: str = Field("model.yml", description="Name of the model definition file (default=model.yml).")
 
-    def validate_model(self) -> None:
-        if len([o is not None for o in [self.plugin, self.package, self.path]]) != 1:
-            raise ValueError("Invalid model configuration. Exactly one model option needs to be provided.")
+    @model_validator(mode="after")
+    def _validate_exactly_one_source(self) -> "ModelSettings":
+        count = sum(x is not None for x in (self.plugin, self.package, self.path))
+        if count != 1:
+            raise ValueError(
+                "Exactly one of `plugin`, `package`, or `path` must be provided."
+            )
+        return self
 
 
 class SerializationSettings(BaseModel):
@@ -282,7 +349,6 @@ def _get_settings_cached(config_file_str: str | None, overrides_blob: bytes) -> 
     with _config_file_context(config_path):
         settings = AppSettings(**overrides)
     settings.serialization.validate_protocol()
-    settings.model.validate_model()
     return settings
 
 

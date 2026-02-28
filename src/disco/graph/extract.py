@@ -9,6 +9,7 @@ import pandas as pd
 import graphblas as gb
 from sqlalchemy import select, and_, literal
 from sqlalchemy.orm import Session
+from sqlalchemy import BigInteger, Boolean, Double, Float, Integer, Numeric, SmallInteger
 from sqlalchemy.sql.schema import Table
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.engine import RowMapping
@@ -21,14 +22,17 @@ Backend = Literal["pandas"]  # reserved for future extension
 IndexBy = Literal["index", "key"]
 EdgeIndexBy = Literal["indices", "keys"]
 
+NumericType = BigInteger | Boolean | Double | Float | Integer | Numeric | SmallInteger
 
-def _rows_to_df(rows: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
+
+def _rows_to_df(rows: Sequence[Mapping[str, Any]], columns: Sequence[ColumnElement]) -> pd.DataFrame:
     """
     Convert SQLAlchemy RowMapping list (or any mapping sequence) to a pandas DataFrame.
     """
+    col_names = [c.name for c in columns]
     if not rows:
-        return pd.DataFrame()
-    return pd.DataFrame(rows)
+        return pd.DataFrame(columns=col_names)
+    return pd.DataFrame(rows, columns=col_names)
 
 
 # ---------------------------------------------------------------------------
@@ -36,21 +40,21 @@ def _rows_to_df(rows: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def get_vertex_data(
-    session: Session,
-    graph: Graph,
-    vertex_table: Table,
-    columns: Sequence[ColumnElement[Any]],
-    *,
-    mask: Optional[GraphMask] = None,
-    index_by: IndexBy = "index",
-    default_fill: Any | None = None,
+        session: Session,
+        graph: Graph,
+        vertex_table: Table,
+        columns: Sequence[ColumnElement[Any]],
+        *,
+        mask: Optional[GraphMask] = None,
+        index_by: IndexBy = "index",
+        default_fill: Any | None = None,
 ) -> pd.DataFrame:
     """
     Return a DataFrame with vertex-level data from a *model node table*.
 
     The model node table (vertex_table) is keyed by (scenario_id, key),
     while the Graph structure uses (scenario_id, index). The mapping
-    from index -> key is stored in graph.vertices.
+    from index -> key is stored in graph_vertices.
 
     Semantics:
       - We start from graph.vertices (mapping table).
@@ -61,7 +65,7 @@ def get_vertex_data(
       - Missing model rows -> NaN/null, unless default_fill is provided.
 
     Requirements:
-      - graph.vertices must have columns:
+      - graph_vertices must have columns:
             scenario_id, index, key
       - vertex_table must have columns:
             scenario_id, key
@@ -76,13 +80,17 @@ def get_vertex_data(
     vmap = vertices_table
     eff_mask: Optional[GraphMask] = mask if mask is not None else graph.graph_mask
 
+    all_columns = (
+        vmap.c.index.label("index"),
+        vmap.c.key.label("key"),
+        *columns,
+    )
+
     # Base: all vertices in this graph scenario_id
     # We always include index and key in the projection so we can index
     base = (
         select(
-            vmap.c.index.label("index"),
-            vmap.c.key.label("key"),
-            *columns,
+            *all_columns,
         )
         .select_from(vmap)
         .outerjoin(
@@ -112,10 +120,7 @@ def get_vertex_data(
     result = session.execute(base)
     raw_rows: list[RowMapping] = list(result.mappings())
     rows = cast(Sequence[Mapping[str, Any]], raw_rows)
-    df = _rows_to_df(rows)
-
-    if df.empty:
-        return df
+    df = _rows_to_df(rows, all_columns)
 
     # Index by vertex index (default) or vertex key
     if index_by == "index":
@@ -132,13 +137,13 @@ def get_vertex_data(
 
 
 def get_vertex_numeric_vector(
-    session: Session,
-    graph: Graph,
-    vertex_table: Table,
-    value_column: ColumnElement[Any],
-    *,
-    mask: Optional[GraphMask] = None,
-    default_value: float = 0.0,
+        session: Session,
+        graph: Graph,
+        vertex_table: Table,
+        value_column: ColumnElement[NumericType],
+        *,
+        mask: Optional[GraphMask] = None,
+        default_value: float = 0.0,
 ) -> gb.Vector:
     """
     Return a GraphBLAS Vector[FP64] of size graph.num_vertices with values taken
@@ -243,15 +248,15 @@ def _validate_edge_table(edge_table: Table) -> None:
 
 
 def get_outbound_edge_data(
-    session: Session,
-    graph: Graph,
-    edge_table: Table,
-    columns: Sequence[ColumnElement[Any]],
-    *,
-    layer_idx: int,
-    mask: Optional[GraphMask] = None,
-    index_by: EdgeIndexBy = "indices",
-    default_fill: Any | None = None,
+        session: Session,
+        graph: Graph,
+        edge_table: Table,
+        columns: Sequence[ColumnElement[Any]],
+        *,
+        layer_idx: int,
+        mask: Optional[GraphMask] = None,
+        index_by: EdgeIndexBy = "indices",
+        default_fill: Any | None = None,
 ) -> pd.DataFrame:
     """
     Return a DataFrame with one row per outbound edge from vertices in the mask
@@ -260,12 +265,12 @@ def get_outbound_edge_data(
     Model edge tables are key-based:
       - scenario_id, source_key, target_key, ...
 
-    Structural edges in the graph schema are index-based:
-      - graph.edges with (scenario_id, layer_idx, source_idx, target_idx).
+    Structural edges are index-based:
+      - graph_edges with (scenario_id, layer_idx, source_idx, target_idx).
 
     We:
-      - Start from graph.edges (indices).
-      - Join vertices twice to map source_idx/target_idx -> source_key/target_key.
+      - Start from graph_edges (indices).
+      - Join graph_vertices twice to map source_idx/target_idx -> source_key/target_key.
       - LEFT OUTER JOIN the model edge table on (scenario_id, source_key, target_key).
       - Optionally filter by GraphMask on the source index.
       - Return a DataFrame indexed by:
@@ -282,13 +287,17 @@ def get_outbound_edge_data(
     v_tgt = vertices_table.alias("v_tgt")
     ed = edge_table
 
+    all_columns = (
+        e.c.source_idx.label("source_index"),
+        e.c.target_idx.label("target_index"),
+        v_src.c.key.label("source_key"),
+        v_tgt.c.key.label("target_key"),
+        *columns,
+    )
+
     base = (
         select(
-            e.c.source_idx.label("source_index"),
-            e.c.target_idx.label("target_index"),
-            v_src.c.key.label("source_key"),
-            v_tgt.c.key.label("target_key"),
-            *columns,
+            *all_columns
         )
         .select_from(e)
         .join(
@@ -337,10 +346,7 @@ def get_outbound_edge_data(
     result = session.execute(base)
     raw_rows: list[RowMapping] = list(result.mappings())
     rows = cast(Sequence[Mapping[str, Any]], raw_rows)
-    df = _rows_to_df(rows)
-
-    if df.empty:
-        return df
+    df = _rows_to_df(rows, all_columns)
 
     # Multi-index: indices or keys
     if index_by == "indices":
@@ -357,15 +363,15 @@ def get_outbound_edge_data(
 
 
 def get_inbound_edge_data(
-    session: Session,
-    graph: Graph,
-    edge_table: Table,
-    columns: Sequence[ColumnElement[Any]],
-    *,
-    layer_idx: int,
-    mask: Optional[GraphMask] = None,
-    index_by: EdgeIndexBy = "indices",
-    default_fill: Any | None = None,
+        session: Session,
+        graph: Graph,
+        edge_table: Table,
+        columns: Sequence[ColumnElement[Any]],
+        *,
+        layer_idx: int,
+        mask: Optional[GraphMask] = None,
+        index_by: EdgeIndexBy = "indices",
+        default_fill: Any | None = None,
 ) -> pd.DataFrame:
     """
     Return a DataFrame with one row per inbound edge to vertices in the mask
@@ -374,12 +380,12 @@ def get_inbound_edge_data(
     Model edge tables are key-based:
       - scenario_id, source_key, target_key, ...
 
-    Structural edges in the graph schema are index-based:
-      - graph.edges with (scenario_id, layer_idx, source_idx, target_idx).
+    Structural edges are index-based:
+      - graph_edges with (scenario_id, layer_idx, source_idx, target_idx).
 
     We:
-      - Start from graph.edges (indices).
-      - Join vertices twice to map source_idx/target_idx -> source_key/target_key.
+      - Start from graph_edges (indices).
+      - Join graph_vertices twice to map source_idx/target_idx -> source_key/target_key.
       - LEFT OUTER JOIN the model edge table on (scenario_id, source_key, target_key).
       - Optionally filter by GraphMask on the *target* index.
       - Return a DataFrame indexed by:
@@ -396,13 +402,17 @@ def get_inbound_edge_data(
     v_tgt = vertices_table.alias("v_tgt")
     ed = edge_table
 
+    all_columns = (
+        e.c.source_idx.label("source_index"),
+        e.c.target_idx.label("target_index"),
+        v_src.c.key.label("source_key"),
+        v_tgt.c.key.label("target_key"),
+        *columns,
+    )
+
     base = (
         select(
-            e.c.source_idx.label("source_index"),
-            e.c.target_idx.label("target_index"),
-            v_src.c.key.label("source_key"),
-            v_tgt.c.key.label("target_key"),
-            *columns,
+            *all_columns,
         )
         .select_from(e)
         .join(
@@ -451,10 +461,7 @@ def get_inbound_edge_data(
     result = session.execute(base)
     raw_rows: list[RowMapping] = list(result.mappings())
     rows = cast(Sequence[Mapping[str, Any]], raw_rows)
-    df = _rows_to_df(rows)
-
-    if df.empty:
-        return df
+    df = _rows_to_df(rows, all_columns)
 
     if index_by == "indices":
         df = df.set_index(["source_index", "target_index"])
@@ -473,20 +480,17 @@ def get_inbound_edge_data(
 # 3. Map extraction (GraphBLAS matrices, still weight-only from graph.edges)
 # ---------------------------------------------------------------------------
 
-ValueSource = Literal["weight"]  # keep simple for now
-
-
 def get_outbound_map(
-    session: Session,
-    graph: Graph,
-    *,
-    layer_idx: int,
-    mask: Optional[GraphMask] = None,
-    value_source: ValueSource = "weight",
+        session: Session,
+        graph: Graph,
+        *,
+        layer_idx: int,
+        mask: Optional[GraphMask] = None,
+        values: Optional[ColumnElement[NumericType]] = None,
 ) -> gb.Matrix:
     """
     Return a GraphBLAS Matrix for outbound edges in a given layer,
-    using the structural graph.edges table (index-based).
+    using the structural graph_edges table (index-based).
 
     - Rows: source_idx
     - Columns: target_idx
@@ -495,16 +499,19 @@ def get_outbound_map(
     Mask semantics (if provided or set on graph):
     - Only edges whose *source* vertex is in the mask are included.
     """
-    if value_source != "weight":
-        raise NotImplementedError("Only value_source='weight' is supported for now.")
 
     eff_mask: Optional[GraphMask] = mask if mask is not None else graph.graph_mask
 
     e = edges_table
+    if values is None:
+        values = literal(1.)
+    else:
+        ...  # TODO
+
     base = select(
         e.c.source_idx.label("src"),
         e.c.target_idx.label("tgt"),
-        e.c.weight.label("val"),
+        values.label("val"),
     ).where(
         and_(
             e.c.scenario_id == literal(graph.scenario_id),
@@ -532,7 +539,7 @@ def get_outbound_map(
     raw_rows: list[RowMapping] = list(result.mappings())
 
     if not raw_rows:
-        return gb.Matrix.sparse(
+        return gb.Matrix(
             gb.dtypes.FP64, graph.num_vertices, graph.num_vertices
         )
 
@@ -550,16 +557,16 @@ def get_outbound_map(
 
 
 def get_inbound_map(
-    session: Session,
-    graph: Graph,
-    *,
-    layer_idx: int,
-    mask: Optional[GraphMask] = None,
-    value_source: ValueSource = "weight",
+        session: Session,
+        graph: Graph,
+        *,
+        layer_idx: int,
+        mask: Optional[GraphMask] = None,
+        values: Optional[ColumnElement[NumericType]] = None,
 ) -> gb.Matrix:
     """
     Return a GraphBLAS Matrix for inbound edges in a given layer,
-    using the structural graph.edges table (index-based).
+    using the structural graph_edges table (index-based).
 
     - Rows: source_idx
     - Columns: target_idx
@@ -568,16 +575,18 @@ def get_inbound_map(
     Mask semantics:
     - Only edges whose *target* vertex is in the mask are included.
     """
-    if value_source != "weight":
-        raise NotImplementedError("Only value_source='weight' is supported for now.")
-
     eff_mask: Optional[GraphMask] = mask if mask is not None else graph.graph_mask
 
     e = edges_table
+    if values is None:
+        values = literal(1.)
+    else:
+        ...  # TODO
+
     base = select(
         e.c.source_idx.label("src"),
         e.c.target_idx.label("tgt"),
-        e.c.weight.label("val"),
+        values.label("val"),
     ).where(
         and_(
             e.c.scenario_id == literal(graph.scenario_id),
@@ -605,7 +614,7 @@ def get_inbound_map(
     raw_rows: list[RowMapping] = list(result.mappings())
 
     if not raw_rows:
-        return gb.Matrix.sparse(
+        return gb.Matrix(
             gb.dtypes.FP64, graph.num_vertices, graph.num_vertices
         )
 

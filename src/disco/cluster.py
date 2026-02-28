@@ -438,7 +438,7 @@ class Cluster:
 
     @classmethod
     @contextmanager
-    def make_cluster(cls, zookeeper_settings: ZookeeperSettings, group: str = None) -> Iterator[Cluster]:
+    def make_cluster(cls, zookeeper_settings: ZookeeperSettings, group: str | None = None) -> Iterator[Cluster]:
         zk_manager = ZkConnectionManager(zookeeper_settings)
         zk_manager.start()
 

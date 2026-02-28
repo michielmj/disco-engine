@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from data_logger import DataLogger
-from numpy.random import SeedSequence, Generator, default_rng
+from numpy.random import SeedSequence, Generator as NpGenerator, default_rng
 
 from .exceptions import DiscoRuntimeError
 from .graph import Graph
@@ -117,8 +117,8 @@ class NodeRuntime(NodeRuntimeLike):
         ) for i, s in enumerate(model.spec.simprocs))
 
         self._status = NodeStatus.INITIALIZED
-        self._waiting_for = None
-        self._active_simproc = None
+        self._waiting_for: str | None = None
+        self._active_simproc: SimProc | None = None
         self._simproc_by_name = {s: i for i, s in enumerate(model.spec.simprocs)}
 
         logger.info("Node created for node=%s repid=%s", self._name, self._repid)
@@ -173,7 +173,7 @@ class NodeRuntime(NodeRuntimeLike):
         return self._dlogger
 
     @property
-    def rng(self) -> Generator:
+    def rng(self) -> NpGenerator:
         return self._rng
 
     def send_event(
@@ -185,6 +185,7 @@ class NodeRuntime(NodeRuntimeLike):
             headers: Dict[str, str] | None = None,
     ) -> None:
         if self._status == NodeStatus.ACTIVE:
+            assert self._active_simproc is not None
             logger.debug(
                 "Node[%s] sending event: simproc=%s target_node=%s target_simproc=%s epoch=%s",
                 self._name,
@@ -204,6 +205,7 @@ class NodeRuntime(NodeRuntimeLike):
 
     def wakeup(self, epoch: float, hard: bool) -> None:
         if self._status == NodeStatus.ACTIVE:
+            assert self._active_simproc is not None
             logger.debug(
                 "Node[%s] setting wakup: simproc=%s epoch=%s hard=%s",
                 self._name,
@@ -220,6 +222,7 @@ class NodeRuntime(NodeRuntimeLike):
     def advance_promise(self, target_node: str, target_simproc: str, epoch: float) -> None:
 
         if self._status == NodeStatus.ACTIVE:
+            assert self._active_simproc is not None
             logger.debug(
                 "Node[%s] making advance promise: simproc=%s target_node=%s target_simproc=%s epoch=%s",
                 self._name,
@@ -291,7 +294,7 @@ class NodeRuntime(NodeRuntimeLike):
         self._node.initialize(**kwargs)
         self._status = NodeStatus.INITIALIZED
 
-    def runner(self, duration: float) -> Generator:
+    def runner(self, duration: float) -> Generator[None, None, None]:
         """
         Called by the Worker runner in ACTIVE state.
         """
@@ -308,7 +311,7 @@ class NodeRuntime(NodeRuntimeLike):
             else:
                 # The next epoch is the smallest of next_epochs among the processes. If any simproc has next_epoch equal
                 # to None, we de not know what level to simproc next and we must wait for further promises.
-                next_epoch = float("inf")
+                next_epoch: float | None = float("inf")
                 for simproc in self._simprocs:
                     if simproc.next_epoch is None:
                         self._active_simproc = simproc
@@ -336,6 +339,7 @@ class NodeRuntime(NodeRuntimeLike):
 
                 # proceed simulation or idle if the active simproc is still waiting for events
                 else:
+                    assert self._active_simproc is not None
                     if not self._active_simproc.try_next_epoch():
                         self._waiting_for = (
                             f"{self._active_simproc.name} waiting for "

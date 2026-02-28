@@ -129,9 +129,9 @@ class TestRun:
         node_ss = ss.spawn(len(self._partitioning.node_specs))
 
         # Router + in-process transport:
-        self._nodes: dict[str, NodeRuntime] = {}  # InProcessTransport keeps a reference
+        self.nodes: dict[str, NodeRuntime] = {}  # InProcessTransport keeps a reference
         self._router = Router(
-            transports=[InProcessTransport(nodes=self._nodes)],
+            transports=[InProcessTransport(nodes=self.nodes)],
         )
 
         # Build NodeRuntimes now (as requested), but do not initialize them yet.
@@ -146,7 +146,8 @@ class TestRun:
                 session_manager=self._session_manager,
                 graph=graph_view,
                 model=self._model,
-                spec=ns,
+                partitioning=self._partitioning,
+                node_name=ns.node_name
             )
 
             rt = NodeRuntime(
@@ -162,7 +163,7 @@ class TestRun:
             )
 
             # Insert into dict for InProcessTransport delivery.
-            self._nodes[ns.node_name] = rt
+            self.nodes[ns.node_name] = rt
 
         self._experiment.status = ExperimentStatus.LOADED
 
@@ -206,7 +207,7 @@ class TestRun:
 
         params = self._experiment.params or {}
         for ns in self._partitioning.node_specs:
-            self._nodes[ns.node_name].initialize(**params)
+            self.nodes[ns.node_name].initialize(**params)
 
         self._experiment.status = ExperimentStatus.INITIALIZED
         self._initialized = True
@@ -229,7 +230,7 @@ class TestRun:
 
         # Create one runner per node for this duration.
         runners: Tuple[Generator[object, None, None], ...] = tuple(
-            self._nodes[ns.node_name].runner(duration=duration) for ns in self._partitioning.node_specs
+            self.nodes[ns.node_name].runner(duration=duration) for ns in self._partitioning.node_specs
         )
         active = list(range(len(runners)))
 
@@ -248,3 +249,5 @@ class TestRun:
                 active.pop(pos)
 
             finished_positions.clear()
+
+        self._dlogger.close()

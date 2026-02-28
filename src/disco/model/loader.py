@@ -85,7 +85,7 @@ def _read_text_file(path: Path) -> str:
 
 def _parse_model_yml(text: str) -> dict[str, Any]:
     try:
-        data = yaml.safe_load(text)  # type: ignore[attr-defined]
+        data = yaml.safe_load(text)
     except Exception as e:
         raise ModelLoadError(f"Failed to parse model.yml (YAML error): {e}") from e
     if not isinstance(data, dict):

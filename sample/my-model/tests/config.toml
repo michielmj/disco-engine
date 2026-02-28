@@ -1,0 +1,71 @@
+app_name = "my-model"
+debug = false
+
+[logging]
+level = "INFO"
+format = "%(asctime)-20s %(processName)-30s %(name)-40s %(levelname)-8s: %(message)s"
+
+[grpc]
+timeout_s = 600.0
+max_workers = 10
+grace_s = 60.0
+
+# Message size limits (bytes)
+max_send_message_bytes = 10485760
+max_receive_message_bytes = 10485760
+
+# Keepalive (seconds)
+keepalive_time_s = 60.0
+keepalive_timeout_s = 20.0
+keepalive_permit_without_calls = false
+
+# Compression: "none" or "gzip"
+compression = "none"
+
+[zookeeper]
+hosts = "localhost:2181"
+chroot = "/disco"
+default_group = "default"
+
+session_timeout_s = 10.0
+connection_timeout_s = 5.0
+
+max_retries = 5
+retry_delay_s = 1.0
+
+# Optional auth (prefer secrets for credentials)
+# auth_scheme = "digest"
+# auth_credentials = "user:password"
+
+use_tls = false
+
+[database]
+# Optional full URL override (if set, other fields are ignored)
+# url = "postgresql+psycopg://user:password@localhost:5432/disco"
+
+# DB-agnostic components (recommended)
+dialect = "sqlite"     # "postgresql" or "sqlite"
+driver = "pysqlite"    # e.g. "psycopg", "psycopg2", "asyncpg" (postgres) / "pysqlite" (sqlite)
+
+# Postgres-style connection parts
+# host = "localhost"
+# port = 5432
+database = "disco"
+# username = "disco"
+# password should come from secrets_dir:
+#   /run/secrets/disco/database__password
+# password = ""
+
+# Optional default schema (Postgres)
+# default_schema = "public"
+
+# SQLite (used only when dialect="sqlite")
+sqlite_path = "./my-model.db"   # if omitted, sqlite uses :memory:
+
+# Pool tuning (mainly relevant for Postgres)
+# pool_size = 10
+# max_overflow = 20
+# pool_pre_ping = true
+
+[serialization]
+protocol = 5

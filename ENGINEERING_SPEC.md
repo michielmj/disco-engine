@@ -1450,734 +1450,732 @@ This design ensures a clean separation:
   `NodeRuntime` instances using the same ingress path for both IPC and gRPC.
 
 
-## 7. Graph
+## 7. Layered Graph and Scenario Subsystem
 
-### 7.1 Overview and Goals
+This chapter describes the *graph* subpackage: how layered graphs are represented
+in memory with python-graphblas, how they are persisted in the relational
+`graph.*` schema, and how model data is joined back to the structural graph via
+index↔key mappings and vertex masks.
 
-The `disco.graph` subsystem provides a high-performance, layered directed graph abstraction on top of a relational database, with in-memory acceleration using `python-graphblas`. It is designed as a subpackage of `disco` and is intended for large graphs with:
+The focus is on four modules:
 
-- Many vertices and edges per scenario
-- Relatively small structural footprint in memory
-- Potentially huge amounts of vertex and edge *data* stored in the database
+- `disco.graph.core` — in-memory `Graph` representation (DB‑agnostic).
+- `disco.graph.schema` — SQLAlchemy table metadata under the `graph` schema.
+- `disco.graph.db` — utilities to create/delete scenarios and to store/load graphs.
+- `disco.graph.extract` — helpers to extract model data (Pandas / GraphBLAS) using
+  the structural graph plus masks.
 
-Key goals:
-
-- **Performance and scalability**
-  - Store only structural information (adjacency, node types, labels, masks) in memory using GraphBLAS.
-  - Avoid Python loops over vectors/matrices; use GraphBLAS and NumPy operations instead.
-  - Minimize database round trips and enable efficient joins via persisted masks.
-- **Database abstraction**
-  - Use SQLAlchemy Core for all DB interactions (queries, inserts, deletes).
-  - Optimize for PostgreSQL but remain engine-agnostic where possible.
-- **Clear separation of concerns**
-  - Graph structure and metadata in a dedicated DB schema (`graph`).
-  - Vertex/edge *data* tables are user-defined and live in the default schema (or an explicitly chosen schema).
-- **Support for scenarios, node types, and labels**
-  - Multiple scenarios in the same database, each with its own graph.
-  - A node-type system to classify vertices.
-  - A label system for vertices, integrated into the graph structure and usable in graph algorithms.
-- **Masking and selection**
-  - Efficient vertex masks for subgraph selection and DB queries.
-  - Masks persisted temporarily in the DB for use in `JOIN`s rather than large `IN` lists.
-- **Stable vertex keys for model integration**
-  - Graph structure uses dense integer indices per scenario.
-  - Stable string vertex keys live in model tables and are mapped via `graph.vertices`.
-
-The public API of the `disco.graph` subpackage exposes:
-
-- `Graph`: the in-memory structural graph.
-- A small set of free functions for DB-backed extraction and structural maps:
-  - e.g. `get_vertex_data`, `get_vertex_numeric_vector`,
-    `get_outbound_edge_data`, `get_inbound_edge_data`,
-    `get_outbound_map`, `get_inbound_map`.
-- `GraphData`: a node-scoped data access facade that binds a `Graph` + model ORM tables + a node mask + session management, and exposes the extraction helpers with minimal call-site boilerplate.
-
-All other modules in this package (`db`, `extract`, `graph_mask`, `schema`, etc.) are internal implementation details.
+`Graph` deliberately does **not** know about SQLAlchemy or the database; the coupling
+is done through the `graph.db`, `graph.extract`, and `graph_mask` helpers.
 
 
-### 7.2 Data Model and Database Schema
+### 7.1 Overview and Responsibilities
 
-The graph structure is stored in a dedicated schema `graph`. Core tables:
+At a high level:
 
-- **`graph.scenarios`**
-  - Represents a complete scenario (graph instance) in the database.
-  - Columns (conceptual):
-    - `scenario_id: TEXT, PK, not null`
-    - `created_at: TIMESTAMP, not null`
-    - `base_scenario_id: TEXT, FK -> graph.scenarios.scenario_id, nullable`
-    - `description: TEXT, nullable`
-  - `scenario_id` is the external identifier used everywhere else in the system; there is no separate numeric id in the core logic.
+- The **structural graph** lives in memory as a `Graph` backed by python‑graphblas:
 
-- **`graph.vertices`**
-  - Maps scenario-local vertex indices to stable vertex keys, node types, and optional domain identifiers.
-  - Columns (see Appendix A for the index naming convention):
-    - `scenario_id: TEXT, PK, FK -> graph.scenarios.scenario_id`
-    - `index: BIGINT, PK` — dense index `0..num_vertices-1` per scenario
-    - `key: TEXT, not null` — **vertex key** used by model/node tables in the main schema
-  - The in-memory `Graph` object only knows about `index` (integer) and the derived node-type matrix; the `key` and `node_type` are used at the database level to join to model tables and to reconstruct node-type structures.
+  - Vertices are numbered `0 .. num_vertices-1` per scenario.
+  - Each **layer** is a square adjacency matrix `A_ℓ` of shape
+    `num_vertices × num_vertices`.
+  - Optional vertex **labels** are stored in a sparse boolean matrix
+    (`vertex × label_id`).
+  - An optional **mask** is a `Vector[BOOL]` over vertices, wrapped in a
+    `GraphMask` to support persistence.
 
-- **`graph.edges`**
-  - Directed weighted edges by scenario and layer.
-  - Columns:
-    - `scenario_id: TEXT, PK, FK -> graph.scenarios.scenario_id`
-    - `layer_id: INT, PK` — layer index; each layer is acyclic by design
-    - `source_idx: BIGINT, PK` — source vertex index (`graph.vertices.index`)
-    - `target_idx: BIGINT, PK` — target vertex index (`graph.vertices.index`)
-    - `weight: DOUBLE PRECISION, not null`
-  - Layer ids correspond 1:1 to the `Graph`’s internal layer ids.
+- The **relational schema** under `graph.*` stores structural information and
+  the index↔key mapping:
 
-- **`graph.labels`**
-  - Label definitions per scenario. Labels are *global* within a scenario and indexed `0..num_labels-1` in the `Graph` object.
-  - Columns:
-    - `id: BIGINT, PK, autoincrement`
-    - `scenario_id: TEXT, FK -> graph.scenarios.scenario_id, not null`
-    - `type: TEXT, not null` — label type (e.g. `"region"`, `"category"`)
-    - `value: TEXT, not null` — label value (e.g. `"EMEA"`, `"A"`)
+  - `graph.scenarios` holds scenario metadata.
+  - `graph.vertices` maps `(scenario_id, index) → key` and anchors structural
+    edges and masks.
+  - `graph.edges` stores weighted edges per layer in index space.
+  - `graph.labels` and `graph.vertex_labels` store label definitions and
+    vertex‑label assignments.
+  - `graph.vertex_masks` stores persisted vertex masks keyed by a UUID.
 
-- **`graph.vertex_labels`**
-  - Assigns labels to vertices.
-  - Columns:
-    - `scenario_id: TEXT, PK, FK -> graph.scenarios.scenario_id`
-    - `vertex_index: BIGINT, PK` — FK -> `graph.vertices.index`
-    - `label_id: BIGINT, PK, FK -> graph.labels.id`
+- The **model data** (e.g. node tables, edge tables, parameters) is stored in
+  regular schemas, typically keyed by `(scenario_id, key)` for nodes and
+  `(scenario_id, source_key, target_key)` for edges.
 
-- **`graph.vertex_masks`**
-  - Temporary storage for vertex masks (subgraphs) to support fast DB queries via joins.
-  - Columns (see Appendix A for naming):
-    - `scenario_id: TEXT, PK`
-    - `mask_id: CHAR(36), PK` — UUID string
-    - `vertex_index: BIGINT, PK` — FK -> `graph.vertices.index`
-    - `updated_at: TIMESTAMP, not null`
+- **Extraction helpers** bridge these worlds:
 
-A helper function `create_graph_schema(engine)`:
+  - They use `graph.vertices` to map indices ⇄ keys.
+  - They use `graph.vertex_masks` to apply `GraphMask`‑based vertex filters.
+  - They return either Pandas data frames or GraphBLAS vectors/matrices that
+    are aligned with the `Graph`’s vertex indexing.
 
-- Ensures `graph` schema exists (for PostgreSQL: `CREATE SCHEMA IF NOT EXISTS graph`).
-- Calls `metadata.create_all()` to create all tables in the `graph` schema.
+Design goals:
 
-For engines without schema support (e.g. SQLite), tests rely on SQLAlchemy’s `schema_translate_map` to map the `graph` schema to the default namespace, but production usage targets PostgreSQL-like engines.
+- Keep `Graph` minimal, pure python‑graphblas, and easy to test in isolation.
+- Keep SQLAlchemy integration in a thin `db/extract` layer.
+- Make it cheap and explicit to construct shallow graph views (different masks,
+  same structure).
+- Support incremental labelling without rebuilding the entire label matrix.
 
 
-### 7.3 Graph Structure in Memory
+### 7.2 Relational Schema (`disco.graph.schema`)
 
-The central in-memory abstraction is the `Graph` class (`disco.graph.core.Graph`). It is intentionally lean and focused on structure, node types, labels, and masks — not on storing arbitrary Python objects or vertex keys.
+All structural and mask‑related tables live in the `graph` schema. The SQLAlchemy
+metadata is defined in `disco.graph.schema` and created via
+`create_graph_schema(engine)`.
 
-#### 7.3.1 Core fields
+#### 7.2.1 Scenarios
 
-Each `Graph` instance contains:
-
-- `num_vertices: int`  
-  Number of vertices in the scenario (`0..num_vertices-1` are valid indices).
-
-- `scenario_id: str`  
-  Scenario identifier in the database (`graph.scenarios.scenario_id`).
-
-- `_layers: Tuple[gb.Matrix]`  
-  The adjacency matrix for each layer:
-  - shape: `(num_vertices, num_vertices)`
-  - element type: floating point (e.g. `FP64`)
-  - semantics: `A[layer_id][i, j] = weight` if an edge exists from `i` to `j` on that layer.
-
-- `_mask: GraphMask | None`  
-  Optional vertex mask, wrapping a `Vector[BOOL]` and providing DB persistence when needed.
-
-- `_label_matrix: gb.Matrix | None`  
-  Boolean matrix of label assignments:
-  - shape: `(num_vertices, num_labels)`
-  - rows = vertices
-  - columns = labels
-  - `True` indicates "vertex has this label".
-
-- `_label_meta: dict[int, tuple[str, str]]`  
-  Mapping `label_index -> (label_type, label_value)`. Label indices are dense `0..num_labels-1` and are scenario-local.
-
-- `_label_type_vectors: dict[str, gb.Vector]`  
-  For each label type, a boolean vector over label indices:
-  - `label_type_vectors[label_type]` is a `Vector[BOOL]` of size `num_labels`.
-  - `True` at position ℓ indicates that label ℓ belongs to this type.
-
-- `num_labels: int`  
-  Number of labels attached to the graph (columns in `_label_matrix`).
-
-The `Graph` does **not** store vertex keys. All mapping between vertex indices and domain-level keys is handled via the `graph.vertices` table at query time. Node types are reconstructed into `_node_type_matrix` and `_node_type_meta` from `graph.vertices.node_type` when loading from the database.
-
-
-#### 7.3.2 Construction
-
-Graphs are typically constructed via:
-
-```python
-graph = Graph.from_edges(edge_layers, num_vertices=N, scenario_id=scenario_id)
+```text
+graph.scenarios
+-------------------------------
+scenario_id   TEXT PRIMARY KEY
+created_at    TIMESTAMP NOT NULL
+description   TEXT NULL
 ```
 
-where `edge_layers` is a mapping:
+- `scenario_id` is the external identifier used throughout the system.
+- `created_at` is set by `create_scenario`.
+- `description` is optional metadata only.
 
-```python
-edge_layers: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]]  # layer_id -> (src, dst, weight)
+#### 7.2.2 Vertices
+
+```text
+graph.vertices
+-------------------------------------------------------------
+scenario_id   TEXT   PK, FK → graph.scenarios.scenario_id
+index         BIGINT PK     -- 0 .. V-1
+key           TEXT   NOT NULL
 ```
 
-Internally, `from_edges` uses `gb.Matrix.from_coo()` to build one adjacency matrix per layer. No Python loops over edges are used beyond building NumPy arrays.
+- `(scenario_id, index)` identifies a vertex in *index space*.
+- `key` is the *model key* for the vertex (e.g. node ID in model tables).
+- All structural edges and masks refer to vertices via `(scenario_id, index)`.
+- Model tables typically use `(scenario_id, key)`, so `vertices` is the bridge.
 
-The `Graph` class exposes read-only accessors:
+#### 7.2.3 Edges
 
-- `graph.layers: Tuple[gb.Matrix]` — read-only view of the internal layer mapping.
-- `graph.get_matrix(layer_idx) -> gb.Matrix`
-- `graph.get_out_edges(layer_idx, vertex_index) -> gb.Vector` (row slice)
-- `graph.get_in_edges(layer_idx, vertex_index) -> gb.Vector` (column slice)
-
-All of these return GraphBLAS collections, not Python lists or dicts.
-
-
-### 7.4 Masks and Subgraph Selection
-
-A **vertex mask** is a boolean GraphBLAS vector of length `num_vertices` describing a subgraph (set of vertices). Masks are used for:
-
-- In-memory algorithms (filtering vertices for GraphBLAS operations).
-- Efficient DB queries, by persisting the mask into `graph.vertex_masks` and joining on it.
-
-#### 7.4.1 GraphMask
-
-`GraphMask` is a small wrapper around `Vector[BOOL]` that adds:
-
-- `scenario_id: str`
-- `mask_id: str` (UUID)
-- `_stored: bool` flag
-
-Key methods:
-
-- `ensure_persisted(session: Session) -> None`
-  - If not stored yet:
-    - Deletes any existing rows with the same `(scenario_id, mask_id)`.
-    - Extracts `(indices, values)` via `vector.to_coo()` and inserts rows into `graph.vertex_masks` for all `True` indices.
-    - Sets `_stored = True`.
-  - If already stored:
-    - Updates `updated_at` for the current `(scenario_id, mask_id)` in a single `UPDATE`.
-
-- `delete(session: Session) -> None`
-  - Removes all rows for `(scenario_id, mask_id)` from `graph.vertex_masks`.
-
-- `GraphMask.cleanup_old(session: Session, max_age_minutes: int = 60) -> None`
-  - Deletes all masks whose `updated_at` is older than the cutoff.
-
-Masks are not persisted longer than necessary and can be cleaned up periodically. They are intentionally independent of the Graph’s lifetime in the DB, but typical usage is to tie them to a `Graph` instance in memory.
-
-
-#### 7.4.2 Using masks on Graph
-
-`Graph` exposes masks as GraphBLAS vectors on its public API:
-
-- `graph.set_mask(mask_vector: gb.Vector | None) -> None`
-  - Accepts a `Vector[BOOL]` of size `num_vertices`.
-  - Internally wraps it in a `GraphMask` bound to `graph.scenario_id`.
-
-- `graph.mask_vector -> gb.Vector | None`
-  - Returns the underlying GraphBLAS mask vector (if present).
-
-- `graph.graph_mask -> GraphMask | None`
-  - Returns the `GraphMask` wrapper for this graph, if any.
-  - This is mainly for internal use by DB/extract helpers, but exposed as a read-only property instead of an underscored helper.
-
-DB-facing helpers (e.g. in `disco.graph`) use `graph.graph_mask` when no explicit override mask is provided.
-
-
-### 7.5 Labels in the Graph
-
-Labels are a first-class part of the graph structure and are stored in GraphBLAS collections so they can be used directly in algorithms and selections.
-
-#### 7.5.1 Label representation
-
-Within a scenario:
-
-- Label ids are dense ints `0, 1, 2, …`, independent of label type.
-- Label types form **non-overlapping subsets** of labels.
-
-The representation in `Graph` is:
-
-- `label_matrix: Matrix[BOOL]` with shape `(num_vertices, num_labels)`
-  - `label_matrix[v, ℓ] = True` if vertex `v` has label `ℓ`.
-- `label_meta: dict[int, (label_type, label_value)]`
-  - Maps label index ℓ to a `(type, value)` pair.
-- `label_type_vectors: dict[str, Vector[BOOL]]`
-  - For each label type, a vector of size `num_labels` with `True` at label indices belonging to that type.
-
-
-#### 7.5.2 Attaching labels to a Graph
-
-Labels are attached using:
-
-```python
-graph.set_labels(label_matrix, label_meta, label_type_vectors)
+```text
+graph.edges
+----------------------------------------------------------------------------------------------
+scenario_id   TEXT   PK, FK → graph.scenarios.scenario_id
+layer_idx     INT    PK     -- layer identifier (0 .. L-1)
+source_idx    BIGINT PK     -- FK → graph.vertices(index)
+target_idx    BIGINT PK     -- FK → graph.vertices(index)
+weight        FLOAT  NOT NULL
 ```
 
-Checks performed:
+- Each row represents a directed edge `source_idx → target_idx` in `layer_idx`.
+- `(scenario_id, layer_idx, source_idx, target_idx)` must be unique.
+- The in‑memory `Graph` assumes:
+  - edges are always between valid vertex indices `0 .. num_vertices-1`,
+  - layer indices are contiguous `0 .. num_layers-1`.
 
-- `label_matrix.dtype` must be boolean (e.g. `gb.dtypes.BOOL`).
-- `label_matrix.nrows` must equal `graph.num_vertices`.
-- Each type vector (if provided) must be boolean and have `size == num_labels`.
+These invariants are validated when constructing and loading graphs.
 
-After this call:
+#### 7.2.4 Labels and Vertex Labels
 
-- `graph.num_labels` is set based on `label_matrix.ncols`.
-- `graph.label_matrix`, `graph.label_meta`, and `graph.label_type_vectors` are available.
+```text
+graph.labels
+--------------------------------------------------------
+id           INT PRIMARY KEY
+scenario_id  TEXT NOT NULL, FK → graph.scenarios.scenario_id
+type         TEXT NOT NULL   -- label_type
+value        TEXT NOT NULL   -- label_value
 
-
-#### 7.5.3 Label-based masks
-
-The graph supports deriving vertex masks from labels:
-
-- **Mask for a single label id**
-
-  ```python
-  mask = graph.get_vertex_mask_for_label_id(label_id: int) -> gb.Vector
-  ```
-
-  - Returns a `Vector[BOOL]` of size `num_vertices`.
-  - `True` at positions where the vertex has label `label_id`.
-
-- **Mask for all labels of a type**
-
-  ```python
-  mask = graph.get_vertex_mask_for_label_type(label_type: str) -> gb.Vector
-  ```
-
-  - Uses the boolean matrix-vector product:
-
-    ```python
-    mask = graph.label_matrix.mxv(
-        graph.label_type_vectors[label_type],
-        semiring=gb.semiring.lor_land,
-    )
-    ```
-
-  - Result is a `Vector[BOOL]` of size `num_vertices`, `True` for vertices with *any* label of the given type.
-
-These masks can be used directly in algorithms or passed to `graph.set_mask()` to drive subsequent data extractions.
-
-
-#### 7.5.4 Node types
-
-Node types are a compact, structured classification of vertices that is derived from the `graph.vertices.node_type` column.
-
-Representation:
-
-- `node_type_matrix: Matrix[BOOL]` with shape `(num_vertices, num_node_types)`
-  - `node_type_matrix[v, t] = True` if vertex `v` has node-type index `t`.
-  - Typically each row is one-hot (one node type per vertex), but the representation itself allows multiple types if needed.
-- `node_type_meta: dict[int, str]`
-  - `node_type_meta[t] = "node_type_name"` (e.g. `"plant"`, `"warehouse"`, `"customer"`).
-
-Node types are attached using:
-
-```python
-graph.set_node_types(node_type_matrix, node_type_meta)
+graph.vertex_labels
+--------------------------------------------------------------------
+scenario_id   TEXT   PK, FK → graph.scenarios.scenario_id
+vertex_index  BIGINT PK, FK → graph.vertices.index
+label_id      INT    PK, FK → graph.labels.id
 ```
 
-Checks performed:
+- `graph.labels` defines label *kinds* for a scenario:
+  - Each row has a `type` (e.g. `"location"`, `"echelon"`) and a `value`
+    (e.g. `"EU"`, `"upstream"`).
+  - `id` is a DB surrogate key and is re‑indexed into a dense label index
+    for the in‑memory `Graph`.
 
-- `node_type_matrix.dtype` must be boolean.
-- `node_type_matrix.nrows` must equal `graph.num_vertices`.
-- The set of columns in `node_type_matrix` must match the keys of `node_type_meta`
-  (one metadata entry per column index, no gaps).
+- `graph.vertex_labels` maps vertices to labels:
+  - Each `(scenario_id, vertex_index, label_id)` means “this vertex has
+    this label”.
 
-When loading from the database, node types are computed from `graph.vertices.node_type` (see §7.6.3).
+When loading a graph, DB label IDs are sorted by `labels.id` and mapped to dense
+`0 .. num_labels-1` indices that are used as column indices in
+`Graph.label_matrix`.
 
+#### 7.2.5 Vertex Masks
 
-### 7.6 DB Integration: Scenarios, Store and Load
-
-Graph structure, labels, and node types are integrated with the database via internal helpers in `disco.graph.db`.
-
-
-#### 7.6.1 Creating scenarios
-
-Scenarios are created using:
-
-```python
-scenario_id = create_scenario(
-    session,
-    scenario_id="baseline",
-    base_scenario_id=None,
-    description="Initial scenario",
-)
+```text
+graph.vertex_masks
+-----------------------------------------------------------------------------------------------
+scenario_id   TEXT   PK, FK → graph.scenarios.scenario_id
+mask_id       TEXT   PK     -- UUID string identifying a mask
+vertex_index  BIGINT PK, FK → graph.vertices.index
+updated_at    TIMESTAMP NOT NULL
 ```
 
-The external scenario id is a string chosen by the caller. The helper inserts a row into `graph.scenarios` with this `scenario_id`. The caller is responsible for populating `graph.vertices` with vertex indices, keys, node types, and optional names for that scenario.
+- A *mask* is an arbitrary subset of vertices in a scenario, identified by a
+  random `mask_id` (UUID).
+- For each `(scenario_id, mask_id)` there are zero or more `vertex_index` rows.
+- `updated_at` is touched whenever a mask is ensured/persisted.
+
+`GraphMask` is responsible for populating and maintaining this table; it is used
+from `graph.extract` and other higher‑level helpers.
 
 
-#### 7.6.2 Storing a Graph to the database
+### 7.3 Core Graph Representation (`disco.graph.core`)
 
-The canonical method is:
+`Graph` is the in‑memory representation of a layered directed graph backed by
+python‑graphblas. It is completely DB‑agnostic.
 
 ```python
-store_graph(session, graph, store_edges=True, store_labels=True)
+class Graph:
+    def __init__(
+        self,
+        layers: tuple[Matrix, ...],
+        num_vertices: int,
+        scenario_id: str = "",
+        *,
+        mask: Vector | None = None,
+        label_matrix: Matrix | None = None,
+        label_meta: dict[int, tuple[str, str]] | None = None,
+    ) -> None:
+        ...
 ```
 
-Behaviour:
+Key fields (via `__slots__`):
 
-- If `store_edges=True`:
-  - Deletes all existing rows in `graph.edges` for `graph.scenario_id`.
-  - For each layer, extracts `(rows, cols, vals)` via `Matrix.to_coo()`.
-  - Inserts edges `(scenario_id, layer_idx, source_idx, target_idx, weight, name)`.
+- `_layers: tuple[Matrix, ...]` — adjacency matrices per layer.
+- `num_vertices: int` — number of vertices (0 .. num_vertices-1).
+- `scenario_id: str` — scenario identifier (for context, not required).
+- `_mask: GraphMask | None` — optional persisted vertex mask wrapper.
+- `_label_matrix: Matrix[BOOL] | None` — sparse vertex×label matrix.
+- `_label_meta: dict[int, (label_type, label_value)]`.
+- `_labels_by_type: dict[label_type, dict[label_value, label_index]]`.
+- `_label_indices_by_type: dict[label_type, np.ndarray[int64]]`.
+- `_label_index_by_type_value: dict[(label_type, label_value), label_index]`.
+- `_num_labels: int` — number of label columns.
 
-- If `store_labels=True` and `graph.label_matrix` is not `None`:
-  - Deletes all existing label assignments and labels for `graph.scenario_id` from `graph.vertex_labels` and `graph.labels`.
-  - Inserts new label rows from `graph.label_meta`, one per label index.
-    - Assigns DB ids and tracks mapping `label_index -> labels.id`.
-  - Extracts `(rows, cols, vals)` from `label_matrix.to_coo()` and inserts into `graph.vertex_labels`:
-    - `vertex_index = row`
-    - `label_id = mapped DB id for `label_index = col`.
+#### 7.3.1 Construction and Validation
 
-Node types are **not** written by `store_graph`; they live in `graph.vertices.node_type` and are managed together with vertex creation logic in the model layer.
+- `Graph.from_edges(edge_layers, *, num_vertices, scenario_id="")`
 
-A backwards-compatible helper `store_graph_edges(session, graph)` calls `store_graph` with both `store_edges=True` and `store_labels=True` so that structure and labels remain in sync.
+  - `edge_layers` is a mapping `layer_idx → (src, dst, weights)` where each
+    array is converted to `np.int64` (for indices) and proper dtype for
+    weights.
+  - For each layer a `gb.Matrix.from_coo` is constructed with shape
+    `num_vertices × num_vertices`.
+  - Layer indices must be contiguous (0 .. L-1); otherwise a `ValueError`
+    is raised.
+  - The constructor then calls `validate(check_cycles=False)`.
 
+- `Graph.validate(check_cycles: bool = True)`
 
-#### 7.6.3 Loading a Graph from the database
+  - For each layer:
 
-Graphs are loaded via:
+    - Verifies `nrows == num_vertices` and `ncols == num_vertices`.
+    - Calls `has_self_loop` to forbid self‑loops.
+    - Optionally calls `matrix_has_cycle` to detect cycles in the layer
+      when `check_cycles=True`.
+
+#### 7.3.2 Structural Accessors
+
+- `layers → tuple[Matrix, ...]` — read‑only tuple of adjacency matrices.
+- `get_matrix(layer: int) → Matrix` — raw adjacency matrix for `layer`.
+- `get_out_edges(layer: int, vertex_index: int) → Vector` — outgoing edges
+  (row slice) as a `Vector`.
+- `get_in_edges(layer: int, vertex_index: int) → Vector` — incoming edges
+  (column slice) as a `Vector`.
+
+These methods do **not** apply masks; masking is handled at higher levels by
+`GraphMask` and the extraction helpers.
+
+#### 7.3.3 Mask Handling (`GraphMask` integration)
+
+Masks are represented in `Graph` as:
+
+- `set_mask(mask_vector: Vector | None)`
+
+  - If `mask_vector` is `None`, clears the mask.
+  - Otherwise enforces:
+
+    - `mask_vector.dtype == gb.dtypes.BOOL`.
+    - `mask_vector.size == num_vertices`.
+
+  - Wraps the vector in a `GraphMask(mask_vector, scenario_id=self.scenario_id)`
+    and stores it in `_mask`.
+
+- `mask_vector → Vector | None`
+
+  - Returns the underlying GraphBLAS mask vector (or `None`).
+
+- `graph_mask → GraphMask | None`
+
+  - Returns the `GraphMask` wrapper (or `None`).
+
+`GraphMask` is responsible for persisting its vector to `graph.vertex_masks`
+via `ensure_persisted(session)`. This is used by `graph.extract` helpers when
+joining filtered subsets of vertices or edges.
+
+#### 7.3.4 Labels and Incremental Labelling
+
+`Graph` stores vertex labels in a sparse matrix and multiple metadata
+structures to support efficient per‑type queries.
+
+- `set_labels(label_matrix: Matrix, label_meta: dict[int, (str, str)] | None)`
+
+  - Attaches an existing label matrix and metadata.
+  - Requires `label_matrix.dtype == BOOL` and
+    `label_matrix.nrows == num_vertices`.
+  - Sets `_num_labels = label_matrix.ncols`.
+  - Rebuilds all per‑type structures (`_labels_by_type`, `_label_indices_by_type`,
+    `_label_index_by_type_value`) from `_label_meta`.
+
+- `label_matrix → Matrix | None` — sparse `num_vertices × num_labels` matrix.
+- `label_meta → Mapping[int, (str, str)]` — read‑only view of label metadata.
+- `num_labels → int` — number of labels (columns).
+
+Per‑type helpers:
+
+- `labels_for_type(label_type: str) → (np.ndarray, Matrix)`
+
+  - Returns `(label_indices, submatrix)` where:
+
+    - `label_indices` is a `np.ndarray[int64]` of global label indices of this type.
+    - `submatrix` is a `Matrix[BOOL]` with all vertices and only those columns.
+
+- `label_value_to_index(label_type: str) → Mapping[str, int]`
+
+  - Read‑only mapping `label_value → label_index` for a type.
+
+- `label_index_to_value_for_type(label_type: str) → Mapping[int, str]`
+
+  - Inverse mapping `label_index → label_value` for a type.
+
+- `label_info(label_index: int) → (label_type, label_value)`
+
+  - Returns metadata for a label index, or raises if unknown.
+
+- `get_vertices_for_label(label_id: int) → np.ndarray`
+
+  - Returns indices of vertices that have label `label_id`.
+  - Implemented via a column slice and a sparse `select("!=", 0)` operation.
+
+Incremental labelling:
 
 ```python
-graph = load_graph_for_scenario(session, scenario_id)
+def add_labels(
+    self,
+    label_type: str,
+    labels: Mapping[str, np.ndarray | Sequence[int]],
+) -> None:
+    ...
+```
+
+- `labels` maps `label_value → sequence of vertex indices`.
+
+- For each `(label_type, label_value)`:
+
+  - If the `(type, value)` pair already exists, it reuses the existing
+    label index.
+  - Otherwise it allocates a new label index at `_num_labels` and updates
+    `_label_meta`, `_labels_by_type`, `_label_index_by_type_value`, and
+    the per‑type index set.
+
+- Vertex indices are validated against `0 .. num_vertices-1`.
+
+- A new boolean assignment is constructed with all existing non‑zero entries
+  from `_label_matrix` plus all newly added `(vertex, label)` pairs and fed
+  into `gb.Matrix.from_coo` with `dup_op=gb.binary.lor`:
+
+  - This makes `add_labels` semantics a **set union**: if a `(vertex, label)`
+    pair exists multiple times, the result is still `True` and no error is
+    raised for duplicate indices.
+
+- Per‑type index arrays (`_label_indices_by_type`) are rebuilt for affected
+  label types at the end.
+
+This allows label metadata and assignments to be built incrementally from
+multiple calls without re‑allocating the entire matrix from scratch in user code.
+
+
+#### 7.3.5 Distinct Label Combinations
+
+The method:
+
+```python
+def by_distinct_labels(self, distinct: Sequence[str]) -> np.ndarray:
+    ...
+```
+
+computes distinct combinations of labels across one or more label types.
+
+- Input: a sequence of label types, e.g. `["location", "echelon"]`.
+- For each type, `labels_for_type` gives:
+
+  - `label_indices`: global label indices for that type.
+  - `L_type`: boolean matrix `(num_vertices × num_labels_of_type)`.
+
+- These type‑specific matrices are combined row‑wise using a Kronecker‑like
+  operation implemented by `_rowwise_and_kron` and `_rowwise_and_kron_many`:
+
+  - The result `S` has shape `(num_vertices × num_combinations)` and has `True`
+    exactly at positions `(vertex, combination)` where the vertex has all labels
+    involved in that combination.
+
+- Column‑wise reduction `S.reduce_columnwise("lor")` identifies which label
+  combinations are actually present in at least one vertex.
+
+- The column indices of such combinations are decoded back into the original
+  global label indices per type, and returned as a `np.ndarray` of shape
+  `(num_combinations, len(distinct))`.
+
+If each vertex carries at most one label per type, then each vertex contributes
+to at most one combination, but the implementation is generic enough to handle
+multiple labels per type as well.
+
+
+#### 7.3.6 Graph Views
+
+`Graph.get_view(mask: Vector | None = None) → Graph` constructs a shallow view:
+
+- Structural matrices (`layers`) and label structures are shared.
+- A new `Graph` instance is created with the same `num_vertices` and
+  `scenario_id`.
+- The mask used for the new graph:
+
+  - If `mask is None`, it reuses the current mask vector (if any).
+  - Otherwise it applies the given GraphBLAS `Vector[BOOL]`.
+
+This is useful when computations need to work on different vertex subsets while
+sharing the same underlying adjacency matrices and labels.
+
+
+### 7.4 Scenario Creation, Storage, and Loading (`disco.graph.db`)
+
+The `disco.graph.db` module deals with the relational representation of graphs.
+
+#### 7.4.1 Scenario Creation
+
+```python
+def create_scenario(
+    session: Session,
+    scenario_id: str,
+    vertex_keys: np.ndarray,
+    *,
+    description: str | None = None,
+    replace: bool = False,
+    chunk_size: int = 10_000,
+) -> str:
+    ...
+```
+
+Responsibilities:
+
+- Ensure that a scenario with `scenario_id` does not already exist:
+
+  - If it exists and `replace=False`, raise `ValueError`.
+  - If it exists and `replace=True`, call `delete_scenario` to remove all
+    related data before recreating.
+
+- Insert a row into `graph.scenarios` with `created_at = utcnow()` and
+  optional `description`.
+
+- Insert vertices in chunks into `graph.vertices`:
+
+  - `vertex_keys` is a 1‑D NumPy array (or array‑like) of keys.
+  - Position `i` corresponds to vertex index `i` in the structural graph.
+  - Vertices are inserted in batches of size `chunk_size` to avoid building
+    very large insert lists in memory.
+
+This function does **not** commit; the caller’s session management is
+responsible for commit/rollback.
+
+#### 7.4.2 Scenario Deletion
+
+```python
+def delete_scenario(session: Session, scenario_id: str) -> None:
+    ...
+```
+
+Removes everything for a scenario in the correct dependency order:
+
+1. `graph.vertex_masks`
+2. `graph.vertex_labels`
+3. `graph.edges`
+4. `graph.labels`
+5. `graph.vertices`
+6. `graph.scenarios`
+
+This again does not commit; transaction boundaries are the caller’s responsibility.
+
+#### 7.4.3 Storing Graph Structure and Labels
+
+```python
+def store_graph(
+    session: Session,
+    graph: Graph,
+    *,
+    store_edges: bool = True,
+    store_labels: bool = True,
+) -> None:
+    ...
+```
+
+- `_store_edges_for_scenario`:
+
+  - Deletes existing rows in `graph.edges` for the scenario.
+  - For each layer, calls `Matrix.to_coo()` and inserts rows with
+    `(scenario_id, layer_idx, source_idx, target_idx, weight)`.
+
+- `_store_labels_for_scenario`:
+
+  - If `graph.label_matrix is None` or `graph.num_labels == 0`, does nothing.
+  - Deletes existing rows in `graph.vertex_labels` and `graph.labels` for
+    the scenario.
+  - Inserts one row in `graph.labels` for each label index in `graph.label_meta`,
+    returning the DB `id` for each inserted row.
+  - Builds a mapping `label_index → labels.id`.
+  - Iterates over non‑zero entries of `label_matrix` (`to_coo()`), and inserts
+    rows into `graph.vertex_labels` with `(scenario_id, vertex_index, label_id)`
+    for all entries that are `True`.
+
+Again, no commit is performed here.
+
+#### 7.4.4 Loading a Graph from the Database
+
+```python
+def load_graph_for_scenario(session: Session, scenario_id: str) -> Graph:
+    ...
 ```
 
 Steps:
 
-1. **Determine `num_vertices`**  
-   - Query `max(index)` from `graph.vertices` for the scenario.
-   - Set `num_vertices = max_index + 1` (or `0` if no vertices).
+1. `_load_num_vertices`:
 
-2. **Load edges for the scenario and assemble per-layer matrices**
-   - Query `graph.edges` for `(layer_idx, source_idx, target_idx, weight)`.
-   - Group rows by `layer_idx` and build NumPy arrays.
-   - Build `edge_layers: dict[int, gb.Matrix]` using `Matrix.from_coo()` for each layer with shape `(num_vertices, num_vertices)`.
+   - Queries `max(vertices.index)` for the scenario and returns
+     `max_index + 1` (or `0` if no vertices exist).
 
-3. **Load labels and assignments**
-   - Query all labels for the scenario from `graph.labels`.
-   - Sort by `labels.id` to build a deterministic mapping `db_label_id -> label_index` (`0..num_labels-1`).
-   - Build `label_meta` mapping `label_index → (type, value)`.
-   - For each label type, collect all label indices and build a `Vector[BOOL]` over label indices (`label_type_vectors`).
-   - Query `graph.vertex_labels` (assignments) and convert to `(vertex_index, label_index)` pairs (via the `db_label_id -> label_index` mapping).
-   - Build `label_matrix: Matrix[BOOL]` from `Matrix.from_coo()` with `nrows=num_vertices` and `ncols=num_labels`.  
-   - If there are no labels for the scenario, `label_matrix` and related metadata are set to `None` / empty structures.
+2. `_load_edge_layers`:
 
-4. **Load node types**
-   - Query `graph.vertices` for `(index, node_type)` for the scenario.
-   - Collect the distinct node-type strings, sort them to obtain a deterministic order, and assign dense indices `0..num_node_types-1`.
-   - Build `node_type_meta: dict[int, str]` with `node_type_meta[idx] = node_type_string`.
-   - Convert `(vertex_index, node_type_index)` pairs into a boolean `Matrix[BOOL]` using `Matrix.from_coo()`:
-     - shape: `(num_vertices, num_node_types)`.
-     - value `True` at `(v, t)` indicates vertex `v` has node-type index `t`.
-   - If there are no vertices or node-type information, `node_type_matrix` may be `None` and `node_type_meta` is empty.
+   - Queries `graph.edges` for the scenario.
+   - Groups rows by `layer_idx`.
+   - Creates a GraphBLAS matrix per layer via `Matrix.from_coo`.
+   - Ensures layer indices are contiguous `0 .. num_layers-1`.
 
-5. **Construct the `Graph` instance**
+3. `_load_labels_for_scenario`:
+
+   - Queries `graph.labels` for the scenario and sorts by `id`.
+   - Assigns dense label indices `0 .. num_labels-1` and builds `label_meta`.
+   - Queries `graph.vertex_labels` and uses `label_id_to_index` to build a
+     sparse `label_matrix` via `Matrix.from_coo`. If there are no assignments,
+     it constructs an empty boolean matrix with the appropriate size.
+
+4. Constructs and returns a `Graph`:
 
    ```python
-   graph = Graph(
+   Graph(
        layers=edge_layers,
        num_vertices=num_vertices,
        scenario_id=scenario_id,
        label_matrix=label_matrix,
        label_meta=label_meta,
-       label_type_vectors=label_type_vectors,
-       node_type_matrix=node_type_matrix,
-       node_type_meta=node_type_meta,
    )
    ```
 
-After this, `graph.node_type_matrix` and `graph.node_type_meta` are available for node-type-based selection and analysis, in addition to the label structures.
+The resulting `Graph` is fully populated structurally and with labels, but
+has no mask set by default.
 
 
-### 7.7 Data Extraction API
+### 7.5 Data Extraction and Maps (`disco.graph.extract`)
 
-While user-defined vertex and edge *data* tables are not part of the graph schema, the subsystem provides a set of free functions in `disco.graph` that delegate to internal helpers in `disco.graph.extract` to retrieve data as pandas DataFrames or GraphBLAS vectors/matrices.
+The `disco.graph.extract` module bridges structural graphs and model tables.
+It uses the `graph.vertices` mapping and optional `GraphMask` instances to:
 
-The user must provide SQLAlchemy `Table` objects that satisfy some minimal schema conventions. Importantly, **model tables are key-based**, while the graph schema is index-based; the `graph.vertices` mapping table bridges this gap.
+- Pull vertex‑aligned data into Pandas or GraphBLAS structures.
+- Pull edge‑aligned data (per layer) into Pandas.
+- Construct GraphBLAS adjacency‑like matrices filtered by masks.
 
-DB helpers always take the pattern:
+Key concepts:
 
-```python
-result = helper_function(
-    session,
-    graph,
-    ... other arguments ...
-)
-```
+- **IndexBy**: whether results are indexed by vertex **index** or **key**.
+- **EdgeIndexBy**: whether edge results are indexed by source/target **indices**
+  or **keys**.
+- **GraphMask** integration: when a mask is provided (or attached to the graph),
+  only vertices or edges that belong to the mask are returned.
 
-They use `graph.graph_mask` by default, but can also accept an explicit override mask.
-
-
-#### 7.7.1 Vertex data (key-based model tables)
-
-Requirements on a *model node* (vertex) data table:
-
-- Columns:
-  - `scenario_id` — same type and semantics as `graph.scenarios.scenario_id`
-  - `key` — vertex key; must match `graph.vertices.key` for the scenario
-
-The mapping from vertex indices to keys is stored in `graph.vertices`:
-
-- `graph.vertices(scenario_id, index, key, node_type, …)`
-
-API (conceptual wrapper on top of `disco.graph.extract.get_vertex_data`):
+#### 7.5.1 Vertex Data via Index→Key Mapping
 
 ```python
-from disco.graph import get_vertex_data
-
-df = get_vertex_data(
-    session,
-    graph,
-    vertex_table=my_vertex_data_table,
-    columns=[
-        my_vertex_data_table.c.value,
-        my_vertex_data_table.c.capacity,
-    ],
-    mask=optional_mask_vector,   # optional: overrides graph.mask_vector
-    index_by="index",            # or "key"
-    default_fill=None,           # optional: fill value for missing data
-)
+def get_vertex_data(
+    session: Session,
+    graph: Graph,
+    vertex_table: Table,
+    columns: Sequence[ColumnElement[Any]],
+    *,
+    mask: GraphMask | None = None,
+    index_by: Literal["index", "key"] = "index",
+    default_fill: Any | None = None,
+) -> pd.DataFrame:
+    ...
 ```
 
-Semantics:
+- `vertex_table` is a *model node table* keyed by `(scenario_id, key)`.
+- The function:
 
-- Start from `graph.vertices` for the scenario:
-  - `(scenario_id, index, key, node_type)`
-- Optionally restrict vertices via a mask:
-  - A `Vector[BOOL]` mask is wrapped in a `GraphMask` and persisted to `graph.vertex_masks`.
-  - The query joins `graph.vertices` with `graph.vertex_masks` on `(scenario_id, index) == (scenario_id, vertex_index)` and the mask’s `mask_id`.
-- LEFT OUTER JOIN the model vertex table on `(scenario_id, key)`:
-  - Every vertex index appears once; if no row exists in the model vertex table, its columns are `NULL`.
-- The result is converted to a pandas DataFrame that always includes both:
-  - `vertex_index` (the graph index, derived from `graph.vertices.index`)
-  - `key` (the model vertex key)
-- `index_by` controls the DataFrame index:
-  - `"index"` → index is `vertex_index` (default)
-  - `"key"` → index is `key`
-- If `default_fill` is not `None`, `DataFrame.fillna(default_fill)` is applied before returning.
+  - Starts from `graph.vertices` (`vertices_table`), which has
+    `(scenario_id, index, key)`.
+  - Optionally joins `graph.vertex_masks` using the provided or attached
+    `GraphMask` to filter vertices.
+  - LEFT OUTER JOINs the model node table on `(scenario_id, key)`.
+  - Returns a DataFrame with the requested columns plus `index` and `key`.
 
-A convenience helper exists for extracting a single numeric column as a GraphBLAS vector:
+- `index_by` controls the resulting index:
+
+  - `"index"` → DataFrame indexed by vertex index.
+  - `"key"` → DataFrame indexed by vertex key.
+
+- `default_fill` is an optional value to `fillna` for missing model rows.
+
+Numeric vector extraction:
 
 ```python
-from disco.graph import get_vertex_numeric_vector
-
-vec = get_vertex_numeric_vector(
-    session,
-    graph,
-    vertex_table=my_vertex_data_table,
-    value_column=my_vertex_data_table.c.value,
-    mask=optional_mask_vector,
-    default_value=0.0,
-)
+def get_vertex_numeric_vector(
+    session: Session,
+    graph: Graph,
+    vertex_table: Table,
+    value_column: ColumnElement[Any],
+    *,
+    mask: GraphMask | None = None,
+    default_value: float = 0.0,
+) -> gb.Vector:
+    ...
 ```
 
-Semantics:
+- Similar join pattern but returns a `Vector[FP64]` of size `graph.num_vertices`.
+- Missing values become `default_value`; if `default_value == 0.0` they are
+  simply omitted in the sparse representation.
 
-- Same join pattern as above (via `graph.vertices` and optional mask).
-- Builds a sparse `Vector[FP64]` of size `graph.num_vertices` with entries at the vertex indices.
-- If a row is missing or the column is `NULL`:
-  - If `default_value == 0.0`: the value is omitted (implicit zero in the sparse representation).
-  - Otherwise: `default_value` is used.
+#### 7.5.2 Edge Data (Outbound / Inbound), Key‑based Tables
 
+Model edge tables are expected to be key‑based:
 
-#### 7.7.2 Edge data (key-based model tables)
+```text
+scenario_id   TEXT
+source_key    TEXT
+target_key    TEXT
+...
+```
 
-Model edge tables are **key-based** and typically layer-specific (one table per SimProc/layer). Requirements on a *model edge* data table:
-
-- Columns:
-  - `scenario_id`
-  - `source_key`
-  - `target_key`
-  - plus arbitrary data columns (e.g. `cost`, `capacity`, …)
-- If a single table is used for multiple layers, it should additionally have:
-  - `layer_idx` — matching `graph.edges.layer_idx`
-
-Structural edges in the graph schema are **index-based**:
-
-- `graph.edges(scenario_id, layer_idx, source_idx, target_idx, weight, name)`
-- `graph.vertices(scenario_id, index, key, node_type, …)` bridges from `source_idx`/`target_idx` to `source_key`/`target_key`.
-
-API (conceptual wrappers around `disco.graph.extract.get_outbound_edge_data` / `get_inbound_edge_data`):
+Validation helper:
 
 ```python
-from disco.graph import get_outbound_edge_data, get_inbound_edge_data
-
-df_out = get_outbound_edge_data(
-    session,
-    graph,
-    edge_table=my_edge_data_table,            # key-based model table
-    columns=[my_edge_data_table.c.cost],
-    layer_idx=0,
-    mask=optional_mask_vector,               # optional: masks on source index
-    index_by="indices",                      # or "keys"
-    default_fill=None,                       # fill missing model edge data
-)
-
-df_in = get_inbound_edge_data(
-    session,
-    graph,
-    edge_table=my_edge_data_table,
-    columns=[my_edge_data_table.c.cost],
-    layer_idx=0,
-    mask=optional_mask_vector,               # masks on target index
-    index_by="indices",                      # or "keys"
-    default_fill=None,
-)
+def _validate_edge_table(edge_table: Table) -> None:
+    # requires columns: scenario_id, source_key, target_key
 ```
 
-Semantics (outbound):
-
-- Start from `graph.edges` for the scenario and `layer_idx`.
-- Join `graph.vertices` twice:
-  - `v_src` on `(scenario_id, index) == (scenario_id, source_idx)` → `source_key`, `source_node_type`
-  - `v_tgt` on `(scenario_id, index) == (scenario_id, target_idx)` → `target_key`, `target_node_type`
-- LEFT OUTER JOIN the model edge table on `(scenario_id, source_key, target_key[, layer_idx])`.
-- If a mask is present:
-  - Persist via `GraphMask.ensure_persisted()`.
-  - Join `graph.vertex_masks` on `source_idx == vertex_index` to restrict edges whose **source** vertex is in the mask.
-- Construct a DataFrame that includes:
-  - `source_index`, `target_index`
-  - `source_key`, `target_key`
-  - Requested model edge columns (e.g. `cost`).
-- Index choice:
-  - `"indices"` → MultiIndex `(source_index, target_index)` (default).
-  - `"keys"` → MultiIndex `(source_key, target_key)`.
-- If `default_fill` is provided, missing model edge rows are filled with that value.
-
-Semantics (inbound):
-
-- Same as outbound, but masking is applied on the **target** side:
-  - The mask join uses `target_idx == vertex_index`.
-
-This design keeps structural edges purely index-based (efficient for GraphBLAS) while allowing model edge data to stay in domain-friendly key form. Node types can be used in additional joins or filters at the application level when desired.
-
-
-#### 7.7.3 Structural maps (GraphBLAS matrices)
-
-For algorithmic use, the subsystem can project the edge structure back into GraphBLAS matrices filtered by masks and layers, using only the structural `graph.edges` table.
-
-Outbound map:
+Outbound edges:
 
 ```python
-from disco.graph import get_outbound_map
-
-mat_out = get_outbound_map(
-    session,
-    graph,
-    layer_idx=0,
-    mask=optional_mask_vector,
-)
+def get_outbound_edge_data(
+    session: Session,
+    graph: Graph,
+    edge_table: Table,
+    columns: Sequence[ColumnElement[Any]],
+    *,
+    layer_idx: int,
+    mask: GraphMask | None = None,
+    index_by: Literal["indices", "keys"] = "indices",
+    default_fill: Any | None = None,
+) -> pd.DataFrame:
+    ...
 ```
+
+- Starts from `graph.edges` for the given `layer_idx`.
+- Joins `graph.vertices` twice (source and target) to get `source_key` and
+  `target_key`.
+- LEFT OUTER JOINs the model edge table on `(scenario_id, source_key, target_key)`.
+- Optionally filters by `GraphMask` on the *source* index via `graph.vertex_masks`.
+- Returns a DataFrame indexed by:
+
+  - `("source_index", "target_index")` if `index_by == "indices"`, or
+  - `("source_key", "target_key")` if `index_by == "keys"`.
+
+Inbound edges:
+
+```python
+def get_inbound_edge_data(
+    session: Session,
+    graph: Graph,
+    edge_table: Table,
+    columns: Sequence[ColumnElement[Any]],
+    *,
+    layer_idx: int,
+    mask: GraphMask | None = None,
+    index_by: Literal["indices", "keys"] = "indices",
+    default_fill: Any | None = None,
+) -> pd.DataFrame:
+    ...
+```
+
+- Same pattern as outbound, but mask (if any) is applied on the *target* index.
+
+#### 7.5.3 Map Extraction (GraphBLAS Matrices from `graph.edges`)
+
+Two helpers provide sparse adjacency matrices derived directly from
+`graph.edges`:
+
+```python
+def get_outbound_map(
+    session: Session,
+    graph: Graph,
+    *,
+    layer_idx: int,
+    mask: GraphMask | None = None,
+    value_source: Literal["weight"] = "weight",
+) -> gb.Matrix:
+    ...
+```
+
+- Queries `graph.edges` for the scenario and `layer_idx`.
+- If a `GraphMask` is provided or attached to the graph, joins
+  `graph.vertex_masks` and filters by the *source* vertex.
+- Returns a `Matrix[FP64]` with shape `num_vertices × num_vertices` populated
+  with edge weights for the remaining edges.
 
 Inbound map:
 
 ```python
-from disco.graph import get_inbound_map
-
-mat_in = get_inbound_map(
-    session,
-    graph,
-    layer_idx=0,
-    mask=optional_mask_vector,
-)
+def get_inbound_map(
+    session: Session,
+    graph: Graph,
+    *,
+    layer_idx: int,
+    mask: GraphMask | None = None,
+    value_source: Literal["weight"] = "weight",
+) -> gb.Matrix:
+    ...
 ```
 
-Semantics:
+- Same semantics but filters by the *target* vertex in the mask.
 
-- Both calls query `graph.edges` for the scenario and layer, optionally joined with `graph.vertex_masks`:
-  - Outbound: join on `source_idx` (only edges whose source vertex is in the mask).
-  - Inbound: join on `target_idx` (only edges whose target vertex is in the mask).
-- Results are converted to COO arrays and fed into `gb.Matrix.from_coo()`:
-  - shape: `(num_vertices, num_vertices)`
-  - values: edge weights (currently the only supported value source).
-- When no rows are found, an empty sparse matrix of the correct size is returned.
+Currently, `value_source` only supports `"weight"`; this is kept as an enum to
+allow future extensions (e.g. taking values from model edge tables).
 
 
-#### 7.7.4 Node-scoped extraction via GraphData
+### 7.6 Summary
 
-For simulation execution, nodes typically need access to vertex and edge data *restricted to the node’s assignment* (its subgraph). Passing `Session`, `Table` objects, `layer_idx`, and masks through every call is verbose and leaks database concerns into runtime code.
+The graph subsystem cleanly separates concerns:
 
-`GraphData` is a thin, deliberately opaque facade that:
+- `Graph` is a DB‑agnostic, python‑graphblas‑based representation of layered
+  directed graphs with labels and masks.
+- `graph.schema` defines the relational schema for scenarios, vertices, edges,
+  labels, vertex labels, and vertex masks.
+- `graph.db` handles scenario lifecycle and round‑trips between DB structure
+  and in‑memory graphs.
+- `graph.extract` provides high‑level helpers to merge structural graphs with
+  model data and masks into Pandas and GraphBLAS structures.
 
-- Owns a `SessionManager` (see database chapter) to create short-lived SQLAlchemy sessions.
-- Binds a `Graph` (scenario structure).
-- Binds a node-specific vertex mask (typically the node’s `assignment_vector` from a `Partitioning`).
-- Binds model ORM tables via `OrmBundle`:
-  - `OrmBundle.node_tables[node_type]` selects the node’s vertex data table,
-  - `OrmBundle.edge_tables_by_simproc[simproc_name]` selects a per-simproc edge data table when configured,
-  - `OrmBundle.default_edge_table` is used as a fallback when no per-simproc table is configured.
-- Maps `simproc_name -> layer_idx` using `model.spec.simprocs` ordering.
-- Internally delegates to the free functions in `disco.graph` (`get_vertex_data`, `get_outbound_edge_data`, `get_outbound_map`, etc.), using the node mask by default.
-
-Conceptual usage:
-
-```python
-gd = GraphData.for_node(
-    session_manager=session_manager,
-    graph=graph,
-    model=model,
-    orm=model.orm_bundle,
-    spec=node_spec,
-    node_mask=partitioning.assignment_vector(node_spec.node_name),
-)
-
-df_nodes = gd.vertex_data([gd.node_table.c.capacity, gd.node_table.c.value])
-
-df_edges = gd.simproc("flow").outbound_edge_data([gd.edge_table.c.cost])
-mat_out = gd.simproc("flow").outbound_map()
-```
-
-`GraphData` is typically constructed by the Worker for each node runtime and passed into the NodeRuntime/NodeController. The node runtime then uses `GraphData` rather than dealing with raw sessions or schema objects directly.
-
-Session lifecycle is managed by a small helper `SessionManager` (located in `disco.database`), created from `AppSettings.database`. It owns an Engine (with configured pool size / overflow) and provides `with session_manager.session() as session:` scopes used internally by `GraphData` and the graph DB helpers.
-
-
-### 7.8 Testing Strategy
-
-The current test coverage focuses on:
-
-1. **Basic graph structure**
-   - Constructing graphs from NumPy edge arrays.
-   - Verifying adjacency matrix values and row/column slices (`get_matrix`, `get_out_edges`, `get_in_edges`).
-
-2. **Masking semantics**
-   - Applying a boolean mask vector via `set_mask`.
-   - Ensuring the mask is stored as a `Vector[BOOL]` of correct size.
-   - Verifying that masks drive DB-backed queries correctly (via `graph.vertex_masks`) without altering the underlying adjacency matrices.
-
-3. **Label integration**
-   - Attaching a `label_matrix`, `label_meta`, and `label_type_vectors` to a `Graph`.
-   - Verifying `num_labels` and matrix dimensions.
-   - Testing label-based masks for both a single label id and a label type.
-
-4. **Node-type integration**
-   - Populating `graph.vertices` with `(index, key, node_type)` mappings.
-   - Verifying that `load_graph_for_scenario` reconstructs:
-     - The correct set of node types,
-     - A boolean `node_type_matrix` with one-hot assignments per vertex,
-     - A `node_type_meta` mapping that matches the distinct node-type strings.
-   - Ensuring the matrix dimensions match `(num_vertices, num_node_types)` and that each vertex has exactly one active type in typical scenarios.
-
-5. **DB round-trip**
-   - Storing a graph (structure + labels) into an in-memory database via `store_graph`.
-   - Loading it back with `load_graph_for_scenario` and verifying structural and label equality.
-   - Verifying that node types derived from `graph.vertices` are consistent across load operations.
-
-6. **Index↔key data extraction**
-   - Populating `graph.vertices` with `(index, key, node_type)` mappings.
-   - Verifying vertex data extraction from model node tables keyed by `(scenario_id, key)`.
-   - Verifying edge data extraction from model edge tables keyed by `(scenario_id, source_key, target_key)`.
-   - Checking `index_by="index"` vs `index_by="key"` behaviour and handling of missing rows via `default_fill`.
-
-7. **GraphData binding behaviour**
-   - Constructing `GraphData` for a node with a partitioning assignment mask and a Model `OrmBundle`.
-   - Verifying that:
-     - `node_type -> node_table` selection is correct,
-     - `simproc_name -> layer_idx` mapping follows `model.spec.simprocs`,
-     - per-simproc edge tables are used when present, otherwise the default edge table is used,
-     - the node mask is applied by default to extraction calls.
-
-Future test extensions can include:
-
-- Performance benchmarks for large graphs and label sets to validate that no accidental Python loops or object allocations occur in hot paths.
-- Property-based tests for mask persistence and cleanup (e.g. `GraphMask.cleanup_old`).
-- Node-type–aware algorithms and selections (e.g. restricting computations to `"supply"` vs `"demand"` nodes and validating their behaviour).
+This separation allows simulation and optimization code to operate purely on
+`Graph` and GraphBLAS structures, while still supporting robust storage,
+querying, and integration with relational model data.
 
 
 ## 8. Model

@@ -1,6 +1,6 @@
+# tests/graph/test_distinct_labels.py
 import numpy as np
 import graphblas as gb
-from graphblas import Vector
 
 from disco.graph import Graph
 
@@ -10,21 +10,6 @@ NODE_TYPE = "node-type"
 
 
 def test_by_distinct_labels_and_matrix() -> None:
-    # ------------------------------------------------------------------
-    # Label type vectors (over global label indices)
-    # ------------------------------------------------------------------
-    label_type_vectors = {
-        ECHELON_LABEL_TYPE: Vector.from_dense(
-            [False, False, True, True, True, False, False]
-        ),
-        LOCATION_LABEL_TYPE: Vector.from_dense(
-            [False, False, False, False, False, True, True]
-        ),
-        NODE_TYPE: Vector.from_dense(
-            [True, True, False, False, False, False, False]
-        ),
-    }
-
     label_meta = {
         0: (NODE_TYPE, "StockingPoint"),
         1: (NODE_TYPE, "Factory"),
@@ -55,10 +40,10 @@ def test_by_distinct_labels_and_matrix() -> None:
     )
 
     # ------------------------------------------------------------------
-    # Build Graph with labels only
+    # Build Graph with labels only (no structural layers)
     # ------------------------------------------------------------------
-    g = Graph(layers={}, num_vertices=num_vertices, scenario_id="test-scenario")
-    g.set_labels(label_matrix, label_meta, label_type_vectors)
+    g = Graph.from_edges(edge_layers={}, num_vertices=num_vertices, scenario_id="test-scenario")
+    g.set_labels(label_matrix, label_meta)
 
     distinct = [NODE_TYPE, ECHELON_LABEL_TYPE, LOCATION_LABEL_TYPE]
 
@@ -74,10 +59,11 @@ def test_by_distinct_labels_and_matrix() -> None:
         (0, 4, 6),  # StockingPoint, ech2, loc1
     }
 
-    combos = g.by_distinct_labels(distinct)
-    assert isinstance(combos, np.ndarray)
-    combos_set = {tuple(combo) for combo in combos.tolist()}
+    # ------------------------------------------------------------------
+    # Matrix-returning API
+    # ------------------------------------------------------------------
+    combos_matrix = g.by_distinct_labels(distinct)
+    assert combos_matrix.shape[1] == len(distinct)
 
-    assert combos_set == expected_combos
-
-
+    combos_matrix_set = {tuple(row) for row in combos_matrix.tolist()}
+    assert combos_matrix_set == expected_combos

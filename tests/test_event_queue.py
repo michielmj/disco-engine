@@ -325,4 +325,23 @@ def test_3predecessors_waiting_for_messages_states_2():
     assert queue.epoch == 2.0
     assert queue.next_epoch == 5.0
     assert queue.waiting_for == "predecessor2/0 (events)"
-    
+
+
+def test_2predecessors_fail_pop():
+
+    queue = EventQueue()
+    queue.register_predecessor('pred1', 'simproc')
+    queue.register_predecessor('pred2', 'simproc')
+
+    queue.promise('pred1', 'simproc', 1, 20., 1)
+    queue.promise('pred1', 'simproc', 1, 20., 1)
+    queue.push('pred1', 'simproc', 20., b'', {})
+    queue.promise('pred2', 'simproc', 1, 10., 1)
+    queue.push('pred2', 'simproc', 10., b'', {})
+
+    assert queue.epoch == 10.
+    events = queue.pop()
+    assert len(events) == 1
+    n, s, e, d, h = events[0]
+    assert n == 'pred2'
+    assert e == 10.
