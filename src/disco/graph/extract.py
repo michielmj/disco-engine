@@ -54,7 +54,7 @@ def get_vertex_data(
 
     The model node table (vertex_table) is keyed by (scenario_id, key),
     while the Graph structure uses (scenario_id, index). The mapping
-    from index -> key is stored in graph.vertices.
+    from index -> key is stored in graph_vertices.
 
     Semantics:
       - We start from graph.vertices (mapping table).
@@ -65,7 +65,7 @@ def get_vertex_data(
       - Missing model rows -> NaN/null, unless default_fill is provided.
 
     Requirements:
-      - graph.vertices must have columns:
+      - graph_vertices must have columns:
             scenario_id, index, key
       - vertex_table must have columns:
             scenario_id, key
@@ -265,12 +265,12 @@ def get_outbound_edge_data(
     Model edge tables are key-based:
       - scenario_id, source_key, target_key, ...
 
-    Structural edges in the graph schema are index-based:
-      - graph.edges with (scenario_id, layer_idx, source_idx, target_idx).
+    Structural edges are index-based:
+      - graph_edges with (scenario_id, layer_idx, source_idx, target_idx).
 
     We:
-      - Start from graph.edges (indices).
-      - Join vertices twice to map source_idx/target_idx -> source_key/target_key.
+      - Start from graph_edges (indices).
+      - Join graph_vertices twice to map source_idx/target_idx -> source_key/target_key.
       - LEFT OUTER JOIN the model edge table on (scenario_id, source_key, target_key).
       - Optionally filter by GraphMask on the source index.
       - Return a DataFrame indexed by:
@@ -380,12 +380,12 @@ def get_inbound_edge_data(
     Model edge tables are key-based:
       - scenario_id, source_key, target_key, ...
 
-    Structural edges in the graph schema are index-based:
-      - graph.edges with (scenario_id, layer_idx, source_idx, target_idx).
+    Structural edges are index-based:
+      - graph_edges with (scenario_id, layer_idx, source_idx, target_idx).
 
     We:
-      - Start from graph.edges (indices).
-      - Join vertices twice to map source_idx/target_idx -> source_key/target_key.
+      - Start from graph_edges (indices).
+      - Join graph_vertices twice to map source_idx/target_idx -> source_key/target_key.
       - LEFT OUTER JOIN the model edge table on (scenario_id, source_key, target_key).
       - Optionally filter by GraphMask on the *target* index.
       - Return a DataFrame indexed by:
@@ -490,7 +490,7 @@ def get_outbound_map(
 ) -> gb.Matrix:
     """
     Return a GraphBLAS Matrix for outbound edges in a given layer,
-    using the structural graph.edges table (index-based).
+    using the structural graph_edges table (index-based).
 
     - Rows: source_idx
     - Columns: target_idx
@@ -566,7 +566,7 @@ def get_inbound_map(
 ) -> gb.Matrix:
     """
     Return a GraphBLAS Matrix for inbound edges in a given layer,
-    using the structural graph.edges table (index-based).
+    using the structural graph_edges table (index-based).
 
     - Rows: source_idx
     - Columns: target_idx

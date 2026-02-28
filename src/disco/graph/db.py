@@ -76,7 +76,7 @@ def create_scenario(
         if replace:
             delete_scenario(session, scenario_id)
         else:
-            raise ValueError(f"Scenario {scenario_id!r} already exists in graph.scenarios")
+            raise ValueError(f"Scenario {scenario_id!r} already exists in graph_scenarios")
 
     # ------------------------------------------------------------------
     # Insert scenario row
@@ -137,12 +137,12 @@ def delete_scenario(session: Session, scenario_id: str) -> None:
 
     This removes, in order:
 
-      - graph.vertex_masks
-      - graph.vertex_labels
-      - graph.edges
-      - graph.labels
-      - graph.vertices
-      - graph.scenarios
+      - graph_vertex_masks
+      - graph_vertex_labels
+      - graph_edges
+      - graph_labels
+      - graph_vertices
+      - graph_scenarios
 
     for the given scenario_id.
 
@@ -181,7 +181,7 @@ def delete_scenario(session: Session, scenario_id: str) -> None:
 
 def _store_edges_for_scenario(session: Session, graph: Graph) -> None:
     """
-    Persist the Graph's structural edges into graph.edges for its scenario.
+    Persist the Graph's structural edges into graph_edges for its scenario.
 
     - Removes any existing edges for the scenario.
     - Writes rows per layer using Matrix.to_coo().
@@ -214,7 +214,7 @@ def _store_edges_for_scenario(session: Session, graph: Graph) -> None:
 
 def _store_labels_for_scenario(session: Session, graph: Graph) -> None:
     """
-    Persist the Graph's label structure into graph.labels and graph.vertex_labels.
+    Persist the Graph's label structure into graph_labels and graph_vertex_labels.
 
     Strategy:
       - If the Graph has no labels (label_matrix is None), do nothing.
@@ -289,14 +289,14 @@ def store_graph(
         store_labels: bool = True,
 ) -> None:
     """
-    Persist the Graph structure into the graph schema.
+    Persist the Graph structure into the graph tables.
 
     - By default, stores edges and labels.
     - Use store_edges / store_labels flags if you want to control which
       parts are written.
 
     NOTE: This does not manage scenarios; those should be created via
-    create_scenario (which also populates graph.vertices).
+    create_scenario (which also populates graph_vertices).
     """
     if store_edges:
         _store_edges_for_scenario(session, graph)
@@ -311,10 +311,10 @@ def store_graph(
 
 def _load_num_vertices(session: Session, scenario_id: str) -> int:
     """
-    Infer the number of vertices for a scenario from graph.vertices.
+    Infer the number of vertices for a scenario from graph_vertices.
 
     Uses the naming convention:
-      - For vertex rows (graph.vertices), the index column is called 'index'.
+      - For vertex rows (graph_vertices), the index column is called 'index'.
     """
     max_idx = session.execute(
         select(func.max(vertices.c.index)).where(
@@ -330,7 +330,7 @@ def _load_edge_layers(
         num_vertices: int,
 ) -> Tuple[gb.Matrix, ...]:
     """
-    Load edges for a scenario and build one GraphBLAS Matrix per layer.
+    Load edges from graph_edges for a scenario and build one GraphBLAS Matrix per layer.
 
     Returns:
         Tuple[Matrix, ...] where each Matrix has shape
@@ -399,7 +399,7 @@ def _load_labels_for_scenario(
       - label_meta: label_index -> (label_type, label_value)
 
     Global label ids 0..num_labels-1 are assigned based on the order of rows
-    in graph.labels (sorted by id for determinism).
+    in graph_labels (sorted by id for determinism).
     """
     # Fetch all labels for this scenario
     label_rows = session.execute(
@@ -497,9 +497,9 @@ def load_graph_for_scenario(
     """
     Load the full Graph (edges + labels) for a scenario.
 
-    - Vertices: inferred from graph.vertices (max index + 1).
-    - Edges: from graph.edges.
-    - Labels: from graph.labels and graph.vertex_labels, assembled into
+    - Vertices: inferred from graph_vertices (max index + 1).
+    - Edges: from graph_edges.
+    - Labels: from graph_labels and graph_vertex_labels, assembled into
       Graph.label_matrix and Graph.label_meta.
     """
     num_vertices = _load_num_vertices(session, scenario_id)

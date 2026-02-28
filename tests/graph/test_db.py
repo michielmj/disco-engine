@@ -27,15 +27,10 @@ from disco.graph.schema import vertex_masks as vertex_masks_table
 def engine_and_session_factory() -> Iterator[tuple[object, sessionmaker]]:
     """
     Fixture that provides an in-memory SQLite engine and a sessionmaker.
-    For SQLite we strip the 'graph' schema via schema_translate_map.
     """
-    # Base in-memory engine
-    base_engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
 
-    # For SQLite, drop the 'graph' schema (graph.<table> -> <table>)
-    engine = base_engine.execution_options(schema_translate_map={"graph": None})
-
-    # Create schema (tables) in the in-memory database
+    # Create graph tables (graph_scenarios, graph_vertices, etc.) in the in-memory database
     create_graph_schema(engine)
 
     SessionLocal = sessionmaker(bind=engine, future=True)
@@ -47,11 +42,8 @@ def engine_and_session_factory() -> Iterator[tuple[object, sessionmaker]]:
 
 def _create_scenario_with_vertices(session: Session, num_vertices: int) -> str:
     """
-    Helper to create a scenario and populate graph.vertices with
+    Helper to create a scenario and populate graph_vertices with
     vertex indices 0..num_vertices-1 via create_scenario.
-
-    NOTE: This matches the current graph.vertices schema, which
-    uses 'index' and 'key'.
     """
     scenario_id = "roundtrip_test"
     vertex_keys = np.array([f"v{i}" for i in range(num_vertices)], dtype=object)
@@ -238,7 +230,7 @@ def test_store_and_load_graph_with_labels_and_mask(
     # ------------------------------------------------------------------
     # Set a mask (vertices 1 and 2)
     # NOTE: mask is NOT persisted by store_graph/load_graph,
-    #       but will be used in DB queries via vertex_masks.
+    #       but will be used in DB queries via graph_vertex_masks.
     # ------------------------------------------------------------------
     mask_vec = Vector.from_coo([1, 2], [True, True], size=num_vertices)
     graph.set_mask(mask_vec)

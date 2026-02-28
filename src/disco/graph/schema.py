@@ -11,14 +11,14 @@ from sqlalchemy import (
     Float,
     DateTime,
     ForeignKey,
-    text, ForeignKeyConstraint,
+    ForeignKeyConstraint,
 )
 from sqlalchemy.engine import Engine
 
-metadata = MetaData(schema="graph")
+metadata = MetaData()
 
 scenarios = Table(
-    "scenarios",
+    "graph_scenarios",
     metadata,
     Column("scenario_id", String, primary_key=True),
     Column("created_at", DateTime, nullable=False),
@@ -26,86 +26,77 @@ scenarios = Table(
 )
 
 vertices = Table(
-    "vertices",
+    "graph_vertices",
     metadata,
-    Column("scenario_id", String, ForeignKey("graph.scenarios.scenario_id"), primary_key=True),
+    Column("scenario_id", String, ForeignKey("graph_scenarios.scenario_id"), primary_key=True),
     Column("index", BigInteger, primary_key=True),  # 0..V-1
     Column("key", String, nullable=False),
-    # Column("node_type", String, nullable=False),
-    schema="graph",
 )
 
 edges = Table(
-    "edges",
+    "graph_edges",
     metadata,
-    Column("scenario_id", String, ForeignKey("graph.scenarios.scenario_id"), primary_key=True),
+    Column("scenario_id", String, ForeignKey("graph_scenarios.scenario_id"), primary_key=True),
     Column("layer_idx", Integer, primary_key=True),
     Column("source_idx", BigInteger, primary_key=True),
     Column("target_idx", BigInteger, primary_key=True),
     Column("weight", Float, nullable=False),
     ForeignKeyConstraint(
         ["scenario_id", "source_idx"],
-        ["graph.vertices.scenario_id", "graph.vertices.index"],
+        ["graph_vertices.scenario_id", "graph_vertices.index"],
         name="fk_edges_source_vertex",
     ),
     ForeignKeyConstraint(
         ["scenario_id", "target_idx"],
-        ["graph.vertices.scenario_id", "graph.vertices.index"],
+        ["graph_vertices.scenario_id", "graph_vertices.index"],
         name="fk_edges_target_vertex",
     ),
-    schema="graph",
 )
 
 labels = Table(
-    "labels",
+    "graph_labels",
     metadata,
-    Column("id", Integer, primary_key=True),  # <-- changed
-    Column("scenario_id", String, ForeignKey("graph.scenarios.scenario_id"), nullable=False),
+    Column("id", Integer, primary_key=True),
+    Column("scenario_id", String, ForeignKey("graph_scenarios.scenario_id"), nullable=False),
     Column("type", String, nullable=False),
     Column("value", String, nullable=False),
 )
 
 vertex_labels = Table(
-    "vertex_labels",
+    "graph_vertex_labels",
     metadata,
-    Column("scenario_id", String, ForeignKey("graph.scenarios.scenario_id"), primary_key=True),
+    Column("scenario_id", String, ForeignKey("graph_scenarios.scenario_id"), primary_key=True),
     Column("vertex_index", BigInteger, primary_key=True),
-    Column("label_id", Integer, ForeignKey("graph.labels.id"), primary_key=True),
+    Column("label_id", Integer, ForeignKey("graph_labels.id"), primary_key=True),
     ForeignKeyConstraint(
         ["scenario_id", "vertex_index"],
-        ["graph.vertices.scenario_id", "graph.vertices.index"],
+        ["graph_vertices.scenario_id", "graph_vertices.index"],
         name="fk_vertex_labels_vertex",
     ),
-    schema="graph",
 )
 
 vertex_masks = Table(
-    "vertex_masks",
+    "graph_vertex_masks",
     metadata,
-    Column("scenario_id", String, ForeignKey("graph.scenarios.scenario_id"), primary_key=True),
+    Column("scenario_id", String, ForeignKey("graph_scenarios.scenario_id"), primary_key=True),
     Column("mask_id", String(36), primary_key=True),  # UUID as string
     Column("vertex_index", BigInteger, primary_key=True),
     Column("updated_at", DateTime, nullable=False),
     ForeignKeyConstraint(
         ["scenario_id", "vertex_index"],
-        ["graph.vertices.scenario_id", "graph.vertices.index"],
+        ["graph_vertices.scenario_id", "graph_vertices.index"],
         name="fk_vertex_masks_vertex",
     ),
-    schema="graph",
 )
 
 
 def create_graph_schema(engine: Engine) -> None:
     """
-    Create or update the graph schema.
+    Create the graph tables in the default schema.
 
-    - For PostgreSQL: CREATE SCHEMA IF NOT EXISTS graph
-    - For others: rely on metadata.create_all; schema='graph' must be supported
-      or configured appropriately.
+    All graph infrastructure tables are prefixed with ``graph_``:
+    graph_scenarios, graph_vertices, graph_edges, graph_labels,
+    graph_vertex_labels, graph_vertex_masks.
     """
-    dialect_name = engine.dialect.name
-
     with engine.begin() as conn:
-        if dialect_name == "postgresql":
-            conn.execute(text("CREATE SCHEMA IF NOT EXISTS graph"))
         metadata.create_all(conn)
