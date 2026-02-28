@@ -28,9 +28,12 @@ message(STATUS "NumPy include dir: ${NUMPY_INCLUDE_DIR}")
 find_package(pybind11 CONFIG QUIET)
 if(NOT pybind11_FOUND)
     include(FetchContent)
+    # Use a URL tarball instead of GIT_REPOSITORY so that CMAKE_DOWNLOAD_TIMEOUT
+    # (set in pyproject.toml) applies and git is not required at build time.
     FetchContent_Declare(pybind11
-        GIT_REPOSITORY https://github.com/pybind/pybind11.git
-        GIT_TAG v2.12.0
+        URL https://github.com/pybind/pybind11/archive/refs/tags/v2.12.0.tar.gz
+        URL_HASH SHA256=bf8f242abd1abcd375d516a7067490fb71abd79519a282d22b6e4d19282185a7
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
     FetchContent_MakeAvailable(pybind11)
 endif()
