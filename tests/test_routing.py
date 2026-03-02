@@ -6,6 +6,7 @@ import pytest
 
 from disco.envelopes import EventEnvelope, PromiseEnvelope
 from disco.router import Router, RouterError
+from disco.transports.inprocess import InProcessTransport
 
 
 class RecordingTransport:
@@ -156,3 +157,42 @@ def test_router_transports_returns_transport_objects_in_order() -> None:
 
     router = Router(transports=[t1, t2])
     assert list(router.transports()) == [t1, t2]
+
+
+# ---------------------------------------------------------------------------
+# InProcessTransport tests
+# ---------------------------------------------------------------------------
+
+class FakeInProcessNodeRuntime:
+    """Minimal stand-in for a NodeRuntime registered with InProcessTransport."""
+
+    def __init__(self) -> None:
+        self.events: list[EventEnvelope] = []
+        self.promises: list[PromiseEnvelope] = []
+
+    def receive_event(self, envelope: EventEnvelope) -> None:
+        self.events.append(envelope)
+
+    def receive_promise(self, envelope: PromiseEnvelope) -> None:
+        self.promises.append(envelope)
+
+
+def test_inprocess_handles_node_true_for_registered_node() -> None:
+    node = FakeInProcessNodeRuntime()
+    transport = InProcessTransport(nodes={"alpha": node})  # type: ignore[arg-type]
+    assert transport.handles_node("any-repid", "alpha") is True
+
+
+def test_inprocess_handles_node_false_for_unknown_node() -> None:
+    transport = InProcessTransport(nodes={})  # type: ignore[arg-type]
+    assert transport.handles_node("any-repid", "missing") is False
+
+
+def test_inprocess_handles_node_ignores_repid() -> None:
+    """InProcessTransport does not consult a cluster or address book;
+    it returns True for any repid as long as the node is registered."""
+    node = FakeInProcessNodeRuntime()
+    transport = InProcessTransport(nodes={"alpha": node})  # type: ignore[arg-type]
+    assert transport.handles_node("repid-1", "alpha") is True
+    assert transport.handles_node("repid-2", "alpha") is True
+    assert transport.handles_node("", "alpha") is True

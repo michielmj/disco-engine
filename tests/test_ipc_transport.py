@@ -303,6 +303,113 @@ def test_ipc_receiver_promise_delivery() -> None:
     assert promise.num_events == 1
 
 
+def test_ipc_egress_small_event_sender_fields() -> None:
+    """Verify sender_node and sender_simproc are correctly propagated in inline messages."""
+    cluster = FakeCluster()
+    cluster.address_book[("1", "beta")] = "remote"
+    event_queue: Queue[IPCEventMsg] = Queue()
+    promise_queue: Queue[IPCPromiseMsg] = Queue()
+
+    transport = IPCTransport(
+        cluster=cluster,
+        event_queues={"remote": event_queue},
+        promise_queues={"remote": promise_queue},
+    )
+
+    envelope = EventEnvelope(
+        repid="1",
+        sender_node="alpha",
+        sender_simproc="order",
+        target_node="beta",
+        target_simproc="supply",
+        epoch=1.0,
+        data=b"small",
+        headers={},
+    )
+
+    transport.send_event(envelope)
+    msg = _safe_get(event_queue, "IPCEventMsg (sender fields)")
+
+    assert msg.sender_node == "alpha"
+    assert msg.sender_simproc == "order"
+    assert msg.target_node == "beta"
+    assert msg.target_simproc == "supply"
+
+
+def test_ipc_egress_large_event_sender_fields() -> None:
+    """Verify sender_node and sender_simproc are correctly propagated in shared-memory messages."""
+    cluster = FakeCluster()
+    cluster.address_book[("1", "beta")] = "remote"
+    event_queue: Queue[IPCEventMsg] = Queue()
+    promise_queue: Queue[IPCPromiseMsg] = Queue()
+
+    transport = IPCTransport(
+        cluster=cluster,
+        event_queues={"remote": event_queue},
+        promise_queues={"remote": promise_queue},
+        large_payload_threshold=4,
+    )
+
+    payload = b"0123456789"
+    envelope = EventEnvelope(
+        repid="1",
+        sender_node="alpha",
+        sender_simproc="order",
+        target_node="beta",
+        target_simproc="supply",
+        epoch=2.0,
+        data=payload,
+        headers={},
+    )
+
+    transport.send_event(envelope)
+    msg = _safe_get(event_queue, "IPCEventMsg (large sender fields)")
+
+    assert msg.sender_node == "alpha"
+    assert msg.sender_simproc == "order"
+    assert msg.target_node == "beta"
+    assert msg.target_simproc == "supply"
+    assert msg.shm_name is not None
+
+    # Clean up shared memory
+    shm = SharedMemory(name=msg.shm_name)
+    shm.close()
+    shm.unlink()
+
+
+def test_ipc_egress_promise_sender_fields() -> None:
+    """Verify sender_node and sender_simproc are correctly propagated in promise messages."""
+    cluster = FakeCluster()
+    cluster.address_book[("1", "beta")] = "remote"
+    event_queue: Queue[IPCEventMsg] = Queue()
+    promise_queue: Queue[IPCPromiseMsg] = Queue()
+
+    transport = IPCTransport(
+        cluster=cluster,
+        event_queues={"remote": event_queue},
+        promise_queues={"remote": promise_queue},
+    )
+
+    envelope = PromiseEnvelope(
+        repid="1",
+        sender_node="alpha",
+        sender_simproc="order",
+        target_node="beta",
+        target_simproc="supply",
+        seqnr=5,
+        epoch=3.0,
+        num_events=2,
+    )
+
+    transport.send_promise(envelope)
+    msg = _safe_get(promise_queue, "IPCPromiseMsg (sender fields)")
+
+    assert msg.sender_node == "alpha"
+    assert msg.sender_simproc == "order"
+    assert msg.target_node == "beta"
+    assert msg.target_simproc == "supply"
+
+
 def test_ipc_receiver_unknown_node_raises() -> None:
     event_queue: Queue[IPCEventMsg] = Queue()
     promise_queue: Queue[IPCPromiseMsg] = Queue()

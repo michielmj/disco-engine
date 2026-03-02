@@ -70,7 +70,7 @@ class IPCTransport(Transport):
             msg = IPCEventMsg(
                 repid=envelope.repid,
                 sender_node=envelope.sender_node,
-                sender_simproc=envelope.target_simproc,
+                sender_simproc=envelope.sender_simproc,
                 target_node=envelope.target_node,
                 target_simproc=envelope.target_simproc,
                 epoch=envelope.epoch,
@@ -90,8 +90,8 @@ class IPCTransport(Transport):
 
                 msg = IPCEventMsg(
                     repid=envelope.repid,
-                    sender_node="node",
-                    sender_simproc="simproc",
+                    sender_node=envelope.sender_node,
+                    sender_simproc=envelope.sender_simproc,
                     target_node=envelope.target_node,
                     target_simproc=envelope.target_simproc,
                     epoch=envelope.epoch,
@@ -121,8 +121,8 @@ class IPCTransport(Transport):
         queue = self._promise_queues[addr]
         msg = IPCPromiseMsg(
             repid=envelope.repid,
-            sender_node="node",
-            sender_simproc="simproc",
+            sender_node=envelope.sender_node,
+            sender_simproc=envelope.sender_simproc,
             target_node=envelope.target_node,
             target_simproc=envelope.target_simproc,
             seqnr=envelope.seqnr,
