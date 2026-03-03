@@ -35,11 +35,7 @@ class ServerCommand(BaseModel):
 def handle_server(command: ServerCommand) -> None:
     from disco.config import get_settings
 
-    overrides: dict[str, object] = {}
-    if command.loglevel is not None:
-        overrides["logging"] = {"level": command.loglevel.upper()}
-
-    settings = get_settings(config_file=command.config_file, **overrides)
+    settings = get_settings(config_file=command.config_file)
 
     from disco.server import Server
 
@@ -51,6 +47,7 @@ def handle_server(command: ServerCommand) -> None:
         group=command.group,
         grace_s=command.grace_s,
         orchestrator=command.orchestrator,
+        loglevel=command.loglevel,
     )
     server.start()
 

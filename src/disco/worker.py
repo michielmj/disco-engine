@@ -399,7 +399,7 @@ class Worker:
                 active.pop(pos)
 
     def _end_run_locked(self, status: ExperimentStatus) -> None:
-        """
+        “””
         End-of-run sequence for a partition.
 
         This is the “happy path”/structured path end (e.g. FINISHED),
@@ -410,7 +410,17 @@ class Worker:
         2) release per-run resources (NodeRuntimes, DataLogger, ingress queues)
         3) clear assignment + publish AVAILABLE to Cluster
         4) clear runner bookkeeping
-        """
+        “””
+        a = self._assignment
+        logger.info(
+            “Worker %s run ended: status=%s expid=%s repid=%s partition=%s”,
+            self._name,
+            status.name,
+            a.expid if a else None,
+            a.repid if a else None,
+            a.partition if a else None,
+        )
+
         # 1) status + bookkeeping
         self._set_partition_status_locked(status)
 
@@ -975,6 +985,13 @@ class Worker:
         self._runners = tuple(runners)
         self._active_runners = list(range(len(self._runners)))
 
+        logger.info(
+            "Worker %s starting %d runners for duration=%s",
+            self._name,
+            len(self._runners),
+            duration,
+        )
+
         self._set_partition_status_locked(ExperimentStatus.ACTIVE)
 
     def _teardown_run_locked(self) -> None:
@@ -1117,6 +1134,13 @@ class Worker:
         4) Clears assignment and transitions worker back to AVAILABLE
         """
         a = self._require_assignment_locked()
+
+        logger.error(
+            "Worker %s partition failed at %r: %s",
+            self._name,
+            where,
+            exc,
+        )
 
         tb = traceback.format_exc()
         payload: dict[str, Any] = {

@@ -235,6 +235,7 @@ class Server:
         group: Optional[str] = None,
         grace_s: Optional[int] = None,
         orchestrator: bool = True,
+        loglevel: Optional[str] = None,
     ) -> None:
         self._settings = settings
         self._workers_arg = workers
@@ -243,6 +244,7 @@ class Server:
         self._group = group
         self._grace_s = float(grace_s) if grace_s is not None else float(settings.grace_s)
         self._start_orchestrator = orchestrator
+        self._loglevel = loglevel
 
         self._shutdown_requested = threading.Event()
         self._cluster: Optional[Cluster] = None
@@ -295,7 +297,8 @@ class Server:
             event_queues[spec.address] = ctx.Queue()
             promise_queues[spec.address] = ctx.Queue()
 
-        log_level = _parse_log_level(self._settings.logging.level)
+        raw_level = self._loglevel if self._loglevel is not None else self._settings.logging.level
+        log_level = _parse_log_level(raw_level)
         with mp_logging.setup_logging(level=log_level) as log_cfg:
             logger.info("Server starting with %d workers", len(self._worker_specs))
 

@@ -7,9 +7,13 @@ from multiprocessing.shared_memory import SharedMemory
 from typing import Mapping
 import pickle
 
+from tools.mp_logging import getLogger
+
 from ..envelopes import EventEnvelope, PromiseEnvelope
 from ..runtime import NodeRuntime
 from .ipc_messages import IPCEventMsg, IPCPromiseMsg
+
+logger = getLogger(__name__)
 
 
 class IPCReceiver:
@@ -38,6 +42,12 @@ class IPCReceiver:
             self._process_promise(msg)
 
     def _process_event(self, msg: IPCEventMsg) -> None:
+        logger.debug(
+            "IPCReceiver event: node=%s simproc=%s epoch=%s",
+            msg.target_node,
+            msg.target_simproc,
+            msg.epoch,
+        )
         data = self._extract_event_data(msg)
         envelope = EventEnvelope(
             repid=msg.repid,
@@ -55,6 +65,14 @@ class IPCReceiver:
         node.receive_event(envelope)
 
     def _process_promise(self, msg: IPCPromiseMsg) -> None:
+        logger.debug(
+            "IPCReceiver promise: node=%s simproc=%s seqnr=%s epoch=%s num_events=%s",
+            msg.target_node,
+            msg.target_simproc,
+            msg.seqnr,
+            msg.epoch,
+            msg.num_events,
+        )
         envelope = PromiseEnvelope(
             repid=msg.repid,
             sender_node=msg.sender_node,

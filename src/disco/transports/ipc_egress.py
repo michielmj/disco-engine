@@ -7,10 +7,14 @@ from multiprocessing import Queue
 from multiprocessing.shared_memory import SharedMemory
 from typing import Any, Mapping, Callable
 
+from tools.mp_logging import getLogger
+
 from ..cluster import Cluster
 from ..envelopes import EventEnvelope, PromiseEnvelope
 from .base import Transport
 from .ipc_messages import IPCEventMsg, IPCPromiseMsg
+
+logger = getLogger(__name__)
 
 
 class IPCTransport(Transport):
@@ -57,6 +61,14 @@ class IPCTransport(Transport):
                 f"IPCTransport: no address for (repid={envelope.repid!r}, node={envelope.target_node!r})"
             ) from exc
         queue = self._event_queues[addr]
+
+        logger.debug(
+            "IPC send_event: node=%s simproc=%s epoch=%s addr=%s",
+            envelope.target_node,
+            envelope.target_simproc,
+            envelope.epoch,
+            addr,
+        )
 
         # serialize data for IPC transport
         headers = {} if envelope.headers is None else envelope.headers
@@ -119,6 +131,15 @@ class IPCTransport(Transport):
     def send_promise(self, envelope: PromiseEnvelope) -> None:
         addr = self._cluster.address_book[(envelope.repid, envelope.target_node)]
         queue = self._promise_queues[addr]
+        logger.debug(
+            "IPC send_promise: node=%s simproc=%s seqnr=%s epoch=%s num_events=%s addr=%s",
+            envelope.target_node,
+            envelope.target_simproc,
+            envelope.seqnr,
+            envelope.epoch,
+            envelope.num_events,
+            addr,
+        )
         msg = IPCPromiseMsg(
             repid=envelope.repid,
             sender_node=envelope.sender_node,
