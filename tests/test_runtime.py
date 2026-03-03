@@ -186,6 +186,15 @@ def test_initialize_forwards_to_node_initialize() -> None:
     assert rt._status == NodeStatus.INITIALIZED  # private, OK for tests
 
 
+def test_node_graph_is_property_accessor() -> None:
+    """Node.graph must be a @property, not a regular method."""
+    rt, _router, node = make_runtime(simprocs=["L0"])
+    # Access graph as a property (no parentheses). If the @property decorator
+    # is missing, this will return a bound method instead of the graph object.
+    g = node.graph
+    assert isinstance(g, DummyGraph)
+
+
 def test_send_event_requires_active_status() -> None:
     rt, _router, _node = make_runtime(simprocs=["L0"])
     assert rt._status == NodeStatus.INITIALIZED

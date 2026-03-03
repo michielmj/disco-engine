@@ -123,6 +123,7 @@ class Node(ABC):
     def rng(self) -> Generator:
         return self._runtime.rng
 
+    @property
     def graph(self) -> Graph:
         return self._runtime.graph
 

@@ -172,8 +172,8 @@ The precise mapping between graph layers, nodes, and simprocs is described in a 
   A concrete mechanism for delivering envelopes between processes/machines. All transports implement a common interface:
 
   - `handles_node(repid, node) -> bool`
-  - `send_event(repid, envelope)`
-  - `send_promise(repid, envelope)`
+  - `send_event(envelope)`
+  - `send_promise(envelope)`
 
   Current transport types:
 
@@ -224,6 +224,7 @@ The precise mapping between graph layers, nodes, and simprocs is described in a 
       ACTIVE = 4
       PAUSED = 5
       TERMINATED = 6
+      EXITED = 8
       BROKEN = 9
   ```
 
@@ -239,6 +240,7 @@ The precise mapping between graph layers, nodes, and simprocs is described in a 
     - `AVAILABLE`
     - `INITIALIZING`
     - `TERMINATED`
+    - `EXITED`
     - `BROKEN`
 
   Delivery failures (especially for promises) are logged; unrecoverable failures cause the Worker to transition to `BROKEN`.
@@ -268,7 +270,7 @@ The precise mapping between graph layers, nodes, and simprocs is described in a 
   A wrapper around a `Vector[BOOL]`:
 
   - Represents a selection of vertices (a subgraph).
-  - Can be persisted temporarily in `graph.vertex_masks` using a UUID.
+  - Can be persisted temporarily in `graph_vertex_masks` using a UUID.
   - Enables efficient DB queries by joining on the mask instead of sending large `IN` lists.
 
 The graph/scenario subsystem is orthogonal to the runtime in implementation, but conceptually it is the **source of truth for simulation structure**: runtime components (Workers, NodeRuntimes, simprocs) are configured from graph and scenario metadata rather than ad-hoc configuration.
@@ -1029,11 +1031,9 @@ instances in the same process.
 @dataclass(slots=True)
 class InProcessTransport(Transport):
     nodes: Mapping[str, NodeRuntime]
-    cluster: Cluster
 ```
 
 - `nodes` maps node names to their local `NodeRuntime` instances.
-- `cluster` is used only for address-book checks in `handles_node`.
 
 This transport is also long-lived. The worker owns a single `InProcessTransport`
 instance and updates its `nodes` mapping as it creates and tears down
@@ -1043,16 +1043,14 @@ instance and updates its `nodes` mapping as it creates and tears down
 
 ```python
 def handles_node(self, repid: str, node: str) -> bool:
-  if node not in self.node_specs:
+  if node not in self.nodes:
     return False
-  return (repid, node) in self.cluster.address_book
+  return True
 ```
 
-A node is considered in-process if:
-
-- The worker hosts a `NodeRuntime` for that node, and
-- The address book has an entry for `(repid, node)` mapping to this worker's
-  address (ensured by `Cluster` and `Worker` assignment logic).
+A node is considered in-process if the worker hosts a `NodeRuntime` for that
+node. The `repid` parameter is accepted for interface compatibility but is not
+consulted; locality is determined purely by node registration.
 
 #### 6.5.3 Delivery
 
@@ -1060,7 +1058,7 @@ Events:
 
 ```python
 def send_event(self, envelope: EventEnvelope) -> None:
-  node = self.node_specs[envelope.target_node]
+  node = self.nodes[envelope.target_node]
   node.receive_event(envelope)
 ```
 
@@ -1068,7 +1066,7 @@ Promises:
 
 ```python
 def send_promise(self, envelope: PromiseEnvelope) -> None:
-  node = self.node_specs[envelope.target_node]
+  node = self.nodes[envelope.target_node]
   node.receive_promise(envelope)
 ```
 
@@ -1148,6 +1146,8 @@ message belongs to.
 @dataclass(slots=True)
 class IPCEventMsg:
     repid: str
+    sender_node: str
+    sender_simproc: str
     target_node: str
     target_simproc: str
     epoch: float
@@ -1159,6 +1159,8 @@ class IPCEventMsg:
 @dataclass(slots=True)
 class IPCPromiseMsg:
     repid: str
+    sender_node: str
+    sender_simproc: str
     target_node: str
     target_simproc: str
     seqnr: int
@@ -1381,6 +1383,8 @@ class DiscoTransportServicer(transport_pb2_grpc.DiscoTransportServicer):
         for msg in request_iterator:
             ipc = IPCEventMsg(
                 repid=msg.repid,
+                sender_node=msg.sender_node,
+                sender_simproc=msg.sender_simproc,
                 target_node=msg.target_node,
                 target_simproc=msg.target_simproc,
                 epoch=msg.epoch,
@@ -1396,6 +1400,8 @@ class DiscoTransportServicer(transport_pb2_grpc.DiscoTransportServicer):
     def SendPromise(self, request, context):
         ipc = IPCPromiseMsg(
             repid=request.repid,
+            sender_node=request.sender_node,
+            sender_simproc=request.sender_simproc,
             target_node=request.target_node,
             target_simproc=request.target_simproc,
             seqnr=request.seqnr,
@@ -1486,13 +1492,13 @@ At a high level:
 - The **relational schema** under `graph.*` stores structural information and
   the index↔key mapping:
 
-  - `graph.scenarios` holds scenario metadata.
-  - `graph.vertices` maps `(scenario_id, index) → key` and anchors structural
+  - `graph_scenarios` holds scenario metadata.
+  - `graph_vertices` maps `(scenario_id, index) → key` and anchors structural
     edges and masks.
-  - `graph.edges` stores weighted edges per layer in index space.
-  - `graph.labels` and `graph.vertex_labels` store label definitions and
+  - `graph_edges` stores weighted edges per layer in index space.
+  - `graph_labels` and `graph_vertex_labels` store label definitions and
     vertex‑label assignments.
-  - `graph.vertex_masks` stores persisted vertex masks keyed by a UUID.
+  - `graph_vertex_masks` stores persisted vertex masks keyed by a UUID.
 
 - The **model data** (e.g. node tables, edge tables, parameters) is stored in
   regular schemas, typically keyed by `(scenario_id, key)` for nodes and
@@ -1500,8 +1506,8 @@ At a high level:
 
 - **Extraction helpers** bridge these worlds:
 
-  - They use `graph.vertices` to map indices ⇄ keys.
-  - They use `graph.vertex_masks` to apply `GraphMask`‑based vertex filters.
+  - They use `graph_vertices` to map indices ⇄ keys.
+  - They use `graph_vertex_masks` to apply `GraphMask`‑based vertex filters.
   - They return either Pandas data frames or GraphBLAS vectors/matrices that
     are aligned with the `Graph`’s vertex indexing.
 
@@ -1516,14 +1522,14 @@ Design goals:
 
 ### 7.2 Relational Schema (`disco.graph.schema`)
 
-All structural and mask‑related tables live in the `graph` schema. The SQLAlchemy
+All structural and mask‑related tables use a `graph_` name prefix. The SQLAlchemy
 metadata is defined in `disco.graph.schema` and created via
 `create_graph_schema(engine)`.
 
 #### 7.2.1 Scenarios
 
 ```text
-graph.scenarios
+graph_scenarios
 -------------------------------
 scenario_id   TEXT PRIMARY KEY
 created_at    TIMESTAMP NOT NULL
@@ -1537,9 +1543,9 @@ description   TEXT NULL
 #### 7.2.2 Vertices
 
 ```text
-graph.vertices
+graph_vertices
 -------------------------------------------------------------
-scenario_id   TEXT   PK, FK → graph.scenarios.scenario_id
+scenario_id   TEXT   PK, FK → graph_scenarios.scenario_id
 index         BIGINT PK     -- 0 .. V-1
 key           TEXT   NOT NULL
 ```
@@ -1552,12 +1558,12 @@ key           TEXT   NOT NULL
 #### 7.2.3 Edges
 
 ```text
-graph.edges
+graph_edges
 ----------------------------------------------------------------------------------------------
-scenario_id   TEXT   PK, FK → graph.scenarios.scenario_id
+scenario_id   TEXT   PK, FK → graph_scenarios.scenario_id
 layer_idx     INT    PK     -- layer identifier (0 .. L-1)
-source_idx    BIGINT PK     -- FK → graph.vertices(index)
-target_idx    BIGINT PK     -- FK → graph.vertices(index)
+source_idx    BIGINT PK     -- FK → graph_vertices(index)
+target_idx    BIGINT PK     -- FK → graph_vertices(index)
 weight        FLOAT  NOT NULL
 ```
 
@@ -1572,27 +1578,27 @@ These invariants are validated when constructing and loading graphs.
 #### 7.2.4 Labels and Vertex Labels
 
 ```text
-graph.labels
+graph_labels
 --------------------------------------------------------
 id           INT PRIMARY KEY
-scenario_id  TEXT NOT NULL, FK → graph.scenarios.scenario_id
+scenario_id  TEXT NOT NULL, FK → graph_scenarios.scenario_id
 type         TEXT NOT NULL   -- label_type
 value        TEXT NOT NULL   -- label_value
 
-graph.vertex_labels
+graph_vertex_labels
 --------------------------------------------------------------------
-scenario_id   TEXT   PK, FK → graph.scenarios.scenario_id
-vertex_index  BIGINT PK, FK → graph.vertices.index
-label_id      INT    PK, FK → graph.labels.id
+scenario_id   TEXT   PK, FK → graph_scenarios.scenario_id
+vertex_index  BIGINT PK, FK → graph_vertices.index
+label_id      INT    PK, FK → graph_labels.id
 ```
 
-- `graph.labels` defines label *kinds* for a scenario:
+- `graph_labels` defines label *kinds* for a scenario:
   - Each row has a `type` (e.g. `"location"`, `"echelon"`) and a `value`
     (e.g. `"EU"`, `"upstream"`).
   - `id` is a DB surrogate key and is re‑indexed into a dense label index
     for the in‑memory `Graph`.
 
-- `graph.vertex_labels` maps vertices to labels:
+- `graph_vertex_labels` maps vertices to labels:
   - Each `(scenario_id, vertex_index, label_id)` means “this vertex has
     this label”.
 
@@ -1603,11 +1609,11 @@ When loading a graph, DB label IDs are sorted by `labels.id` and mapped to dense
 #### 7.2.5 Vertex Masks
 
 ```text
-graph.vertex_masks
+graph_vertex_masks
 -----------------------------------------------------------------------------------------------
-scenario_id   TEXT   PK, FK → graph.scenarios.scenario_id
+scenario_id   TEXT   PK, FK → graph_scenarios.scenario_id
 mask_id       TEXT   PK     -- UUID string identifying a mask
-vertex_index  BIGINT PK, FK → graph.vertices.index
+vertex_index  BIGINT PK, FK → graph_vertices.index
 updated_at    TIMESTAMP NOT NULL
 ```
 
@@ -1710,7 +1716,7 @@ Masks are represented in `Graph` as:
 
   - Returns the `GraphMask` wrapper (or `None`).
 
-`GraphMask` is responsible for persisting its vector to `graph.vertex_masks`
+`GraphMask` is responsible for persisting its vector to `graph_vertex_masks`
 via `ensure_persisted(session)`. This is used by `graph.extract` helpers when
 joining filtered subsets of vertices or edges.
 
@@ -1875,10 +1881,10 @@ Responsibilities:
   - If it exists and `replace=True`, call `delete_scenario` to remove all
     related data before recreating.
 
-- Insert a row into `graph.scenarios` with `created_at = utcnow()` and
+- Insert a row into `graph_scenarios` with `created_at = utcnow()` and
   optional `description`.
 
-- Insert vertices in chunks into `graph.vertices`:
+- Insert vertices in chunks into `graph_vertices`:
 
   - `vertex_keys` is a 1‑D NumPy array (or array‑like) of keys.
   - Position `i` corresponds to vertex index `i` in the structural graph.
@@ -1897,12 +1903,12 @@ def delete_scenario(session: Session, scenario_id: str) -> None:
 
 Removes everything for a scenario in the correct dependency order:
 
-1. `graph.vertex_masks`
-2. `graph.vertex_labels`
-3. `graph.edges`
-4. `graph.labels`
-5. `graph.vertices`
-6. `graph.scenarios`
+1. `graph_vertex_masks`
+2. `graph_vertex_labels`
+3. `graph_edges`
+4. `graph_labels`
+5. `graph_vertices`
+6. `graph_scenarios`
 
 This again does not commit; transaction boundaries are the caller’s responsibility.
 
@@ -1921,20 +1927,20 @@ def store_graph(
 
 - `_store_edges_for_scenario`:
 
-  - Deletes existing rows in `graph.edges` for the scenario.
+  - Deletes existing rows in `graph_edges` for the scenario.
   - For each layer, calls `Matrix.to_coo()` and inserts rows with
     `(scenario_id, layer_idx, source_idx, target_idx, weight)`.
 
 - `_store_labels_for_scenario`:
 
   - If `graph.label_matrix is None` or `graph.num_labels == 0`, does nothing.
-  - Deletes existing rows in `graph.vertex_labels` and `graph.labels` for
+  - Deletes existing rows in `graph_vertex_labels` and `graph_labels` for
     the scenario.
-  - Inserts one row in `graph.labels` for each label index in `graph.label_meta`,
+  - Inserts one row in `graph_labels` for each label index in `graph.label_meta`,
     returning the DB `id` for each inserted row.
   - Builds a mapping `label_index → labels.id`.
   - Iterates over non‑zero entries of `label_matrix` (`to_coo()`), and inserts
-    rows into `graph.vertex_labels` with `(scenario_id, vertex_index, label_id)`
+    rows into `graph_vertex_labels` with `(scenario_id, vertex_index, label_id)`
     for all entries that are `True`.
 
 Again, no commit is performed here.
@@ -1955,16 +1961,16 @@ Steps:
 
 2. `_load_edge_layers`:
 
-   - Queries `graph.edges` for the scenario.
+   - Queries `graph_edges` for the scenario.
    - Groups rows by `layer_idx`.
    - Creates a GraphBLAS matrix per layer via `Matrix.from_coo`.
    - Ensures layer indices are contiguous `0 .. num_layers-1`.
 
 3. `_load_labels_for_scenario`:
 
-   - Queries `graph.labels` for the scenario and sorts by `id`.
+   - Queries `graph_labels` for the scenario and sorts by `id`.
    - Assigns dense label indices `0 .. num_labels-1` and builds `label_meta`.
-   - Queries `graph.vertex_labels` and uses `label_id_to_index` to build a
+   - Queries `graph_vertex_labels` and uses `label_id_to_index` to build a
      sparse `label_matrix` via `Matrix.from_coo`. If there are no assignments,
      it constructs an empty boolean matrix with the appropriate size.
 
@@ -1987,7 +1993,7 @@ has no mask set by default.
 ### 7.5 Data Extraction and Maps (`disco.graph.extract`)
 
 The `disco.graph.extract` module bridges structural graphs and model tables.
-It uses the `graph.vertices` mapping and optional `GraphMask` instances to:
+It uses the `graph_vertices` mapping and optional `GraphMask` instances to:
 
 - Pull vertex‑aligned data into Pandas or GraphBLAS structures.
 - Pull edge‑aligned data (per layer) into Pandas.
@@ -2020,9 +2026,9 @@ def get_vertex_data(
 - `vertex_table` is a *model node table* keyed by `(scenario_id, key)`.
 - The function:
 
-  - Starts from `graph.vertices` (`vertices_table`), which has
+  - Starts from `graph_vertices` (`vertices_table`), which has
     `(scenario_id, index, key)`.
-  - Optionally joins `graph.vertex_masks` using the provided or attached
+  - Optionally joins `graph_vertex_masks` using the provided or attached
     `GraphMask` to filter vertices.
   - LEFT OUTER JOINs the model node table on `(scenario_id, key)`.
   - Returns a DataFrame with the requested columns plus `index` and `key`.
@@ -2088,11 +2094,11 @@ def get_outbound_edge_data(
     ...
 ```
 
-- Starts from `graph.edges` for the given `layer_idx`.
-- Joins `graph.vertices` twice (source and target) to get `source_key` and
+- Starts from `graph_edges` for the given `layer_idx`.
+- Joins `graph_vertices` twice (source and target) to get `source_key` and
   `target_key`.
 - LEFT OUTER JOINs the model edge table on `(scenario_id, source_key, target_key)`.
-- Optionally filters by `GraphMask` on the *source* index via `graph.vertex_masks`.
+- Optionally filters by `GraphMask` on the *source* index via `graph_vertex_masks`.
 - Returns a DataFrame indexed by:
 
   - `("source_index", "target_index")` if `index_by == "indices"`, or
@@ -2117,10 +2123,10 @@ def get_inbound_edge_data(
 
 - Same pattern as outbound, but mask (if any) is applied on the *target* index.
 
-#### 7.5.3 Map Extraction (GraphBLAS Matrices from `graph.edges`)
+#### 7.5.3 Map Extraction (GraphBLAS Matrices from `graph_edges`)
 
 Two helpers provide sparse adjacency matrices derived directly from
-`graph.edges`:
+`graph_edges`:
 
 ```python
 def get_outbound_map(
@@ -2134,9 +2140,9 @@ def get_outbound_map(
     ...
 ```
 
-- Queries `graph.edges` for the scenario and `layer_idx`.
+- Queries `graph_edges` for the scenario and `layer_idx`.
 - If a `GraphMask` is provided or attached to the graph, joins
-  `graph.vertex_masks` and filters by the *source* vertex.
+  `graph_vertex_masks` and filters by the *source* vertex.
 - Returns a `Matrix[FP64]` with shape `num_vertices × num_vertices` populated
   with edge weights for the remaining edges.
 
@@ -3147,7 +3153,10 @@ This interface provides:
   - `name` (node name),
   - `epoch` (current epoch of the active SimProc, or `None` outside handler execution),
   - `active_simproc_name` and `active_simproc_number`,
-  - optionally runtime-provided objects such as `graph`, `dlogger`, and `seed` (implementation-dependent).
+  - `graph` (the `Graph` view for the simulation scenario),
+  - `data` (a `GraphData` accessor for node-specific model data),
+  - `dlogger` (a `DataLogger` for instrumentation),
+  - `rng` (a `numpy.random.Generator` for stochastic control).
 
 #### 11.3.1 Active SimProc context
 
@@ -3312,7 +3321,7 @@ processes update the same experiment concurrently.
 Experiment lifecycle is represented by the `ExperimentStatus` enum:
 
 - `CREATED`
-- `SCHEDULED`
+- `SUBMITTED`
 - `ASSIGNED`
 - `LOADED`
 - `INITIALIZED`
@@ -3352,9 +3361,9 @@ Fields:
   Unique replication id (UUID string).
 - `repno: int`  
   Sequence number within the experiment.
-- `seeds: list[int]`  
-  List of per-partition seeds. Must contain **at least as many seeds as partitions** used by the replication.
-  In unpartitioned mode, at least one seed is required.
+- `seed_sequence: SeedSequence`
+  A NumPy `SeedSequence` used to derive per-partition seeds via `get_seed_sequence(partition)`.
+  Child sequences are spawned lazily on demand.
 - `status: ExperimentStatus`
 - `assignments: dict[int, Assignment]`  
   Mapping of partition -> assignment.
@@ -3369,10 +3378,13 @@ Fields:
 
 - `expid: str`  
   Unique experiment id (UUID string).
-- `duration: float`  
+- `duration: float`
   Runtime budget for the replication runtime (must be > 0).
-- `scenario: str`  
+- `scenario_id: str`
   Scenario identifier (string).
+- `master_seed: int | None`
+  Optional master seed for reproducibility. Used to construct a `SeedSequence`
+  when generating replications.
 - `allowed_partitionings: list[str]`  
   Identifiers for permissible partitioning schemes.  
   **May be empty**, which denotes **unpartitioned mode** (equivalent to a partitioning with one partition).
@@ -3401,7 +3413,7 @@ The propagation rules are:
 3. Else if **all children are FINISHED** and there is at least one child, the parent is FINISHED.
 4. Else if **any child is ACTIVE**, the parent is ACTIVE.
 5. Otherwise, the parent status remains unchanged (the orchestrator may set intermediate states such as
-   `SCHEDULED`, `ASSIGNED`, `LOADED`, etc.).
+   `SUBMITTED`, `ASSIGNED`, `LOADED`, etc.).
 
 Exception propagation is defined as:
 
@@ -4434,15 +4446,15 @@ We distinguish between **owning tables** (where the row *is* the entity) and **r
 
 Examples:
 
-- `graph.vertices`
+- `graph_vertices`
   - `scenario_id`
   - `index` – primary integer index for the vertex
-- `graph.vertex_labels`
+- `graph_vertex_labels`
   - `scenario_id`
-  - `vertex_index` – FK → `graph.vertices.index`
-- `graph.edges`
+  - `vertex_index` – FK → `graph_vertices.index`
+- `graph_edges`
   - `scenario_id`
-  - `source_index`, `target_index` – FKs → `graph.vertices.index`
+  - `source_idx`, `target_idx` – FKs → `graph_vertices.index`
 
 The same pattern applies to other entity types: an owning table uses a generic `index` column, and referencing tables use `<entity>_index` (for vertices: `vertex_index`).
 
