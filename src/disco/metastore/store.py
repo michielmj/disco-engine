@@ -127,6 +127,9 @@ class Metastore:
         """
         Ensure `base_structure` paths exist under the chroot + optional /<group>.
         """
+        if self._group is not None:
+            self.client.ensure_path(f"/{self._group}")
+
         if not base_structure:
             return
 

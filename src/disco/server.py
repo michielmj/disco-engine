@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from disco.orchestrator import Orchestrator
+
 """Kubernetes-friendly Disco server supervisor.
 
 Spawns multiple Worker processes (optionally an orchestrator placeholder) and
@@ -196,13 +198,27 @@ def _worker_main(
     wlog.info("Worker exiting: %s", address)
 
 
-def _orchestrator_process_entry(stop_event: Any, log_queue: Any) -> None:
+def _orchestrator_process_entry(
+        address: str,
+        settings: AppSettings,
+        group: Optional[str],
+        stop_event: Any,
+        log_queue: Any
+) -> None:
     """Placeholder orchestrator: start, wait for stop_event, exit cleanly."""
     mp_logging.configure_worker(log_queue)
     olog = mp_logging.getLogger(__name__)
-    olog.info("Orchestrator placeholder started")
-    stop_event.wait()
-    olog.info("Orchestrator placeholder exiting")
+    olog.info("Orchestrator starting: %s", address)
+
+    with Cluster.make_cluster(zookeeper_settings=settings.zookeeper, group=group) as cluster:
+        orchestrator = Orchestrator(
+            address=address,
+            cluster=cluster,
+            settings=settings.orchestrator,
+        )
+        orchestrator.run_forever()
+
+    olog.info("Orchestrator exiting: %s", address)
 
 
 def _force_kill(proc: BaseProcess) -> None:
@@ -241,7 +257,7 @@ class Server:
         self._workers_arg = workers
         self._ports_arg = ports
         self._bind_host_arg = bind_host
-        self._group = group
+        self._group = group or settings.zookeeper.default_group
         self._grace_s = float(grace_s) if grace_s is not None else float(settings.grace_s)
         self._start_orchestrator = orchestrator
         self._loglevel = loglevel
@@ -300,7 +316,8 @@ class Server:
         raw_level = self._loglevel if self._loglevel is not None else self._settings.logging.level
         log_level = _parse_log_level(raw_level)
         with mp_logging.setup_logging(level=log_level) as log_cfg:
-            logger.info("Server starting with %d workers", len(self._worker_specs))
+            mp_logging.configure_worker(log_cfg.queue)
+            logger.info("Server starting with %d workers (group=%s)", len(self._worker_specs), self._group)
 
             with Cluster.make_cluster(zookeeper_settings=self._settings.zookeeper, group=self._group) as cluster:
                 self._cluster = cluster
@@ -308,11 +325,12 @@ class Server:
 
                 if self._start_orchestrator:
                     stop_event = ctx.Event()
+                    address = self._worker_specs[0].address
                     self._orchestrator_stop = stop_event
                     self._orchestrator_proc = ctx.Process(
                         name="orchestrator",
                         target=_orchestrator_process_entry,
-                        args=(stop_event, log_cfg.queue),  # ✅ pass queue
+                        args=(address, self._settings, self._group, stop_event, log_cfg.queue),
                         daemon=False,
                     )
                     self._orchestrator_proc.start()
