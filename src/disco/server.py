@@ -269,7 +269,7 @@ class Server:
         self._worker_specs: List[WorkerSpec] = []
         self._worker_procs: Dict[str, BaseProcess] = {}
         self._orchestrator_proc: Optional[BaseProcess] = None
-        self._orchestrator_stop: Optional[Any] = None
+        self._stop: Optional[Any] = None
 
     def start(self) -> None:
         self._acquire_singleton_guard()
@@ -325,7 +325,7 @@ class Server:
                 self._install_signal_handlers()
 
                 stop_event = ctx.Event()
-                self._orchestrator_stop = stop_event
+                self._stop = stop_event
 
                 if self._start_orchestrator:
                     address = self._worker_specs[0].address
@@ -361,8 +361,8 @@ class Server:
                 finally:
                     logger.info("Server stopping")
 
-                    if self._orchestrator_stop is not None:
-                        self._orchestrator_stop.set()
+                    if self._stop is not None:
+                        self._stop.set()
                     if self._orchestrator_proc is not None:
                         self._orchestrator_proc.join(timeout=5.0)
                     self._cluster = None
@@ -394,8 +394,8 @@ class Server:
 
     def _shutdown(self) -> None:
         # Signal all processes to stop gracefully via the shared stop event.
-        if self._orchestrator_stop is not None:
-            self._orchestrator_stop.set()
+        if self._stop is not None:
+            self._stop.set()
 
         deadline = time.monotonic() + self._grace_s
 

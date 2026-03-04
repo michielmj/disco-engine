@@ -282,7 +282,7 @@ def test_shutdown_sets_stop_event_then_escalates(monkeypatch: pytest.MonkeyPatch
     )
     # Prepopulate worker processes and shared stop event.
     stop_event = FakeEvent()
-    srv._orchestrator_stop = stop_event
+    srv._stop = stop_event
 
     p1 = FakeProcess(name="w1", target=lambda: None, args=(), daemon=False, autorun=False)
     p2 = FakeProcess(name="w2", target=lambda: None, args=(), daemon=False, autorun=False)
@@ -335,6 +335,6 @@ def test_orchestrator_started_and_stopped(monkeypatch: pytest.MonkeyPatch) -> No
 
     # Orchestrator should have been created and joined (i.e., stopped) as workers exited.
     assert srv._orchestrator_proc is not None
-    assert srv._orchestrator_stop is not None
-    assert cast(FakeEvent, srv._orchestrator_stop).is_set is True
+    assert srv._stop is not None
+    assert cast(FakeEvent, srv._stop).is_set is True
     assert cast(FakeProcess, srv._orchestrator_proc).is_alive() is False

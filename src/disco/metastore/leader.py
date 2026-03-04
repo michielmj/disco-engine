@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from threading import Event, Thread
+from threading import Event
 from time import sleep
 from typing import Any, Callable, Mapping, Optional
 
@@ -79,16 +79,7 @@ class LeaderElection:
         """
         Block until cancelled or abort is set; campaign for leadership.
         When leading, publish leader record and run on_lead().
-
-        If abort is provided (e.g. a multiprocessing.Event), a daemon thread monitors it
-        and calls cancel() when it is set, unblocking any in-progress election.
         """
-        if abort is not None:
-            def _on_abort() -> None:
-                abort.wait()
-                self.cancel()
-            Thread(target=_on_abort, daemon=True).start()
-
         while not self._cancelled.is_set() and (abort is None or not abort.is_set()):
             try:
                 self._election.run(self._run_as_leader, on_lead)
