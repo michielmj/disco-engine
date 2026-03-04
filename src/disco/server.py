@@ -346,7 +346,7 @@ class Server:
                             self._settings,
                             self._group,
                             spec.name,
-                            log_cfg.queue,  # ✅ pass queue
+                            log_cfg.queue,
                         ),
                         daemon=False,
                     )

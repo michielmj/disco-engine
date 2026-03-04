@@ -264,6 +264,7 @@ class Worker:
             if self._running:
                 raise WorkerError("Worker runner already running")
             self._running = True
+            self._set_state_locked(WorkerState.AVAILABLE)
 
         self._runner_loop()
 
@@ -458,8 +459,6 @@ class Worker:
         """
         next_control = monotonic()
         control_period_s = 1.0
-
-        self._set_state_locked(WorkerState.AVAILABLE)
 
         try:
             while True:

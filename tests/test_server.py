@@ -127,7 +127,7 @@ class FakeProcess:
         # If this is the orchestrator entrypoint, it blocks on a stop_event.
         # We simulate that: if stop_event is set, process can exit.
         if self._alive and self._target is server_mod._orchestrator_process_entry:
-            stop_event = cast(FakeEvent, self._args[0])
+            _, _, _, stop_event, _ = self._args
             if stop_event.is_set:
                 self._alive = False
 
