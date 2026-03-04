@@ -181,6 +181,7 @@ def _worker_main(
 ) -> None:
     """Worker process entrypoint (must create its own Cluster client)."""
     mp_logging.configure_worker(log_queue)  # ✅ worker-side queue handler
+    signal.signal(signal.SIGINT, signal.SIG_IGN)  # parent handles Ctrl-C; we exit via stop_event
 
     wlog = mp_logging.getLogger(__name__)
     wlog.info("Worker starting: %s", address)
@@ -208,6 +209,7 @@ def _orchestrator_process_entry(
 ) -> None:
     """Placeholder orchestrator: start, wait for stop_event, exit cleanly."""
     mp_logging.configure_worker(log_queue)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)  # parent handles Ctrl-C; we exit via stop_event
     olog = mp_logging.getLogger(__name__)
     olog.info("Orchestrator starting: %s", address)
 
