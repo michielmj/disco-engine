@@ -27,7 +27,7 @@ from typing import Dict, List, Mapping, Optional, Sequence, Any, cast
 import logging
 from tools import mp_logging
 
-from disco.cluster import Cluster, WorkerState
+from disco.cluster import Cluster
 from disco.config import AppSettings, ConfigError
 from disco.worker import Worker
 
@@ -177,9 +177,11 @@ def _worker_main(
     group: Optional[str],
     name: Optional[str],
     log_queue: Any,
+    stop_event: Any,
 ) -> None:
     """Worker process entrypoint (must create its own Cluster client)."""
     mp_logging.configure_worker(log_queue)  # ✅ worker-side queue handler
+    signal.signal(signal.SIGINT, signal.SIG_IGN)  # parent handles Ctrl-C; we exit via stop_event
 
     wlog = mp_logging.getLogger(__name__)
     wlog.info("Worker starting: %s", address)
@@ -193,7 +195,7 @@ def _worker_main(
             settings=settings,
             name=name,
         )
-        worker.run_forever()
+        worker.run_forever(stop_event)
 
     wlog.info("Worker exiting: %s", address)
 
@@ -207,6 +209,7 @@ def _orchestrator_process_entry(
 ) -> None:
     """Placeholder orchestrator: start, wait for stop_event, exit cleanly."""
     mp_logging.configure_worker(log_queue)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)  # parent handles Ctrl-C; we exit via stop_event
     olog = mp_logging.getLogger(__name__)
     olog.info("Orchestrator starting: %s", address)
 
@@ -216,7 +219,7 @@ def _orchestrator_process_entry(
             cluster=cluster,
             settings=settings.orchestrator,
         )
-        orchestrator.run_forever()
+        orchestrator.run_forever(stop_event)
 
     olog.info("Orchestrator exiting: %s", address)
 
@@ -268,7 +271,7 @@ class Server:
         self._worker_specs: List[WorkerSpec] = []
         self._worker_procs: Dict[str, BaseProcess] = {}
         self._orchestrator_proc: Optional[BaseProcess] = None
-        self._orchestrator_stop: Optional[Any] = None
+        self._stop: Optional[Any] = None
 
     def start(self) -> None:
         self._acquire_singleton_guard()
@@ -323,10 +326,11 @@ class Server:
                 self._cluster = cluster
                 self._install_signal_handlers()
 
+                stop_event = ctx.Event()
+                self._stop = stop_event
+
                 if self._start_orchestrator:
-                    stop_event = ctx.Event()
                     address = self._worker_specs[0].address
-                    self._orchestrator_stop = stop_event
                     self._orchestrator_proc = ctx.Process(
                         name="orchestrator",
                         target=_orchestrator_process_entry,
@@ -347,6 +351,7 @@ class Server:
                             self._group,
                             spec.name,
                             log_cfg.queue,
+                            stop_event,
                         ),
                         daemon=False,
                     )
@@ -358,8 +363,8 @@ class Server:
                 finally:
                     logger.info("Server stopping")
 
-                    if self._orchestrator_stop is not None:
-                        self._orchestrator_stop.set()
+                    if self._stop is not None:
+                        self._stop.set()
                     if self._orchestrator_proc is not None:
                         self._orchestrator_proc.join(timeout=5.0)
                     self._cluster = None
@@ -390,13 +395,9 @@ class Server:
                 return
 
     def _shutdown(self) -> None:
-        cluster = self._cluster
-        if cluster is not None:
-            for addr in self._worker_procs.keys():
-                try:
-                    cluster.set_desired_state(worker_address=addr, state=WorkerState.TERMINATED)
-                except Exception:
-                    pass
+        # Signal all processes to stop gracefully via the shared stop event.
+        if self._stop is not None:
+            self._stop.set()
 
         deadline = time.monotonic() + self._grace_s
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import Event
 from types import SimpleNamespace
 from typing import Any, Callable
 
@@ -32,7 +33,7 @@ class FakeElection:
     def __init__(self) -> None:
         self.canceled = False
 
-    def run(self, cb: Callable[[], None]) -> None:
+    def run(self, cb: Callable[[], None], abort: Any = None) -> None:
         # Synchronous "leadership": immediately execute callback.
         cb()
 
@@ -235,7 +236,7 @@ def test_on_stop_requested_releases_entity_and_exits(
     monkeypatch.setattr(orch, "_handle_submission", lambda *, entity: (_ for _ in ()).throw(orchestrator_mod._StopRequested()))
 
     # Run lead callback once. FakeElection calls synchronously.
-    orch.run_forever()
+    orch.run_forever(Event())
 
     assert entity.released is True
     assert entity.consumed is False
@@ -266,7 +267,7 @@ def test_on_unexpected_exception_marks_failed_and_consumes(
 
     monkeypatch.setattr(orch, "_handle_submission", boom)
 
-    orch.run_forever()
+    orch.run_forever(Event())
 
     assert entity.consumed is True
     assert len(fake_store.failed_exc) == 1

@@ -184,7 +184,7 @@ class FakeWorker:
         self.name = name
         FakeWorker.instances.append(self)
 
-    def run_forever(self) -> WorkerState:
+    def run_forever(self, stop: Any) -> WorkerState:
         return WorkerState.TERMINATED
 
 
@@ -271,7 +271,7 @@ def test_server_start_spawns_workers_and_passes_shared_queues(monkeypatch: pytes
     assert set(FakeWorker.instances[0].promise_queues.keys()) == {"10.0.0.12:5001", "10.0.0.12:5002"}
 
 
-def test_shutdown_sends_desired_state_then_escalates(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_shutdown_sets_stop_event_then_escalates(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = FakeAppSettings(grpc=FakeGrpcSettings(bind_host="10.0.0.12"), grace_s=0)
 
     srv = server_mod.Server(
@@ -280,9 +280,9 @@ def test_shutdown_sends_desired_state_then_escalates(monkeypatch: pytest.MonkeyP
         orchestrator=False,
         grace_s=0,
     )
-    # Prepopulate worker processes and fake cluster.
-    fake_cluster = FakeCluster()
-    srv._cluster = cast(Any, fake_cluster)
+    # Prepopulate worker processes and shared stop event.
+    stop_event = FakeEvent()
+    srv._stop = stop_event
 
     p1 = FakeProcess(name="w1", target=lambda: None, args=(), daemon=False, autorun=False)
     p2 = FakeProcess(name="w2", target=lambda: None, args=(), daemon=False, autorun=False)
@@ -305,11 +305,8 @@ def test_shutdown_sends_desired_state_then_escalates(monkeypatch: pytest.MonkeyP
 
     srv._shutdown()
 
-    # Desired state must be sent for each worker.
-    assert [(c.worker_address, c.state) for c in fake_cluster.calls] == [
-        ("10.0.0.12:5001", WorkerState.TERMINATED),
-        ("10.0.0.12:5002", WorkerState.TERMINATED),
-    ]
+    # Stop event must be set to signal all processes.
+    assert stop_event._is_set is True
 
     # Terminate attempted, then kill enforced.
     assert p1.terminate_called is True
@@ -338,6 +335,6 @@ def test_orchestrator_started_and_stopped(monkeypatch: pytest.MonkeyPatch) -> No
 
     # Orchestrator should have been created and joined (i.e., stopped) as workers exited.
     assert srv._orchestrator_proc is not None
-    assert srv._orchestrator_stop is not None
-    assert cast(FakeEvent, srv._orchestrator_stop).is_set is True
+    assert srv._stop is not None
+    assert cast(FakeEvent, srv._stop).is_set is True
     assert cast(FakeProcess, srv._orchestrator_proc).is_alive() is False
