@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from threading import Event
+from threading import Event, Thread
 from time import sleep
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Optional
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import KazooException, NodeExistsError, NoNodeError
@@ -75,15 +75,25 @@ class LeaderElection:
         except Exception:
             pass
 
-    def run(self, on_lead: Callable[[], None]) -> None:
+    def run(self, on_lead: Callable[[], None], abort: Optional[Any] = None) -> None:
         """
-        Block until cancelled; campaign for leadership. When leading, publish leader record and run on_lead().
+        Block until cancelled or abort is set; campaign for leadership.
+        When leading, publish leader record and run on_lead().
+
+        If abort is provided (e.g. a multiprocessing.Event), a daemon thread monitors it
+        and calls cancel() when it is set, unblocking any in-progress election.
         """
-        while not self._cancelled.is_set():
+        if abort is not None:
+            def _on_abort() -> None:
+                abort.wait()
+                self.cancel()
+            Thread(target=_on_abort, daemon=True).start()
+
+        while not self._cancelled.is_set() and (abort is None or not abort.is_set()):
             try:
                 self._election.run(self._run_as_leader, on_lead)
             except KazooException as exc:
-                if self._cancelled.is_set():
+                if self._cancelled.is_set() or (abort is not None and abort.is_set()):
                     return
                 logger.warning(
                     "Leader election error (candidate_id=%s, root=%s): %r",

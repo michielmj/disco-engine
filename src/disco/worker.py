@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from multiprocessing.queues import Queue
 from pathlib import Path
 from queue import Empty
-from threading import RLock, Event, Thread
+from threading import RLock, Event
 from time import monotonic
 from typing import Dict, Generator, Mapping, Optional, cast, Any
 
@@ -257,8 +257,7 @@ class Worker:
         Entry point called by the worker process main.
 
         - Sets _running True once (guarded by lock).
-        - Monitors stop event and calls request_stop() when it is set.
-        - Runs the runner loop until stop/broken/exit.
+        - Runs the runner loop; exits when stop is set, BROKEN, or EXITED.
         - Returns final WorkerState (acquired under lock to read consistent value).
         """
         with self._lock:
@@ -267,13 +266,7 @@ class Worker:
             self._running = True
             self._set_state_locked(WorkerState.AVAILABLE)
 
-        def _monitor_stop() -> None:
-            stop.wait()
-            self.request_stop()
-
-        Thread(target=_monitor_stop, daemon=True).start()
-
-        self._runner_loop()
+        self._runner_loop(stop)
 
         with self._lock:
             return self._state
@@ -444,7 +437,7 @@ class Worker:
         self._runners = ()
         self._active_runners = []
 
-    def _runner_loop(self) -> None:
+    def _runner_loop(self, stop: Any) -> None:
         """
         Main loop executed by the worker process (main thread).
 
@@ -461,6 +454,7 @@ class Worker:
         - "Hot path" advances simulation and handles completion.
 
         Exit conditions:
+        - stop event is set (graceful shutdown from Server)
         - _running becomes False (request_stop or EXITED)
         - worker transitions to BROKEN and sets _running False elsewhere (not shown here)
         """
@@ -474,7 +468,7 @@ class Worker:
                 if now >= next_control or self._kick.is_set():
                     self._kick.clear()
                     with self._lock:
-                        if not self._running:
+                        if not self._running or stop.is_set():
                             break
 
                         # Apply desired-state transitions (READY/ACTIVE/PAUSED/TERMINATED/EXITED).
@@ -487,7 +481,7 @@ class Worker:
                     # - runner thread is sole mutator of _state in normal operation
                     # - callback thread only sets _pending_desired + kicks
                     state = self._state
-                    if not self._running:
+                    if not self._running or stop.is_set():
                         break
 
                 # --- hot paths ---

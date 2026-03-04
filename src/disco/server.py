@@ -268,7 +268,6 @@ class Server:
 
         self._worker_specs: List[WorkerSpec] = []
         self._worker_procs: Dict[str, BaseProcess] = {}
-        self._worker_stop_events: Dict[str, Any] = {}
         self._orchestrator_proc: Optional[BaseProcess] = None
         self._orchestrator_stop: Optional[Any] = None
 
@@ -325,10 +324,11 @@ class Server:
                 self._cluster = cluster
                 self._install_signal_handlers()
 
+                stop_event = ctx.Event()
+                self._orchestrator_stop = stop_event
+
                 if self._start_orchestrator:
-                    stop_event = ctx.Event()
                     address = self._worker_specs[0].address
-                    self._orchestrator_stop = stop_event
                     self._orchestrator_proc = ctx.Process(
                         name="orchestrator",
                         target=_orchestrator_process_entry,
@@ -338,8 +338,6 @@ class Server:
                     self._orchestrator_proc.start()
 
                 for spec in self._worker_specs:
-                    worker_stop = ctx.Event()
-                    self._worker_stop_events[spec.address] = worker_stop
                     proc = ctx.Process(
                         name=spec.name,
                         target=_worker_main,
@@ -351,7 +349,7 @@ class Server:
                             self._group,
                             spec.name,
                             log_cfg.queue,
-                            worker_stop,
+                            stop_event,
                         ),
                         daemon=False,
                     )
@@ -395,9 +393,9 @@ class Server:
                 return
 
     def _shutdown(self) -> None:
-        # Signal workers to stop gracefully via their stop events.
-        for stop_event in self._worker_stop_events.values():
-            stop_event.set()
+        # Signal all processes to stop gracefully via the shared stop event.
+        if self._orchestrator_stop is not None:
+            self._orchestrator_stop.set()
 
         deadline = time.monotonic() + self._grace_s
 

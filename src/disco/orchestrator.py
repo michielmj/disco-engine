@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from threading import Event, Thread
 from time import monotonic
-from typing import Optional, Any
+from typing import Any, Optional
 
 from tools.mp_logging import getLogger
 
@@ -68,40 +68,10 @@ class Orchestrator:
         # Launch threads (best-effort bookkeeping for stop/join).
         self._launch_threads: list[Thread] = []
 
-    def request_stop(self, timeout_s: Optional[float] = None) -> None:
-        self._stop.set()
-        try:
-            self._election.cancel()
-        except Exception:
-            pass
-
-        if timeout_s is not None and timeout_s > 0:
-            deadline = monotonic() + timeout_s
-
-            for t in list(self._launch_threads):
-                remaining = deadline - monotonic()
-                if remaining <= 0:
-                    break
-                t.join(timeout=remaining)
-
-            still_alive = [t for t in self._launch_threads if t.is_alive()]
-            if still_alive:
-                logger.warning("Orchestrator shutdown: %d launch threads still alive after timeout.",
-                               len(still_alive))
-        else:
-            for t in list(self._launch_threads):
-                t.join()
-
     def run_forever(self, stop: Any) -> None:
+        self._stop = stop
         logger.info("Orchestrator %s starting leader election.", self._address)
-
-        def _monitor_stop() -> None:
-            stop.wait()
-            self.request_stop()
-
-        Thread(target=_monitor_stop, daemon=True).start()
-
-        self._election.run(self._on_lead)
+        self._election.run(self._on_lead, abort=stop)
 
     # ------------------------------------------------------------------ #
     # Leader loop
@@ -130,7 +100,7 @@ class Orchestrator:
                 # Scenario 1: stop during "waiting for enough workers" or any pre-launch stage
                 # -> release so submission remains available at queue head
                 entity.release()
-                return
+                break
 
             except Exception as exc:
                 # Scheduling-side unexpected failure: mark failed so it doesn't go unnoticed,
@@ -145,6 +115,9 @@ class Orchestrator:
                 entity.consume()
 
         logger.info("Orchestrator %s relinquishing leadership.", self._address)
+
+        for t in list(self._launch_threads):
+            t.join()
 
     # ------------------------------------------------------------------ #
     # Submission handling

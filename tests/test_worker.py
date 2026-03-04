@@ -405,7 +405,8 @@ def test_runner_loop_finishes_partition_and_returns_available(monkeypatch: pytes
         w._running = True
 
     # Run loop in background so we can stop it after it finishes.
-    t = threading.Thread(target=w._runner_loop, daemon=True)
+    stop = threading.Event()
+    t = threading.Thread(target=w._runner_loop, args=(stop,), daemon=True)
     t.start()
 
     # Wait until it transitions to AVAILABLE (should be quick).

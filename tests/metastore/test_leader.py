@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import Event
 from typing import Any, Callable, Mapping, Optional
 
 import pytest
@@ -281,3 +282,36 @@ def test_cancel_cancels_election_and_deletes_leader(monkeypatch: pytest.MonkeyPa
     assert isinstance(le._election, FakeElection)  # type: ignore[attr-defined]
     assert le._election.cancel_called is True  # type: ignore[attr-defined]
     assert leader_path in client.delete_calls
+
+
+def test_run_abort_event_stops_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    When run() is called with an abort event and the event is set before calling,
+    the loop should not enter leadership at all.
+    """
+    import disco.metastore.leader as leader_mod
+
+    monkeypatch.setattr(leader_mod, "Election", FakeElection)
+
+    client = FakeKazooClient()
+
+    le = LeaderElection(
+        client=client,
+        root_path="/g/simulation/orchestrator/leader_election",
+        candidate_id="orch-1",
+        metadata=None,
+        packb=lambda _: b"Z",
+        retry_delay_s=0.0,
+    )
+
+    on_lead_called: dict[str, bool] = {"called": False}
+
+    def on_lead() -> None:
+        on_lead_called["called"] = True
+
+    abort = Event()
+    abort.set()  # pre-set: loop should exit immediately without calling on_lead
+
+    le.run(on_lead, abort=abort)
+
+    assert on_lead_called["called"] is False
