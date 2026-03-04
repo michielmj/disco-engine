@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from multiprocessing.queues import Queue
 from pathlib import Path
 from queue import Empty
-from threading import RLock, Event
+from threading import RLock, Event, Thread
 from time import monotonic
 from typing import Dict, Generator, Mapping, Optional, cast, Any
 
@@ -252,11 +252,12 @@ class Worker:
     # Runner entrypoint (main thread of worker process)
     # ------------------------------------------------------------------ #
 
-    def run_forever(self) -> WorkerState:
+    def run_forever(self, stop: Any) -> WorkerState:
         """
         Entry point called by the worker process main.
 
         - Sets _running True once (guarded by lock).
+        - Monitors stop event and calls request_stop() when it is set.
         - Runs the runner loop until stop/broken/exit.
         - Returns final WorkerState (acquired under lock to read consistent value).
         """
@@ -265,6 +266,12 @@ class Worker:
                 raise WorkerError("Worker runner already running")
             self._running = True
             self._set_state_locked(WorkerState.AVAILABLE)
+
+        def _monitor_stop() -> None:
+            stop.wait()
+            self.request_stop()
+
+        Thread(target=_monitor_stop, daemon=True).start()
 
         self._runner_loop()
 

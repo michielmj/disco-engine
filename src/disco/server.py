@@ -27,7 +27,7 @@ from typing import Dict, List, Mapping, Optional, Sequence, Any, cast
 import logging
 from tools import mp_logging
 
-from disco.cluster import Cluster, WorkerState
+from disco.cluster import Cluster
 from disco.config import AppSettings, ConfigError
 from disco.worker import Worker
 
@@ -177,6 +177,7 @@ def _worker_main(
     group: Optional[str],
     name: Optional[str],
     log_queue: Any,
+    stop_event: Any,
 ) -> None:
     """Worker process entrypoint (must create its own Cluster client)."""
     mp_logging.configure_worker(log_queue)  # ✅ worker-side queue handler
@@ -193,7 +194,7 @@ def _worker_main(
             settings=settings,
             name=name,
         )
-        worker.run_forever()
+        worker.run_forever(stop_event)
 
     wlog.info("Worker exiting: %s", address)
 
@@ -216,7 +217,7 @@ def _orchestrator_process_entry(
             cluster=cluster,
             settings=settings.orchestrator,
         )
-        orchestrator.run_forever()
+        orchestrator.run_forever(stop_event)
 
     olog.info("Orchestrator exiting: %s", address)
 
@@ -267,6 +268,7 @@ class Server:
 
         self._worker_specs: List[WorkerSpec] = []
         self._worker_procs: Dict[str, BaseProcess] = {}
+        self._worker_stop_events: Dict[str, Any] = {}
         self._orchestrator_proc: Optional[BaseProcess] = None
         self._orchestrator_stop: Optional[Any] = None
 
@@ -336,6 +338,8 @@ class Server:
                     self._orchestrator_proc.start()
 
                 for spec in self._worker_specs:
+                    worker_stop = ctx.Event()
+                    self._worker_stop_events[spec.address] = worker_stop
                     proc = ctx.Process(
                         name=spec.name,
                         target=_worker_main,
@@ -347,6 +351,7 @@ class Server:
                             self._group,
                             spec.name,
                             log_cfg.queue,
+                            worker_stop,
                         ),
                         daemon=False,
                     )
@@ -390,13 +395,9 @@ class Server:
                 return
 
     def _shutdown(self) -> None:
-        cluster = self._cluster
-        if cluster is not None:
-            for addr in self._worker_procs.keys():
-                try:
-                    cluster.set_desired_state(worker_address=addr, state=WorkerState.TERMINATED)
-                except Exception:
-                    pass
+        # Signal workers to stop gracefully via their stop events.
+        for stop_event in self._worker_stop_events.values():
+            stop_event.set()
 
         deadline = time.monotonic() + self._grace_s
 

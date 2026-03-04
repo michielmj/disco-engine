@@ -92,8 +92,15 @@ class Orchestrator:
             for t in list(self._launch_threads):
                 t.join()
 
-    def run_forever(self) -> None:
+    def run_forever(self, stop: Any) -> None:
         logger.info("Orchestrator %s starting leader election.", self._address)
+
+        def _monitor_stop() -> None:
+            stop.wait()
+            self.request_stop()
+
+        Thread(target=_monitor_stop, daemon=True).start()
+
         self._election.run(self._on_lead)
 
     # ------------------------------------------------------------------ #
