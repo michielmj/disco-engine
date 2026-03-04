@@ -38,7 +38,10 @@ _SINGLETON_LOCK = threading.Lock()
 _SERVER_RUNNING = False
 
 
-def _parse_log_level(level: str) -> int:
+def _parse_log_level(level: str | int) -> int:
+    if isinstance(level, int):
+        return level
+
     mapping = logging.getLevelNamesMapping()
     lvl = mapping.get(level.upper())
     if isinstance(lvl, int):
@@ -178,9 +181,10 @@ def _worker_main(
     name: Optional[str],
     log_queue: Any,
     stop_event: Any,
+    loglevel: int,
 ) -> None:
     """Worker process entrypoint (must create its own Cluster client)."""
-    mp_logging.configure_worker(log_queue)  # ✅ worker-side queue handler
+    mp_logging.configure_worker(log_queue, level=loglevel)
     signal.signal(signal.SIGINT, signal.SIG_IGN)  # parent handles Ctrl-C; we exit via stop_event
 
     wlog = mp_logging.getLogger(__name__)
@@ -205,10 +209,11 @@ def _orchestrator_process_entry(
         settings: AppSettings,
         group: Optional[str],
         stop_event: Any,
-        log_queue: Any
+        log_queue: Any,
+        loglevel: int,
 ) -> None:
     """Placeholder orchestrator: start, wait for stop_event, exit cleanly."""
-    mp_logging.configure_worker(log_queue)
+    mp_logging.configure_worker(log_queue, level=loglevel)
     signal.signal(signal.SIGINT, signal.SIG_IGN)  # parent handles Ctrl-C; we exit via stop_event
     olog = mp_logging.getLogger(__name__)
     olog.info("Orchestrator starting: %s", address)
@@ -263,7 +268,9 @@ class Server:
         self._group = group or settings.zookeeper.default_group
         self._grace_s = float(grace_s) if grace_s is not None else float(settings.grace_s)
         self._start_orchestrator = orchestrator
-        self._loglevel = loglevel
+
+        raw_level = loglevel if loglevel is not None else settings.logging.level
+        self._loglevel = _parse_log_level(raw_level)
 
         self._shutdown_requested = threading.Event()
         self._cluster: Optional[Cluster] = None
@@ -316,9 +323,7 @@ class Server:
             event_queues[spec.address] = ctx.Queue()
             promise_queues[spec.address] = ctx.Queue()
 
-        raw_level = self._loglevel if self._loglevel is not None else self._settings.logging.level
-        log_level = _parse_log_level(raw_level)
-        with mp_logging.setup_logging(level=log_level) as log_cfg:
+        with mp_logging.setup_logging(level=self._loglevel) as log_cfg:
             mp_logging.configure_worker(log_cfg.queue)
             logger.info("Server starting with %d workers (group=%s)", len(self._worker_specs), self._group)
 
@@ -334,7 +339,7 @@ class Server:
                     self._orchestrator_proc = ctx.Process(
                         name="orchestrator",
                         target=_orchestrator_process_entry,
-                        args=(address, self._settings, self._group, stop_event, log_cfg.queue),
+                        args=(address, self._settings, self._group, stop_event, log_cfg.queue, self._loglevel),
                         daemon=False,
                     )
                     self._orchestrator_proc.start()
@@ -352,6 +357,7 @@ class Server:
                             spec.name,
                             log_cfg.queue,
                             stop_event,
+                            self._loglevel
                         ),
                         daemon=False,
                     )
