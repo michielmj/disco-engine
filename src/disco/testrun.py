@@ -1,13 +1,16 @@
 # src/disco/testrun.py
 from __future__ import annotations
 
+import contextlib
+import logging as _logging
 import uuid
 from pathlib import Path
-from typing import Generator, Tuple
+from typing import Generator, Optional, Tuple
 
 from data_logger import DataLogger
 from numpy.random import SeedSequence
 
+from tools import mp_logging
 from tools.mp_logging import getLogger
 
 from .config import AppSettings
@@ -67,7 +70,18 @@ class TestRun:
         dlogger: DataLogger | None = None,
         partitioning: Partitioning | None = None,
         master_seed: int | SeedSequence | None = None,
+        loglevel: Optional[str] = None,
     ) -> None:
+        # Set up logging for this single-process run.
+        if loglevel is not None:
+            raw_level = loglevel.upper()
+        else:
+            _log_settings = getattr(settings, "logging", None)
+            raw_level = getattr(_log_settings, "level", "INFO").upper()
+        log_level = getattr(_logging, raw_level, _logging.INFO)
+        self._log_stack = contextlib.ExitStack()
+        self._log_stack.enter_context(mp_logging.setup_logging(level=log_level))
+
         self._experiment = experiment
         self._graph = graph
         self._settings = settings
@@ -211,6 +225,7 @@ class TestRun:
 
         self._experiment.status = ExperimentStatus.INITIALIZED
         self._initialized = True
+        logger.info("TestRun initialized: %d nodes ready", len(self._partitioning.node_specs))
 
     def run(self, duration: float) -> None:
         """
@@ -227,6 +242,7 @@ class TestRun:
             self.initialize()
 
         self._experiment.status = ExperimentStatus.ACTIVE
+        logger.info("TestRun starting run: duration=%s", duration)
 
         # Create one runner per node for this duration.
         runners: Tuple[Generator[object, None, None], ...] = tuple(
@@ -251,3 +267,8 @@ class TestRun:
             finished_positions.clear()
 
         self._dlogger.close()
+        logger.info("TestRun run completed: duration=%s", duration)
+
+    def close(self) -> None:
+        """Tear down logging context. Call when the TestRun is fully done."""
+        self._log_stack.close()

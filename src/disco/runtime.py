@@ -293,6 +293,7 @@ class NodeRuntime(NodeRuntimeLike):
     def initialize(self, **kwargs) -> None:
         self._node.initialize(**kwargs)
         self._status = NodeStatus.INITIALIZED
+        logger.debug("NodeRuntime[%s] initialized", self._name)
 
     def runner(self, duration: float) -> Generator[None, None, None]:
         """
@@ -300,6 +301,7 @@ class NodeRuntime(NodeRuntimeLike):
         """
 
         self._status = NodeStatus.ACTIVE
+        logger.debug("NodeRuntime[%s] runner started: duration=%s", self._name, duration)
 
         no_news = 0
 
@@ -329,11 +331,22 @@ class NodeRuntime(NodeRuntimeLike):
 
                 # idle if waiting for promises
                 if next_epoch is None:
+                    logger.debug(
+                        "NodeRuntime[%s] waiting for promises: %s",
+                        self._name,
+                        self._waiting_for,
+                    )
                     no_news = NO_NEWS_SKIP
                     yield
 
                 # stop if next event is beyond duration
                 elif next_epoch >= duration:
+                    logger.debug(
+                        "NodeRuntime[%s] runner finished: next_epoch=%s >= duration=%s",
+                        self._name,
+                        next_epoch,
+                        duration,
+                    )
                     self._status = NodeStatus.FINISHED
                     return
 

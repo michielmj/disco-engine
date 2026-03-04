@@ -47,11 +47,14 @@ from heapq import heappush, heappop
 from typing import Any, Dict, Tuple, Callable, Iterable, Set, cast
 
 from tools.ctypes import MAX_UINT32
+from tools.mp_logging import getLogger
 
 from .exceptions import DiscoRuntimeError
 from .event_queue import EventQueue
 from .envelopes import EventEnvelope, PromiseEnvelope
 from .node import Event
+
+logger = getLogger(__name__)
 
 
 class DiscoTimingError(DiscoRuntimeError):
@@ -174,6 +177,16 @@ class SimProc:
             # flush wakeups
             is_wakeup = self._epoch == self.next_wakeup
             self._flush_wakeup()
+
+            logger.debug(
+                "SimProc[%s/%s] advancing to epoch=%s events=%d is_wakeup=%s next_epoch=%s",
+                self._node_name,
+                self._name,
+                self._epoch,
+                len(event_inbox),
+                is_wakeup,
+                self._next_epoch,
+            )
 
             # SimProc events in cache.
             if is_wakeup or event_inbox:
@@ -427,6 +440,14 @@ class SimProc:
 
         assert epoch > self._epoch, "Can wake-up in future only."
 
+        logger.debug(
+            "SimProc[%s/%s] scheduling wakeup: epoch=%s hard=%s",
+            self._node_name,
+            self._name,
+            epoch,
+            hard,
+        )
+
         if epoch not in self._hard_wakeup:
             heappush(self._wakeup_points, epoch)
         self._hard_wakeup[epoch] = hard
@@ -548,6 +569,16 @@ class SimProc:
         :param num_events:
         :return: true if next_epoch updated
         """
+        logger.debug(
+            "SimProc[%s/%s] received promise from %s/%s: seqnr=%s epoch=%s num_events=%s",
+            self._node_name,
+            self._name,
+            sender_node,
+            sender_simproc,
+            seqnr,
+            epoch,
+            num_events,
+        )
 
         if (
             self._queue.promise(

@@ -41,9 +41,9 @@ class WorkerError(DiscoError):
     Worker-level errors.
 
     Conceptually:
-    - WorkerError is used for “control-plane” problems: invalid transitions,
+    - WorkerError is used for "control-plane" problems: invalid transitions,
       missing assignments, internal invariants violated.
-    - “Data/model” problems should usually be captured and turned into partition failures
+    - "Data/model" problems should usually be captured and turned into partition failures
       (via ExperimentStore.set_partition_exc), not turned into BROKEN unless they prevent
       *any* experiment from being started.
     """
@@ -94,7 +94,7 @@ class Worker:
         * self._running, self._state (though _state is *effectively* runner-owned)
         * transitions, assignment changes, metastore writes
     - self._kick is a wakeup mechanism:
-        * Set by callback thread to notify runner “control-plane work is pending”.
+        * Set by callback thread to notify runner "control-plane work is pending".
         * Also set when request_stop is called, to exit promptly.
         * NOT set for ingress messages (by design): ingress delivery in READY/PAUSED
           can wait until next tick; ACTIVE drains continuously anyway.
@@ -123,7 +123,7 @@ class Worker:
         * set ExperimentStatus.CANCELED (when appropriate)
         * teardown + AVAILABLE
 
-    “Fail partition vs break worker” rule of thumb
+    "Fail partition vs break worker" rule of thumb
     ----------------------------------------------
     - Fail partition (keep worker healthy) when:
         * experiment data is inconsistent
@@ -153,7 +153,7 @@ class Worker:
         self._name = name or address
         self._settings: AppSettings = settings
 
-        # ExperimentStore is the worker’s “write channel” for partition status/exc.
+        # ExperimentStore is the worker's "write channel" for partition status/exc.
         # The worker is responsible for advancing ExperimentStatus after ASSIGNED.
         self._exp_store = ExperimentStore(self._cluster.meta)
 
@@ -264,6 +264,7 @@ class Worker:
             if self._running:
                 raise WorkerError("Worker runner already running")
             self._running = True
+            self._set_state_locked(WorkerState.AVAILABLE)
 
         self._runner_loop()
 
@@ -323,7 +324,7 @@ class Worker:
         IMPORTANT:
         - Must not perform heavy work or block.
         - Must not mutate runtime structures directly.
-        - Only stores desired state in _pending_desired and “kicks” the runner.
+        - Only stores desired state in _pending_desired and "kicks" the runner.
 
         Return value:
         - None if accepted.
@@ -369,7 +370,7 @@ class Worker:
         Failure handling:
         - StopIteration: runner completed -> remove it from _active_runners.
         - Any other exception during next(gen):
-            * treated as model/runtime “grey zone” failure
+            * treated as model/runtime "grey zone" failure
             * fail the partition (under lock) and return immediately
             * failing the partition triggers teardown + AVAILABLE, so hot path stops naturally
         """
@@ -388,7 +389,7 @@ class Worker:
             except StopIteration:
                 finished_positions.append(pos)
             except Exception as exc:
-                # “Grey zone” rule: any exception during next(gen) fails the partition.
+                # "Grey zone" rule: any exception during next(gen) fails the partition.
                 with self._lock:
                     self._fail_partition_locked(exc, where=f"runner next() failed for runner_index={idx}")
                 return
@@ -402,7 +403,7 @@ class Worker:
         """
         End-of-run sequence for a partition.
 
-        This is the “happy path”/structured path end (e.g. FINISHED),
+        This is the "happy path"/structured path end (e.g. FINISHED),
         distinct from _fail_partition_locked which ends via exception.
 
         Steps:
@@ -411,6 +412,16 @@ class Worker:
         3) clear assignment + publish AVAILABLE to Cluster
         4) clear runner bookkeeping
         """
+        a = self._assignment
+        logger.info(
+            "Worker %s run ended: status=%s expid=%s repid=%s partition=%s",
+            self._name,
+            status.name,
+            a.expid if a else None,
+            a.repid if a else None,
+            a.partition if a else None,
+        )
+
         # 1) status + bookkeeping
         self._set_partition_status_locked(status)
 
@@ -439,8 +450,8 @@ class Worker:
             * or earlier if _kick is set (desired-state change or stop request)
 
         Time structure:
-        - “Control tick” evaluates desired state and transitions the worker state machine.
-        - “Hot path” advances simulation and handles completion.
+        - "Control tick" evaluates desired state and transitions the worker state machine.
+        - "Hot path" advances simulation and handles completion.
 
         Exit conditions:
         - _running becomes False (request_stop or EXITED)
@@ -490,7 +501,7 @@ class Worker:
                 if state in (WorkerState.READY, WorkerState.PAUSED):
                     # Design note:
                     # - Delivering messages here is not critical, but it is harmless and may reduce
-                    #   backlog when switching back to ACTIVE. If you want strictly “no overhead”
+                    #   backlog when switching back to ACTIVE. If you want strictly "no overhead"
                     #   outside ACTIVE, you could move this drain into ACTIVE only.
                     self._drain_ingress()
 
@@ -547,7 +558,7 @@ class Worker:
         - NodeRuntime.receive_event exception: worker BROKEN (runtime invariants violated).
 
         Note: These errors are treated as worker-fatal because they indicate corruption
-        or a fundamental mismatch in the worker’s runtime setup vs messages being routed.
+        or a fundamental mismatch in the worker's runtime setup vs messages being routed.
         """
         node = self._nodes.get(msg.target_node)
         if node is None:
@@ -622,7 +633,7 @@ class Worker:
         Best-effort drain of ingress queues during teardown.
 
         Used to prevent:
-        - stale messages from prior runs being delivered into the next run’s NodeRuntimes.
+        - stale messages from prior runs being delivered into the next run's NodeRuntimes.
         - memory growth if controller routed messages late.
         """
         while True:
@@ -673,7 +684,7 @@ class Worker:
         """
         State machine transitions driven by DesiredWorkerState.
 
-        This method is the “control-plane brain”:
+        This method is the "control-plane brain":
         - validates desired state
         - updates assignment (only on READY)
         - calls setup/start/teardown helpers
@@ -975,6 +986,13 @@ class Worker:
         self._runners = tuple(runners)
         self._active_runners = list(range(len(self._runners)))
 
+        logger.info(
+            "Worker %s starting %d runners for duration=%s",
+            self._name,
+            len(self._runners),
+            duration,
+        )
+
         self._set_partition_status_locked(ExperimentStatus.ACTIVE)
 
     def _teardown_run_locked(self) -> None:
@@ -1084,7 +1102,7 @@ class Worker:
         """
         Advance partition ExperimentStatus via ExperimentStore.
 
-        This is the canonical “status update” path. If this fails, the worker is considered BROKEN
+        This is the canonical "status update" path. If this fails, the worker is considered BROKEN
         because it cannot reliably report progress or completion.
         """
         a = self._require_assignment_locked()
@@ -1105,7 +1123,7 @@ class Worker:
         """
         Fail the currently assigned partition and return worker to AVAILABLE.
 
-        This is the “partition failure” path (not worker-fatal) and is used for:
+        This is the "partition failure" path (not worker-fatal) and is used for:
         - invalid/missing experiment data
         - invalid/missing/corrupt graph/partitioning/model data
         - runtime exceptions from model logic in next(gen) / initialize / etc.
@@ -1117,6 +1135,13 @@ class Worker:
         4) Clears assignment and transitions worker back to AVAILABLE
         """
         a = self._require_assignment_locked()
+
+        logger.error(
+            "Worker %s partition failed at %r: %s",
+            self._name,
+            where,
+            exc,
+        )
 
         tb = traceback.format_exc()
         payload: dict[str, Any] = {

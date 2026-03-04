@@ -60,7 +60,7 @@ class Client:
         *,
         settings: AppSettings | None = None,
         group: str | None = None,
-    ) -> Iterator["Client"]:
+    ) -> Iterator[Client]:
         """
         Create a Client using ZooKeeper settings and yield it as a context manager.
 
