@@ -12,14 +12,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import numpy as np
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import Column, MetaData, String, Table, UniqueConstraint, insert
 from sqlalchemy.engine import Engine
 
 from disco.database import SessionManager
-from disco.model.orm import OrmBundle, build_orm_bundle
+from disco.model.orm import build_orm_bundle
 from disco.graph_factory import graph_from_model
 from disco.partitioner import NODE_TYPE
 

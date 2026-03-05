@@ -1,25 +1,28 @@
+from typing import List, Dict
 import numpy as np
 import pandas as pd
 
 from sqlalchemy import select, literal
 from disco.model import Model, db_validate
 from disco.graph import Graph
-from disco.database import DbHandle
+from disco.database import DbHandle, SessionManager, normalize_db_handle
 from disco.partitioner import NODE_TYPE
 
 
 def graph_from_model(db: DbHandle, scenario_id: str, model: Model) -> Graph:
+
+    smgr = SessionManager(engine=normalize_db_handle(db))
 
     spec = model.spec
     orm = model.orm
 
     db_validate(orm, db)
 
-    with db.session() as session:
+    with smgr.session() as session:
 
         # build index map and labels
-        keys = list()
-        labels = {NODE_TYPE: dict()}
+        keys: List[str] = []
+        labels: Dict[str, Dict[str, np.ndarray]] = {NODE_TYPE: dict()}
 
         for nt, ns in spec.node_types.items():
             table = orm.node_tables[nt]  # keyed by node-type name, not table name
