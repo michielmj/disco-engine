@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator, Union, Self
+from typing import Iterator, Union, Self, Optional
 
 import pandas as pd
 from sqlalchemy import create_engine, Connection, insert, delete, literal
@@ -46,8 +46,8 @@ class SessionManager:
 DbHandle = Union[Engine, Connection, SessionManager]
 
 
-def normalize_db_handle(db: DbHandle) -> Engine | Connection:
-    if isinstance(db, SessionManager):
+def normalize_db_handle(db: DbHandle) -> Engine:
+    if isinstance(db, (SessionManager, Connection)):
         return db.engine
     return db
 
@@ -58,7 +58,7 @@ def df_to_table(
     df: pd.DataFrame,
     *,
     clear_all: bool = False,
-    clear_scenario: str = None,
+    clear_scenario: Optional[str] = None,
     chunk_size: int = 10_000,
 ):
     if clear_all:
