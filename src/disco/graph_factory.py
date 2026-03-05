@@ -22,8 +22,7 @@ def graph_from_model(db: DbHandle, scenario_id: str, model: Model) -> Graph:
         labels = {NODE_TYPE: dict()}
 
         for nt, ns in spec.node_types.items():
-            table_name = ns.node_data_table
-            table = model.orm.node_tables[table_name]
+            table = orm.node_tables[nt]  # keyed by node-type name, not table name
 
             column_names = ['key'] + list(ns.distinct_nodes)
 
@@ -37,19 +36,20 @@ def graph_from_model(db: DbHandle, scenario_id: str, model: Model) -> Graph:
             vertices = pd.DataFrame(cursor.fetchall(), columns=column_names)
 
             offset = len(keys)
-            vertices['index'] = np.arange(offset, offset + vertices.shape[0])
+            vertices['index'] = np.arange(offset, offset + len(vertices))
             keys += vertices['key'].tolist()
 
-            labels[NODE_TYPE].update({nt: vertices['index'].array})
+            labels[NODE_TYPE].update({nt: vertices['index'].to_numpy()})
             for lt in ns.distinct_nodes:
                 if lt not in labels:
                     labels[lt] = dict()
 
                 for lbl, group in vertices.groupby(lt)['index']:
+                    grp_arr = group.to_numpy()
                     if lbl in labels[lt]:
-                        labels[lt][lbl] = np.union1d(labels[lt][lbl], group.array)
+                        labels[lt][lbl] = np.union1d(labels[lt][lbl], grp_arr)
                     else:
-                        labels[lt][lbl] = group.array
+                        labels[lt][lbl] = grp_arr
 
         keymap = {k: i for i, k in enumerate(keys)}
         num_vertices = len(keys)
@@ -60,6 +60,11 @@ def graph_from_model(db: DbHandle, scenario_id: str, model: Model) -> Graph:
             if simproc in orm.edge_tables_by_simproc:
                 table = orm.edge_tables_by_simproc[simproc]
             else:
+                if orm.default_edge_table is None:
+                    raise ValueError(
+                        f"Simproc '{simproc}' has no dedicated edge table and "
+                        "no default_edge_data_table is configured in the model."
+                    )
                 table = orm.default_edge_table
 
             cursor = session.execute(
@@ -73,16 +78,17 @@ def graph_from_model(db: DbHandle, scenario_id: str, model: Model) -> Graph:
             edges = pd.DataFrame(cursor.fetchall(), columns=['source_key', 'target_key'])
 
             layers.append((
-                edges['source_key'].map(keymap),
-                edges['target_key'].map(keymap),
-                np.zeros(edges.shape[0], dtype=float)
+                edges['source_key'].map(keymap).to_numpy(dtype=np.int64),
+                edges['target_key'].map(keymap).to_numpy(dtype=np.int64),
+                np.ones(len(edges), dtype=float),
             ))
 
         graph = Graph.from_edges(
-            edge_layers={i: l for i, l in enumerate(layers)},
-            num_vertices=num_vertices
+            edge_layers={i: layer for i, layer in enumerate(layers)},
+            num_vertices=num_vertices,
+            scenario_id=scenario_id,
         )
-        for lt, lbl in labels:
+        for lt, lbl in labels.items():
             graph.add_labels(lt, lbl)
 
     return graph
