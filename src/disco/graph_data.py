@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence, Iterable, Tuple, Generator, Self, cast
+from typing import Any, Mapping, Optional, Sequence, Iterable, Tuple, Generator, Self, cast, TypeVar, overload, Union
 
 import numpy as np
 from graphblas import Matrix, Vector
@@ -237,7 +237,39 @@ class GraphData:
             node_mask=self.node_mask,
         )
 
-    def by_node(self, vector: Vector) -> Generator[Tuple[str, Vector], None, None]:
+    @overload
+    def by_node(self, idxs: int) -> Generator[Tuple[str, int], None, None]: ...
+    @overload
+    def by_node(self, idxs: list) -> Generator[Tuple[str, list], None, None]: ...
+    @overload
+    def by_node(self, idxs: np.ndarray) -> Generator[Tuple[str, np.ndarray], None, None]: ...
+    @overload
+    def by_node(self, idxs: Vector) -> Generator[Tuple[str, Vector], None, None]: ...
+
+    def by_node(
+            self,
+            idxs: Union[Vector, np.ndarray, list, int],
+    ) -> Generator[Tuple[str, Union[Vector, np.ndarray, list, int]], None, None]:
+        if isinstance(idxs, Vector):
+            yield from self._by_node_vector(idxs)
+        elif isinstance(idxs, (np.ndarray, list)):
+            indices = np.asarray(idxs, dtype=np.int64)
+            vector = Vector.from_coo(indices, 1, size=self.incidence_matrix.ncols)
+            for node, vec in self._by_node_vector(vector):
+                arr, _ = vec.to_coo()
+                yield node, arr.tolist() if isinstance(idxs, list) else arr
+        elif isinstance(idxs, int):
+            row_indices, _ = self.partitioning.incidence[:, idxs].to_coo()
+            if len(row_indices) != 1:
+                raise ValueError(
+                    f"Vertex {idxs} belongs to {len(row_indices)} nodes in the incidence matrix; "
+                    f"expected exactly 1."
+                )
+            yield self.partitioning.node_specs[row_indices[0]].node_name, idxs
+        else:
+            raise TypeError(f"Unsupported type for idxs: {type(idxs).__name__}")
+
+    def _by_node_vector(self, vector: Vector):
         if vector.size != self.incidence_matrix.ncols:
             raise ValueError('vector.size must equal incidence_matrix.ncols')
 
