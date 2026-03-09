@@ -210,8 +210,6 @@ def store_graph(
         description: Optional[str] = None,
         replace: bool = False,
         chunk_size: int = 10_000,
-        store_edges: bool = True,
-        store_labels: bool = True,
 ) -> None:
     """
     Validate and persist the Graph to the database.
@@ -220,9 +218,8 @@ def store_graph(
       1. Validates the graph (checks scenario_id, vertex key coverage, structure).
       2. Creates (or replaces) the scenario row in graph_scenarios.
       3. Writes the graph's vertices to graph_vertices.
-      4. Writes the graph's edges to graph_edges (when store_edges=True).
-      5. Writes the graph's labels to graph_labels / graph_vertex_labels
-         (when store_labels=True).
+      4. Writes the graph's edges to graph_edges.
+      5. Writes the graph's labels to graph_labels / graph_vertex_labels.
 
     Parameters
     ----------
@@ -237,10 +234,6 @@ def store_graph(
         If False (default), a duplicate scenario_id raises ValueError.
     chunk_size:
         Number of vertices to insert per batch into graph_vertices.
-    store_edges:
-        Whether to write edge data (default True).
-    store_labels:
-        Whether to write label data (default True).
 
     Notes
     -----
@@ -288,12 +281,10 @@ def store_graph(
     _store_vertices_for_scenario(session, scenario_id, graph.vertices, chunk_size=chunk_size)
 
     # Step 4: write edges
-    if store_edges:
-        _store_edges_for_scenario(session, graph)
+    _store_edges_for_scenario(session, graph)
 
     # Step 5: write labels
-    if store_labels:
-        _store_labels_for_scenario(session, graph)
+    _store_labels_for_scenario(session, graph)
 
 
 # ---------------------------------------------------------------------------

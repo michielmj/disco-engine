@@ -76,7 +76,7 @@ def test_store_graph_inserts_vertices(
         scenario_id=scenario_id,
         vertices=vertex_keys,
     )
-    store_graph(session, graph, store_labels=False)
+    store_graph(session, graph)
 
     rows = session.execute(
         select(vertices_table.c.index, vertices_table.c.key)
@@ -103,11 +103,11 @@ def test_store_graph_duplicate_raises(
     keys2 = np.array(["x", "y"], dtype=object)
 
     graph1 = Graph.from_edges({}, num_vertices=3, scenario_id=scenario_id, vertices=keys1)
-    store_graph(session, graph1, store_labels=False)
+    store_graph(session, graph1)
 
     graph2 = Graph.from_edges({}, num_vertices=2, scenario_id=scenario_id, vertices=keys2)
     with pytest.raises(ValueError):
-        store_graph(session, graph2, store_labels=False)
+        store_graph(session, graph2)
 
     # Ensure vertex rows are still only for the first creation
     rows = session.execute(
@@ -140,7 +140,7 @@ def test_store_graph_chunked_insert_large(
         vertices=vertex_keys,
     )
     # Use small chunk_size so we definitely hit multiple chunks
-    store_graph(session, graph, chunk_size=7, store_labels=False)
+    store_graph(session, graph, chunk_size=7)
 
     rows = session.execute(
         select(vertices_table.c.index, vertices_table.c.key)
@@ -244,7 +244,7 @@ def test_store_and_load_graph_with_labels_and_mask(
     # ------------------------------------------------------------------
     # Store graph (scenario + vertices + edges + labels) into DB
     # ------------------------------------------------------------------
-    store_graph(session, graph, store_edges=True, store_labels=True)
+    store_graph(session, graph)
     session.commit()
 
     # Quick sanity: edges really exist in DB
