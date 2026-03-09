@@ -184,7 +184,7 @@ def _worker_main(
     loglevel: int,
 ) -> None:
     """Worker process entrypoint (must create its own Cluster client)."""
-    mp_logging.configure_worker(log_queue, level=loglevel)
+    mp_logging.configure_worker(log_queue, level=[("disco", loglevel), ("", max(logging.INFO, loglevel))])
     signal.signal(signal.SIGINT, signal.SIG_IGN)  # parent handles Ctrl-C; we exit via stop_event
 
     wlog = mp_logging.getLogger(__name__)
@@ -213,7 +213,8 @@ def _orchestrator_process_entry(
         loglevel: int,
 ) -> None:
     """Placeholder orchestrator: start, wait for stop_event, exit cleanly."""
-    mp_logging.configure_worker(log_queue, level=loglevel)
+    mp_logging.configure_worker(log_queue, level=[("disco", loglevel), ("", max(logging.INFO, loglevel))])
+
     signal.signal(signal.SIGINT, signal.SIG_IGN)  # parent handles Ctrl-C; we exit via stop_event
     olog = mp_logging.getLogger(__name__)
     olog.info("Orchestrator starting: %s", address)
@@ -323,8 +324,8 @@ class Server:
             event_queues[spec.address] = ctx.Queue()
             promise_queues[spec.address] = ctx.Queue()
 
-        with mp_logging.setup_logging(level=self._loglevel) as log_cfg:
-            mp_logging.configure_worker(log_cfg.queue)
+        with mp_logging.setup_logging(level=[("disco", self._loglevel), ("", max(logging.INFO, self._loglevel))]) as log_cfg:
+            # mp_logging.configure_worker(log_cfg.queue, level=[("disco", self._loglevel), ("", logging.INFO)])
             logger.info("Server starting with %d workers (group=%s)", len(self._worker_specs), self._group)
 
             with Cluster.make_cluster(zookeeper_settings=self._settings.zookeeper, group=self._group) as cluster:
