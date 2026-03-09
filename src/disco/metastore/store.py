@@ -184,11 +184,15 @@ class Metastore:
         self._ensure_running()
         full_path = self._full_path(path)
 
+        # ensure the path exists
+        self.client.ensure_path(full_path)
+
         def _wrapped(raw: Optional[bytes], p: str) -> bool:
             if raw is None:
                 # Node deleted → stop watching.
                 return False
-            value = self._unpackb(raw)
+
+            value = None if raw == b'' else self._unpackb(raw)
             return callback(value, p)
 
         return self._connection.watch_data(full_path, _wrapped)

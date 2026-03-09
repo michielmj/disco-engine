@@ -493,7 +493,7 @@ class Worker:
                     self._step_runners_once()
 
                     # If all runners finished, end the run as FINISHED.
-                    if not self._active_runners:
+                    if not self._active_runners and self._state == WorkerState.ACTIVE:
                         with self._lock:
                             self._end_run_locked(ExperimentStatus.FINISHED)
 
@@ -758,7 +758,7 @@ class Worker:
             if self._state not in (WorkerState.READY, WorkerState.PAUSED):
                 raise WorkerError(f"Cannot transition to ACTIVE from {self._state.name}")
 
-            if new_assignment is not None:
+            if new_assignment is not None and new_assignment != self._assignment:
                 raise WorkerError("Assignment can only be set for desired state READY")
 
             if self._state == WorkerState.READY:

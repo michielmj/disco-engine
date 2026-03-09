@@ -350,6 +350,9 @@ class Cluster:
 
         def _callback(value: Any, _) -> bool:
             # `value` is already decoded by Metastore (likely a dict).
+            # at first registration, value may be none if the key does not yet exists
+            if value is None:
+                return True
 
             try:
                 error_msg = handler(cast(DesiredWorkerState, value))
