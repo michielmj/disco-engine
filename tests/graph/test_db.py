@@ -1,5 +1,4 @@
 # tests/graph/test_db.py
-# tests/graph/test_db.py
 from typing import Iterator
 
 import numpy as np
@@ -12,7 +11,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from disco.graph import (
     Graph,
     create_graph_schema,
-    create_scenario,
     store_graph,
     load_graph_for_scenario,
     get_outbound_map,
@@ -40,46 +38,45 @@ def engine_and_session_factory() -> Iterator[tuple[object, sessionmaker]]:
     engine.dispose()
 
 
-def _create_scenario_with_vertices(session: Session, num_vertices: int) -> str:
+def _build_graph_with_vertices(
+    num_vertices: int,
+    scenario_id: str,
+    edge_layers: dict | None = None,
+) -> Graph:
     """
-    Helper to create a scenario and populate graph_vertices with
-    vertex indices 0..num_vertices-1 via create_scenario.
+    Helper to build a Graph with vertex keys attached.
     """
-    scenario_id = "roundtrip_test"
     vertex_keys = np.array([f"v{i}" for i in range(num_vertices)], dtype=object)
-
-    create_scenario(
-        session,
+    return Graph.from_edges(
+        edge_layers or {},
+        num_vertices=num_vertices,
         scenario_id=scenario_id,
-        vertex_keys=vertex_keys,
-        description="Roundtrip store/load test",
+        vertices=vertex_keys,
     )
-    session.commit()
-    return scenario_id
 
 
 # ---------------------------------------------------------------------------
-# create_scenario tests
+# store_graph creates scenario + vertices tests
 # ---------------------------------------------------------------------------
 
 
-def test_create_scenario_inserts_vertices(
+def test_store_graph_inserts_vertices(
     engine_and_session_factory: tuple[object, sessionmaker]
 ) -> None:
     _, SessionLocal = engine_and_session_factory
     session: Session = SessionLocal()
 
     num_vertices = 5
-    scenario_id = "scenario_create_test"
+    scenario_id = "scenario_store_test"
     vertex_keys = np.array([f"k{i}" for i in range(num_vertices)], dtype=object)
 
-    create_scenario(
-        session,
+    graph = Graph.from_edges(
+        {},
+        num_vertices=num_vertices,
         scenario_id=scenario_id,
-        vertex_keys=vertex_keys,
-        description="Create scenario test",
-        chunk_size=2,  # force multiple chunks even for small N
+        vertices=vertex_keys,
     )
+    store_graph(session, graph, store_labels=False)
 
     rows = session.execute(
         select(vertices_table.c.index, vertices_table.c.key)
@@ -95,7 +92,7 @@ def test_create_scenario_inserts_vertices(
     session.close()
 
 
-def test_create_scenario_duplicate_raises(
+def test_store_graph_duplicate_raises(
     engine_and_session_factory: tuple[object, sessionmaker]
 ) -> None:
     _, SessionLocal = engine_and_session_factory
@@ -105,22 +102,12 @@ def test_create_scenario_duplicate_raises(
     keys1 = np.array(["a", "b", "c"], dtype=object)
     keys2 = np.array(["x", "y"], dtype=object)
 
-    # First creation succeeds
-    create_scenario(
-        session,
-        scenario_id=scenario_id,
-        vertex_keys=keys1,
-        description="First creation",
-    )
+    graph1 = Graph.from_edges({}, num_vertices=3, scenario_id=scenario_id, vertices=keys1)
+    store_graph(session, graph1, store_labels=False)
 
-    # Second creation with same scenario_id must raise
+    graph2 = Graph.from_edges({}, num_vertices=2, scenario_id=scenario_id, vertices=keys2)
     with pytest.raises(ValueError):
-        create_scenario(
-            session,
-            scenario_id=scenario_id,
-            vertex_keys=keys2,
-            description="Second creation (should fail)",
-        )
+        store_graph(session, graph2, store_labels=False)
 
     # Ensure vertex rows are still only for the first creation
     rows = session.execute(
@@ -133,7 +120,7 @@ def test_create_scenario_duplicate_raises(
     session.close()
 
 
-def test_create_scenario_chunked_insert_large(
+def test_store_graph_chunked_insert_large(
     engine_and_session_factory: tuple[object, sessionmaker]
 ) -> None:
     """
@@ -146,14 +133,14 @@ def test_create_scenario_chunked_insert_large(
     scenario_id = "chunk_test"
     vertex_keys = np.array([f"node_{i}" for i in range(num_vertices)], dtype=object)
 
-    # Use small chunk_size so we definitely hit multiple chunks
-    create_scenario(
-        session,
+    graph = Graph.from_edges(
+        {},
+        num_vertices=num_vertices,
         scenario_id=scenario_id,
-        vertex_keys=vertex_keys,
-        description="Chunked insert test",
-        chunk_size=7,
+        vertices=vertex_keys,
     )
+    # Use small chunk_size so we definitely hit multiple chunks
+    store_graph(session, graph, chunk_size=7, store_labels=False)
 
     rows = session.execute(
         select(vertices_table.c.index, vertices_table.c.key)
@@ -165,6 +152,21 @@ def test_create_scenario_chunked_insert_large(
     for i, (idx, key) in enumerate(rows):
         assert idx == i
         assert key == vertex_keys[i]
+
+    session.close()
+
+
+def test_store_graph_without_vertices_raises(
+    engine_and_session_factory: tuple[object, sessionmaker]
+) -> None:
+    """store_graph must raise if the graph has no vertices attached."""
+    _, SessionLocal = engine_and_session_factory
+    session: Session = SessionLocal()
+
+    graph = Graph.from_edges({}, num_vertices=3, scenario_id="no-verts")
+
+    with pytest.raises(ValueError, match="vertices"):
+        store_graph(session, graph)
 
     session.close()
 
@@ -181,10 +183,11 @@ def test_store_and_load_graph_with_labels_and_mask(
     session: Session = SessionLocal()
 
     num_vertices = 4
-    scenario_id = _create_scenario_with_vertices(session, num_vertices)
+    scenario_id = "roundtrip_test"
+    vertex_keys = np.array([f"v{i}" for i in range(num_vertices)], dtype=object)
 
     # ------------------------------------------------------------------
-    # Build in-memory Graph: edges
+    # Build in-memory Graph: edges + vertices
     # ------------------------------------------------------------------
     src = np.array([0, 1], dtype=np.int64)
     tgt = np.array([1, 2], dtype=np.int64)
@@ -194,7 +197,10 @@ def test_store_and_load_graph_with_labels_and_mask(
     }
 
     graph = Graph.from_edges(
-        edge_layers, num_vertices=num_vertices, scenario_id=scenario_id
+        edge_layers,
+        num_vertices=num_vertices,
+        scenario_id=scenario_id,
+        vertices=vertex_keys,
     )
 
     # ------------------------------------------------------------------
@@ -236,7 +242,7 @@ def test_store_and_load_graph_with_labels_and_mask(
     graph.set_mask(mask_vec)
 
     # ------------------------------------------------------------------
-    # Store graph (edges + labels) into DB
+    # Store graph (scenario + vertices + edges + labels) into DB
     # ------------------------------------------------------------------
     store_graph(session, graph, store_edges=True, store_labels=True)
     session.commit()
@@ -246,6 +252,14 @@ def test_store_and_load_graph_with_labels_and_mask(
         edges_table.select().where(edges_table.c.scenario_id == scenario_id)
     ).all()
     assert len(db_edges) == 2
+
+    # Quick sanity: vertices really exist in DB
+    db_vertices = session.execute(
+        vertices_table.select()
+        .where(vertices_table.c.scenario_id == scenario_id)
+        .order_by(vertices_table.c.index)
+    ).all()
+    assert len(db_vertices) == num_vertices
 
     # ------------------------------------------------------------------
     # Load graph back from DB
@@ -260,6 +274,12 @@ def test_store_and_load_graph_with_labels_and_mask(
     # Should match the original weights
     assert loaded_mat[0, 1].value == 1.0
     assert loaded_mat[1, 2].value == 2.0
+
+    # Vertices should be restored
+    assert loaded.vertices is not None
+    assert len(loaded.vertices) == num_vertices
+    for i, key in enumerate(vertex_keys):
+        assert loaded.vertices[i] == key
 
     # Label checks
     assert loaded.num_labels == 3

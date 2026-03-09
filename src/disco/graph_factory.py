@@ -90,6 +90,7 @@ def graph_from_model(db: DbHandle, scenario_id: str, model: Model) -> Graph:
             edge_layers={i: layer for i, layer in enumerate(layers)},
             num_vertices=num_vertices,
             scenario_id=scenario_id,
+            vertices=np.array(keys, dtype=object),
         )
         for lt, lbl in labels.items():
             graph.add_labels(lt, lbl)

@@ -7,12 +7,12 @@ Layered graph + scenario subsystem.
 
 Public API (this subpackage):
 
-- Graph                  : core in-memory graph structure (layers, labels, mask).
+- Graph                  : core in-memory graph structure (layers, vertices, labels, mask).
 - GraphMask              : graph mask object.
 - create_graph_schema    : create the graph schema/tables in a database.
-- create_scenario        : insert/register a new scenario_id row.
-- store_graph            : persist a Graph's structure (edges + labels) to the DB.
-- load_graph_for_scenario: load a Graph (edges + labels) from the DB for a scenario.
+- store_graph            : validate and persist a Graph (scenario + vertices + edges + labels)
+                           to the DB.
+- load_graph_for_scenario: load a Graph (vertices + edges + labels) from the DB for a scenario.
 
 - get_node_types         : return node_type per vertex index from graph.vertices,
                            optionally filtered by a mask.
@@ -37,7 +37,6 @@ from __future__ import annotations
 from .core import Graph
 from .schema import create_graph_schema
 from .db import (
-    create_scenario,
     store_graph,
     load_graph_for_scenario,
 )
@@ -55,7 +54,6 @@ __all__ = [
     "Graph",
     "GraphMask",
     "create_graph_schema",
-    "create_scenario",
     "store_graph",
     "load_graph_for_scenario",
     "get_vertex_data",

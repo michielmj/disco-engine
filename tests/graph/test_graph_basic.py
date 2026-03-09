@@ -13,7 +13,7 @@ def test_basic_graph_structure() -> None:
     wgt = np.array([1.0, 2.0, 3.0], dtype=np.float64)
     layers: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {0: (src, tgt, wgt)}
 
-    graph = Graph.from_edges(layers, num_vertices=5)
+    graph = Graph.from_edges(layers, num_vertices=5, scenario_id="basic-test")
 
     assert graph.num_vertices == 5
     mat = graph.get_matrix(0)
@@ -32,7 +32,7 @@ def test_graph_masking_and_view() -> None:
     wgt = np.array([1.0, 2.0], dtype=np.float64)
     layers: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {0: (src, tgt, wgt)}
 
-    graph = Graph.from_edges(layers, num_vertices=4)
+    graph = Graph.from_edges(layers, num_vertices=4, scenario_id="mask-test")
 
     # Mask vertices 1 and 2
     mask = Vector.from_coo([1, 2], [True, True], size=4)
