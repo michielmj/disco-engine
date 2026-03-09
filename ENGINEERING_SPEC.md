@@ -1482,6 +1482,9 @@ At a high level:
 - The **structural graph** lives in memory as a `Graph` backed by python‑graphblas:
 
   - Vertices are numbered `0 .. num_vertices-1` per scenario.
+  - Vertex **keys** are stored in a 1‑D NumPy array (`vertices`), where
+    position `i` holds the model key for vertex `i`.  Keys bridge the
+    index space of the in‑memory graph to the key space of model tables.
   - Each **layer** is a square adjacency matrix `A_ℓ` of shape
     `num_vertices × num_vertices`.
   - Optional vertex **labels** are stored in a sparse boolean matrix
@@ -1537,7 +1540,7 @@ description   TEXT NULL
 ```
 
 - `scenario_id` is the external identifier used throughout the system.
-- `created_at` is set by `create_scenario`.
+- `created_at` is set by `store_graph`.
 - `description` is optional metadata only.
 
 #### 7.2.2 Vertices
@@ -1639,6 +1642,7 @@ class Graph:
         num_vertices: int,
         scenario_id: str = "",
         *,
+        vertices: np.ndarray | None = None,
         mask: Vector | None = None,
         label_matrix: Matrix | None = None,
         label_meta: dict[int, tuple[str, str]] | None = None,
@@ -1650,7 +1654,11 @@ Key fields (via `__slots__`):
 
 - `_layers: tuple[Matrix, ...]` — adjacency matrices per layer.
 - `num_vertices: int` — number of vertices (0 .. num_vertices-1).
-- `scenario_id: str` — scenario identifier (for context, not required).
+- `scenario_id: str` — scenario identifier; must be non‑empty for the graph
+  to pass `validate()`.
+- `_vertices: np.ndarray | None` — 1‑D array of vertex keys (`object` dtype),
+  where position `i` holds the model key for vertex `i`.  `None` when not
+  yet attached.
 - `_mask: GraphMask | None` — optional persisted vertex mask wrapper.
 - `_label_matrix: Matrix[BOOL] | None` — sparse vertex×label matrix.
 - `_label_meta: dict[int, (label_type, label_value)]`.
@@ -1661,11 +1669,13 @@ Key fields (via `__slots__`):
 
 #### 7.3.1 Construction and Validation
 
-- `Graph.from_edges(edge_layers, *, num_vertices, scenario_id="")`
+- `Graph.from_edges(edge_layers, *, num_vertices, scenario_id="", vertices=None)`
 
   - `edge_layers` is a mapping `layer_idx → (src, dst, weights)` where each
     array is converted to `np.int64` (for indices) and proper dtype for
     weights.
+  - `vertices` is an optional 1‑D NumPy array of vertex keys.  When provided,
+    position `i` must be the model key for vertex `i`.
   - For each layer a `gb.Matrix.from_coo` is constructed with shape
     `num_vertices × num_vertices`.
   - Layer indices must be contiguous (0 .. L-1); otherwise a `ValueError`
@@ -1674,6 +1684,9 @@ Key fields (via `__slots__`):
 
 - `Graph.validate(check_cycles: bool = True)`
 
+  - Checks that `scenario_id` is non‑empty; raises `ValueError` otherwise.
+  - Checks that `len(vertices) == num_vertices` when `vertices` is attached;
+    raises `ValueError` otherwise.
   - For each layer:
 
     - Verifies `nrows == num_vertices` and `ncols == num_vertices`.
@@ -1683,6 +1696,8 @@ Key fields (via `__slots__`):
 
 #### 7.3.2 Structural Accessors
 
+- `vertices → np.ndarray | None` — 1‑D array of vertex keys, or `None` when
+  not yet attached.  Read‑only property; the array is not copied on access.
 - `layers → tuple[Matrix, ...]` — read‑only tuple of adjacency matrices.
 - `get_matrix(layer: int) → Matrix` — raw adjacency matrix for `layer`.
 - `get_out_edges(layer: int, vertex_index: int) → Vector` — outgoing edges
@@ -1842,9 +1857,10 @@ multiple labels per type as well.
 
 `Graph.get_view(mask: Vector | None = None) → Graph` constructs a shallow view:
 
-- Structural matrices (`layers`) and label structures are shared.
-- A new `Graph` instance is created with the same `num_vertices` and
-  `scenario_id`.
+- Structural matrices (`layers`), vertex keys (`_vertices`), and label
+  structures are shared by reference — no copies are made.
+- A new `Graph` instance is created with the same `num_vertices`, `scenario_id`,
+  and `vertices` array.
 - The mask used for the new graph:
 
   - If `mask is None`, it reuses the current mask vector (if any).
@@ -1854,45 +1870,69 @@ This is useful when computations need to work on different vertex subsets while
 sharing the same underlying adjacency matrices and labels.
 
 
-### 7.4 Scenario Creation, Storage, and Loading (`disco.graph.db`)
+### 7.4 Graph Storage and Loading (`disco.graph.db`)
 
 The `disco.graph.db` module deals with the relational representation of graphs.
+Scenario creation is no longer a separate step: `store_graph` is the single
+entry point that validates, creates the scenario row, writes vertices, edges,
+and labels in one call.
 
-#### 7.4.1 Scenario Creation
+#### 7.4.1 Storing a Graph
 
 ```python
-def create_scenario(
+def store_graph(
     session: Session,
-    scenario_id: str,
-    vertex_keys: np.ndarray,
+    graph: Graph,
     *,
     description: str | None = None,
     replace: bool = False,
     chunk_size: int = 10_000,
-) -> str:
+) -> None:
     ...
 ```
 
-Responsibilities:
+Responsibilities (in order):
 
-- Ensure that a scenario with `scenario_id` does not already exist:
+1. **Validate** the graph by calling `graph.validate(check_cycles=False)`:
 
-  - If it exists and `replace=False`, raise `ValueError`.
-  - If it exists and `replace=True`, call `delete_scenario` to remove all
-    related data before recreating.
+   - Checks `scenario_id` is non‑empty.
+   - Checks `len(graph.vertices) == graph.num_vertices` when vertices are set.
+   - Checks matrix dimensions and absence of self‑loops per layer.
 
-- Insert a row into `graph_scenarios` with `created_at = utcnow()` and
-  optional `description`.
+2. **Check vertices** are attached; raises `ValueError` when `graph.vertices is None`.
 
-- Insert vertices in chunks into `graph_vertices`:
+3. **Create or replace the scenario row** in `graph_scenarios`:
 
-  - `vertex_keys` is a 1‑D NumPy array (or array‑like) of keys.
-  - Position `i` corresponds to vertex index `i` in the structural graph.
-  - Vertices are inserted in batches of size `chunk_size` to avoid building
-    very large insert lists in memory.
+   - If a row for `scenario_id` already exists and `replace=False`, raises
+     `ValueError`.
+   - If it exists and `replace=True`, calls `delete_scenario` first.
+   - Inserts `(scenario_id, created_at=utcnow(), description)`.
 
-This function does **not** commit; the caller’s session management is
-responsible for commit/rollback.
+4. **Write vertices** (`_store_vertices_for_scenario`):
+
+   - `graph.vertices` is a 1‑D NumPy array of keys; position `i` is the key
+     for vertex index `i`.
+   - Rows are inserted into `graph_vertices` in batches of `chunk_size` to
+     avoid large in‑memory insert lists.
+
+5. **Write edges** (`_store_edges_for_scenario`):
+
+   - Deletes existing rows in `graph_edges` for the scenario.
+   - For each layer, calls `Matrix.to_coo()` and inserts rows with
+     `(scenario_id, layer_idx, source_idx, target_idx, weight)`.
+
+6. **Write labels** (`_store_labels_for_scenario`):
+
+   - If `graph.label_matrix is None` or `graph.num_labels == 0`, does nothing.
+   - Deletes existing rows in `graph_vertex_labels` and `graph_labels` for
+     the scenario.
+   - Inserts one row in `graph_labels` for each label index in `graph.label_meta`,
+     collecting the DB `id` for each.
+   - Iterates over non‑zero entries of `label_matrix` (`to_coo()`) and inserts
+     rows into `graph_vertex_labels` with `(scenario_id, vertex_index, label_id)`.
+
+This function does **not** commit; transaction boundaries are the caller’s
+responsibility.
 
 #### 7.4.2 Scenario Deletion
 
@@ -1910,42 +1950,9 @@ Removes everything for a scenario in the correct dependency order:
 5. `graph_vertices`
 6. `graph_scenarios`
 
-This again does not commit; transaction boundaries are the caller’s responsibility.
+Does not commit; transaction boundaries are the caller’s responsibility.
 
-#### 7.4.3 Storing Graph Structure and Labels
-
-```python
-def store_graph(
-    session: Session,
-    graph: Graph,
-    *,
-    store_edges: bool = True,
-    store_labels: bool = True,
-) -> None:
-    ...
-```
-
-- `_store_edges_for_scenario`:
-
-  - Deletes existing rows in `graph_edges` for the scenario.
-  - For each layer, calls `Matrix.to_coo()` and inserts rows with
-    `(scenario_id, layer_idx, source_idx, target_idx, weight)`.
-
-- `_store_labels_for_scenario`:
-
-  - If `graph.label_matrix is None` or `graph.num_labels == 0`, does nothing.
-  - Deletes existing rows in `graph_vertex_labels` and `graph_labels` for
-    the scenario.
-  - Inserts one row in `graph_labels` for each label index in `graph.label_meta`,
-    returning the DB `id` for each inserted row.
-  - Builds a mapping `label_index → labels.id`.
-  - Iterates over non‑zero entries of `label_matrix` (`to_coo()`), and inserts
-    rows into `graph_vertex_labels` with `(scenario_id, vertex_index, label_id)`
-    for all entries that are `True`.
-
-Again, no commit is performed here.
-
-#### 7.4.4 Loading a Graph from the Database
+#### 7.4.3 Loading a Graph from the Database
 
 ```python
 def load_graph_for_scenario(session: Session, scenario_id: str) -> Graph:
@@ -1954,10 +1961,12 @@ def load_graph_for_scenario(session: Session, scenario_id: str) -> Graph:
 
 Steps:
 
-1. `_load_num_vertices`:
+1. `_load_vertices`:
 
-   - Queries `max(vertices.index)` for the scenario and returns
-     `max_index + 1` (or `0` if no vertices exist).
+   - Queries `graph_vertices` for the scenario ordered by `index`.
+   - Returns a 1‑D NumPy array of vertex keys (`object` dtype) where
+     position `i` holds the key for vertex `i`.
+   - `num_vertices` is derived as `len(vertex_keys)`.
 
 2. `_load_edge_layers`:
 
@@ -1972,7 +1981,7 @@ Steps:
    - Assigns dense label indices `0 .. num_labels-1` and builds `label_meta`.
    - Queries `graph_vertex_labels` and uses `label_id_to_index` to build a
      sparse `label_matrix` via `Matrix.from_coo`. If there are no assignments,
-     it constructs an empty boolean matrix with the appropriate size.
+     an empty boolean matrix of appropriate size is constructed.
 
 4. Constructs and returns a `Graph`:
 
@@ -1981,13 +1990,14 @@ Steps:
        layers=edge_layers,
        num_vertices=num_vertices,
        scenario_id=scenario_id,
+       vertices=vertex_keys,   # attached from graph_vertices
        label_matrix=label_matrix,
        label_meta=label_meta,
    )
    ```
 
-The resulting `Graph` is fully populated structurally and with labels, but
-has no mask set by default.
+The resulting `Graph` is fully populated with vertices, edges, and labels,
+but has no mask set by default.
 
 
 ### 7.5 Data Extraction and Maps (`disco.graph.extract`)
@@ -2171,11 +2181,16 @@ allow future extensions (e.g. taking values from model edge tables).
 The graph subsystem cleanly separates concerns:
 
 - `Graph` is a DB‑agnostic, python‑graphblas‑based representation of layered
-  directed graphs with labels and masks.
+  directed graphs.  It now carries vertex keys (`_vertices`), labels, and
+  masks in a single self‑contained object.  It requires a non‑empty
+  `scenario_id` and validates structural invariants via `validate()`.
 - `graph.schema` defines the relational schema for scenarios, vertices, edges,
   labels, vertex labels, and vertex masks.
-- `graph.db` handles scenario lifecycle and round‑trips between DB structure
-  and in‑memory graphs.
+- `graph.db` handles the full graph lifecycle: `store_graph` is the single
+  entry point for persisting a `Graph` (scenario row + vertices + edges +
+  labels); `load_graph_for_scenario` reconstructs a complete `Graph`
+  (including vertex keys) from the database; `delete_scenario` removes all
+  related rows in dependency order.
 - `graph.extract` provides high‑level helpers to merge structural graphs with
   model data and masks into Pandas and GraphBLAS structures.
 
