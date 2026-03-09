@@ -5,8 +5,8 @@ metadata = MetaData()
 stockingpoint_data = Table(
     "stockingpoint_data",
     metadata,
-    Column("scenario_id", String, nullable=False),
-    Column("key", String, nullable=False),
+    Column("scenario_id", String, nullable=False, primary_key=True),
+    Column("key", String, nullable=False, primary_key=True),
     Column("echelon", Integer, nullable=False),
     Column("location", String, nullable=False),
     Column("ip_target", Float, nullable=True),
@@ -17,17 +17,17 @@ stockingpoint_data = Table(
 demand_data = Table(
     "demand_data",
     metadata,
-    Column("scenario_id", String, nullable=False),
-    Column("source_key", String, nullable=False),
-    Column("target_key", String, nullable=False),
+    Column("scenario_id", String, nullable=False, primary_key=True),
+    Column("source_key", String, nullable=False, primary_key=True),
+    Column("target_key", String, nullable=False, primary_key=True),
 )
 
 supply_data = Table(
     "supply_data",
     metadata,
-    Column("scenario_id", String, nullable=False),
-    Column("source_key", String, nullable=False),
-    Column("target_key", String, nullable=False),
+    Column("scenario_id", String, nullable=False, primary_key=True),
+    Column("source_key", String, nullable=False, primary_key=True),
+    Column("target_key", String, nullable=False, primary_key=True),
     Column("lead_time", Float, nullable=False),
 )
 
