@@ -5,6 +5,7 @@ from typing import Any, Mapping, Optional, Sequence, Iterable, Tuple, Generator,
 
 import numpy as np
 from graphblas import Matrix, Vector
+from graphblas.core.vector import VectorExpression
 from pandas import DataFrame
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.schema import Table
@@ -250,7 +251,7 @@ class GraphData:
             self,
             idxs: Union[Vector, np.ndarray, list, int],
     ) -> Generator[Tuple[str, Union[Vector, np.ndarray, list, int]], None, None]:
-        if isinstance(idxs, Vector):
+        if isinstance(idxs, (Vector, VectorExpression)):
             yield from self._by_node_vector(idxs)
         elif isinstance(idxs, (np.ndarray, list)):
             indices = np.asarray(idxs, dtype=np.int64)
