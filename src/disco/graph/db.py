@@ -16,117 +16,6 @@ from .schema import (
     edges,
     labels,
     vertex_labels,
-)
-
-
-# ---------------------------------------------------------------------------
-# Scenario management
-# ---------------------------------------------------------------------------
-
-def create_scenario(
-        session: Session,
-        scenario_id: str,
-        vertex_keys: np.ndarray,
-        *,
-        description: Optional[str] = None,
-        replace: bool = False,
-        chunk_size: int = 10_000,
-) -> str:
-    """
-    Create a scenario and populate graph.vertices for it.
-
-    Parameters
-    ----------
-    session:
-        SQLAlchemy ORM Session.
-    scenario_id:
-        External scenario identifier (string). Used everywhere in the system.
-    vertex_keys:
-        1D NumPy array (or array-like) of vertex keys.
-        Position i corresponds to vertex index i (0..V-1).
-    description:
-        Optional human-readable description.
-    replace:
-        Flag prompting the scenario to be deleted first if it already exists.
-    chunk_size:
-        Number of vertices to insert per batch into graph.vertices.
-
-    Returns
-    -------
-    str
-        The scenario_id that was created.
-
-    Notes
-    -----
-    - This function does NOT commit. The caller is responsible for committing
-      or rolling back on the session.
-    - Raises ValueError if the scenario already exists.
-    """
-
-    # ------------------------------------------------------------------
-    # Uniqueness check
-    # ------------------------------------------------------------------
-    existing = session.execute(
-        select(scenarios.c.scenario_id).where(
-            scenarios.c.scenario_id == scenario_id
-        )
-    ).scalar_one_or_none()
-
-    if existing is not None:
-        if replace:
-            delete_scenario(session, scenario_id)
-        else:
-            raise ValueError(f"Scenario {scenario_id!r} already exists in graph_scenarios")
-
-    # ------------------------------------------------------------------
-    # Insert scenario row
-    # ------------------------------------------------------------------
-    now = datetime.utcnow()
-    session.execute(
-        insert(scenarios).values(
-            scenario_id=scenario_id,
-            created_at=now,
-            description=description,
-        )
-    )
-
-    # ------------------------------------------------------------------
-    # Insert vertices in chunks
-    # ------------------------------------------------------------------
-    keys_arr = np.asarray(vertex_keys)
-    if keys_arr.ndim != 1:
-        raise ValueError("vertex_keys must be a 1D array of keys")
-
-    num_vertices = int(keys_arr.shape[0])
-
-    if num_vertices == 0:
-        # No vertices to insert; nothing more to do
-        return scenario_id
-
-    for start in range(0, num_vertices, chunk_size):
-        end = min(start + chunk_size, num_vertices)
-        rows = [
-            {
-                "scenario_id": scenario_id,
-                "index": int(i),
-                "key": str(keys_arr[i]),
-            }
-            for i in range(start, end)
-        ]
-        session.execute(insert(vertices), rows)
-
-    return scenario_id
-
-
-from sqlalchemy import delete
-from sqlalchemy.orm import Session
-
-from .schema import (
-    scenarios,
-    vertices,
-    edges,
-    labels,
-    vertex_labels,
     vertex_masks,
 )
 
@@ -175,8 +64,41 @@ def delete_scenario(session: Session, scenario_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Store Graph -> DB (edges + labels)
+# Store Graph -> DB (scenario + vertices + edges + labels)
 # ---------------------------------------------------------------------------
+
+
+def _store_vertices_for_scenario(
+        session: Session,
+        scenario_id: str,
+        vertex_keys: np.ndarray,
+        *,
+        chunk_size: int = 10_000,
+) -> None:
+    """
+    Insert vertex rows for a scenario into graph_vertices.
+
+    vertex_keys is a 1D array where position i holds the key for vertex i.
+    """
+    keys_arr = np.asarray(vertex_keys)
+    if keys_arr.ndim != 1:
+        raise ValueError("vertices must be a 1D array of keys")
+
+    num_vertices_count = int(keys_arr.shape[0])
+    if num_vertices_count == 0:
+        return
+
+    for start in range(0, num_vertices_count, chunk_size):
+        end = min(start + chunk_size, num_vertices_count)
+        rows = [
+            {
+                "scenario_id": scenario_id,
+                "index": int(i),
+                "key": str(keys_arr[i]),
+            }
+            for i in range(start, end)
+        ]
+        session.execute(insert(vertices), rows)
 
 
 def _store_edges_for_scenario(session: Session, graph: Graph) -> None:
@@ -285,43 +207,107 @@ def store_graph(
         session: Session,
         graph: Graph,
         *,
-        store_edges: bool = True,
-        store_labels: bool = True,
+        description: Optional[str] = None,
+        replace: bool = False,
+        chunk_size: int = 10_000,
 ) -> None:
     """
-    Persist the Graph structure into the graph tables.
+    Validate and persist the Graph to the database.
 
-    - By default, stores edges and labels.
-    - Use store_edges / store_labels flags if you want to control which
-      parts are written.
+    This function:
+      1. Validates the graph (checks scenario_id, vertex key coverage, structure).
+      2. Creates (or replaces) the scenario row in graph_scenarios.
+      3. Writes the graph's vertices to graph_vertices.
+      4. Writes the graph's edges to graph_edges.
+      5. Writes the graph's labels to graph_labels / graph_vertex_labels.
 
-    NOTE: This does not manage scenarios; those should be created via
-    create_scenario (which also populates graph_vertices).
+    Parameters
+    ----------
+    session:
+        SQLAlchemy ORM Session.
+    graph:
+        Graph instance to persist.  Must have scenario_id set and vertices attached.
+    description:
+        Optional human-readable description stored with the scenario row.
+    replace:
+        If True, an existing scenario with the same scenario_id is deleted first.
+        If False (default), a duplicate scenario_id raises ValueError.
+    chunk_size:
+        Number of vertices to insert per batch into graph_vertices.
+
+    Notes
+    -----
+    - This function does NOT commit. The caller is responsible for committing
+      or rolling back on the session.
+    - Raises ValueError if graph.vertices is None (vertices must be part of Graph
+      before storing).
     """
-    if store_edges:
-        _store_edges_for_scenario(session, graph)
-    if store_labels:
-        _store_labels_for_scenario(session, graph)
+    # Step 1: validate (checks scenario_id, vertices consistency, matrix structure)
+    graph.validate(check_cycles=False)
 
-
-# ---------------------------------------------------------------------------
-# Load DB -> Graph (edges + labels)
-# ---------------------------------------------------------------------------
-
-
-def _load_num_vertices(session: Session, scenario_id: str) -> int:
-    """
-    Infer the number of vertices for a scenario from graph_vertices.
-
-    Uses the naming convention:
-      - For vertex rows (graph_vertices), the index column is called 'index'.
-    """
-    max_idx = session.execute(
-        select(func.max(vertices.c.index)).where(
-            vertices.c.scenario_id == literal(scenario_id)
+    if graph.vertices is None:
+        raise ValueError(
+            "Graph must have vertices attached before storing. "
+            "Pass vertices= to Graph.from_edges() or Graph.__init__()."
         )
-    ).scalar_one()
-    return int(max_idx) + 1 if max_idx is not None else 0
+
+    scenario_id = graph.scenario_id
+
+    # Step 2: create or replace scenario row
+    existing = session.execute(
+        select(scenarios.c.scenario_id).where(
+            scenarios.c.scenario_id == scenario_id
+        )
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        if replace:
+            delete_scenario(session, scenario_id)
+        else:
+            raise ValueError(
+                f"Scenario {scenario_id!r} already exists in graph_scenarios"
+            )
+
+    now = datetime.utcnow()
+    session.execute(
+        insert(scenarios).values(
+            scenario_id=scenario_id,
+            created_at=now,
+            description=description,
+        )
+    )
+
+    # Step 3: write vertices
+    _store_vertices_for_scenario(session, scenario_id, graph.vertices, chunk_size=chunk_size)
+
+    # Step 4: write edges
+    _store_edges_for_scenario(session, graph)
+
+    # Step 5: write labels
+    _store_labels_for_scenario(session, graph)
+
+
+# ---------------------------------------------------------------------------
+# Load DB -> Graph (edges + labels + vertices)
+# ---------------------------------------------------------------------------
+
+
+def _load_vertices(session: Session, scenario_id: str) -> np.ndarray:
+    """
+    Load vertex keys for a scenario from graph_vertices, ordered by index.
+
+    Returns a 1D array of keys where position i is the key for vertex i.
+    """
+    rows = session.execute(
+        select(vertices.c.index, vertices.c.key)
+        .where(vertices.c.scenario_id == literal(scenario_id))
+        .order_by(vertices.c.index)
+    ).all()
+
+    if not rows:
+        return np.empty(0, dtype=object)
+
+    return np.array([key for _, key in rows], dtype=object)
 
 
 def _load_edge_layers(
@@ -495,14 +481,15 @@ def load_graph_for_scenario(
         scenario_id: str,
 ) -> Graph:
     """
-    Load the full Graph (edges + labels) for a scenario.
+    Load the full Graph (vertices + edges + labels) for a scenario.
 
-    - Vertices: inferred from graph_vertices (max index + 1).
+    - Vertices: loaded from graph_vertices (ordered by index).
     - Edges: from graph_edges.
     - Labels: from graph_labels and graph_vertex_labels, assembled into
       Graph.label_matrix and Graph.label_meta.
     """
-    num_vertices = _load_num_vertices(session, scenario_id)
+    vertex_keys = _load_vertices(session, scenario_id)
+    num_vertices = len(vertex_keys)
     edge_layers = _load_edge_layers(session, scenario_id, num_vertices)
     label_matrix, label_meta = _load_labels_for_scenario(
         session, scenario_id, num_vertices
@@ -512,6 +499,7 @@ def load_graph_for_scenario(
         layers=edge_layers,
         num_vertices=num_vertices,
         scenario_id=scenario_id,
+        vertices=vertex_keys if num_vertices > 0 else None,
         label_matrix=label_matrix,
         label_meta=label_meta,
     )

@@ -226,3 +226,5 @@ scripts/
 # local development environment
 /docker-compose.yaml
 /local_tests
+
+uv.lock

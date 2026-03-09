@@ -37,6 +37,7 @@ class Graph:
         "_layers",
         "num_vertices",
         "scenario_id",
+        "_vertices",                   # np.ndarray | None  (index i -> vertex key)
         "_mask",                       # GraphMask | None
         "_label_matrix",               # Matrix[BOOL] | None
         "_label_meta",                 # dict[int, tuple[str, str]]
@@ -55,6 +56,7 @@ class Graph:
         num_vertices: int,
         scenario_id: str = "",
         *,
+        vertices: Optional[np.ndarray] = None,
         mask: Optional[Vector] = None,
         label_matrix: Optional[Matrix] = None,
         label_meta: Optional[Dict[int, Tuple[str, str]]] = None,
@@ -63,9 +65,14 @@ class Graph:
         self._layers: Tuple[Matrix, ...] = layers
 
         self.num_vertices = num_vertices
-        self.validate(check_cycles=False)
-
         self.scenario_id = scenario_id
+
+        # vertices: 1D array mapping vertex index -> vertex key
+        self._vertices: Optional[np.ndarray] = (
+            np.asarray(vertices) if vertices is not None else None
+        )
+
+        self.validate(check_cycles=False)
 
         # mask (GraphMask, internal)
         self._mask: Optional[GraphMask] = None
@@ -89,6 +96,7 @@ class Graph:
         *,
         num_vertices: int,
         scenario_id: str = "",
+        vertices: Optional[np.ndarray] = None,
     ) -> Graph:
         """
         Build a Graph from per-layer edge arrays.
@@ -97,6 +105,8 @@ class Graph:
             mapping layer_idx -> (source_vertex_indices, target_vertex_indices, weights)
         num_vertices:
             total number of vertices (0..num_vertices-1)
+        vertices:
+            optional 1D array of vertex keys, where position i is the key for vertex i
         """
         num_vertices = int(num_vertices)
 
@@ -122,9 +132,23 @@ class Graph:
 
         layers = tuple(layers_dict[i] for i in range(num_layers))
 
-        return cls(layers=layers, num_vertices=num_vertices, scenario_id=scenario_id)
+        return cls(
+            layers=layers,
+            num_vertices=num_vertices,
+            scenario_id=scenario_id,
+            vertices=vertices,
+        )
 
     def validate(self, check_cycles: bool = True) -> None:
+        if not self.scenario_id:
+            raise ValueError("Graph must have a non-empty scenario_id.")
+
+        if self._vertices is not None and len(self._vertices) != self.num_vertices:
+            raise ValueError(
+                f"vertices array length ({len(self._vertices)}) must match "
+                f"num_vertices ({self.num_vertices})"
+            )
+
         for idx, layer in enumerate(self._layers):
             if layer.ncols != self.num_vertices:
                 raise ValueError(f"Matrix layer {idx} has invalid number of columns.")
@@ -135,6 +159,17 @@ class Graph:
             if check_cycles:
                 if matrix_has_cycle(layer):
                     raise ValueError(f"Matrix layer {idx} appears to have cycles.")
+
+    # ------------------------------------------------------------------ #
+    # Vertices
+    # ------------------------------------------------------------------ #
+    @property
+    def vertices(self) -> Optional[np.ndarray]:
+        """
+        1D array of vertex keys (position i is the key for vertex i), or None
+        if no vertex keys have been attached to this graph.
+        """
+        return self._vertices
 
     # ------------------------------------------------------------------ #
     # Mask handling (public API: Vector; internal: GraphMask)
@@ -553,6 +588,7 @@ class Graph:
             layers=self._layers,
             num_vertices=self.num_vertices,
             scenario_id=self.scenario_id,
+            vertices=self._vertices,
             mask=mask_vec,
             label_matrix=self._label_matrix,
             label_meta=self._label_meta,
