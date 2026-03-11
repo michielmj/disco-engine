@@ -228,3 +228,5 @@ scripts/
 /local_tests
 
 uv.lock
+/dlogger
+*.errsnap

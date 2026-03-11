@@ -31,22 +31,46 @@ from disco.cluster import Cluster
 from disco.config import AppSettings, ConfigError
 from disco.worker import Worker
 
-logger = mp_logging.getLogger(__name__)  # optional, but handy
+logger = logging.getLogger(__name__)  # optional, but handy
 
 
 _SINGLETON_LOCK = threading.Lock()
 _SERVER_RUNNING = False
 
 
-def _parse_log_level(level: str | int) -> int:
-    if isinstance(level, int):
-        return level
+def _get_logging_scope(
+        settings: AppSettings,
+        loglevel: mp_logging.LevelConfig = None,
+) -> mp_logging.LevelConfig:
+    logscope = {"": logging.INFO}
+
+    for sc, st in [
+        ("", settings.logging),
+        ("kazoo", settings.zookeeper),
+        ("sqlaclhemy", settings.database),
+        ("grpc", settings.grpc),
+        ("data_logger", settings.data_logger),
+    ]:
+        assert hasattr(st, "loglevel")
+        if st.loglevel is not None:
+            logscope[sc] = _parse_log_level(st.loglevel)
+
+    if loglevel is not None and isinstance(loglevel, (str, int)):
+        logscope[""] = _parse_log_level(loglevel)
+
+    return [(sc, st) for sc, st in logscope.items()]
+
+
+def _parse_log_level(loglevel: str | int) -> int:
+
+    if isinstance(loglevel, int):
+        return loglevel
 
     mapping = logging.getLevelNamesMapping()
-    lvl = mapping.get(level.upper())
+    lvl = mapping.get(loglevel.upper())
     if isinstance(lvl, int):
         return lvl
-    raise ConfigError(f"Invalid logging.level={level!r}. Expected one of: "
+    raise ConfigError(f"Invalid logging.level={loglevel!r}. Expected one of: "
                       f"{sorted({k for k,v in mapping.items() if isinstance(v,int) and isinstance(k,str)})}")
 
 
@@ -181,10 +205,10 @@ def _worker_main(
     name: Optional[str],
     log_queue: Any,
     stop_event: Any,
-    loglevel: int,
+    loglevel: mp_logging.LevelConfig,
 ) -> None:
     """Worker process entrypoint (must create its own Cluster client)."""
-    mp_logging.configure_worker(log_queue, level=[("disco", loglevel), ("", max(logging.INFO, loglevel))])
+    mp_logging.configure_worker(log_queue, level=loglevel)
     signal.signal(signal.SIGINT, signal.SIG_IGN)  # parent handles Ctrl-C; we exit via stop_event
 
     wlog = mp_logging.getLogger(__name__)
@@ -210,10 +234,10 @@ def _orchestrator_process_entry(
         group: Optional[str],
         stop_event: Any,
         log_queue: Any,
-        loglevel: int,
+        loglevel: mp_logging.LevelConfig,
 ) -> None:
     """Placeholder orchestrator: start, wait for stop_event, exit cleanly."""
-    mp_logging.configure_worker(log_queue, level=[("disco", loglevel), ("", max(logging.INFO, loglevel))])
+    mp_logging.configure_worker(log_queue, level=loglevel)
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)  # parent handles Ctrl-C; we exit via stop_event
     olog = mp_logging.getLogger(__name__)
@@ -270,8 +294,7 @@ class Server:
         self._grace_s = float(grace_s) if grace_s is not None else float(settings.grace_s)
         self._start_orchestrator = orchestrator
 
-        raw_level = loglevel if loglevel is not None else settings.logging.level
-        self._loglevel = _parse_log_level(raw_level)
+        self._logscope = _get_logging_scope(settings, loglevel)
 
         self._shutdown_requested = threading.Event()
         self._cluster: Optional[Cluster] = None
@@ -324,8 +347,9 @@ class Server:
             event_queues[spec.address] = ctx.Queue()
             promise_queues[spec.address] = ctx.Queue()
 
-        with mp_logging.setup_logging(level=[("disco", self._loglevel), ("", max(logging.INFO, self._loglevel))]) as log_cfg:
-            mp_logging.configure_worker(log_cfg.queue, level=[("disco", self._loglevel), ("", logging.INFO)])
+        with mp_logging.setup_logging(level=self._logscope) as log_cfg:
+            # mp_logging.configure_worker(log_cfg.queue, level=[("disco", self._loglevel), ("", logging.INFO)])
+            mp_logging.configure_worker(log_cfg.queue, level=self._logscope)
             logger.info("Server starting with %d workers (group=%s)", len(self._worker_specs), self._group)
 
             with Cluster.make_cluster(zookeeper_settings=self._settings.zookeeper, group=self._group) as cluster:
@@ -340,7 +364,7 @@ class Server:
                     self._orchestrator_proc = ctx.Process(
                         name="orchestrator",
                         target=_orchestrator_process_entry,
-                        args=(address, self._settings, self._group, stop_event, log_cfg.queue, self._loglevel),
+                        args=(address, self._settings, self._group, stop_event, log_cfg.queue, self._logscope),
                         daemon=False,
                     )
                     self._orchestrator_proc.start()
@@ -358,7 +382,7 @@ class Server:
                             spec.name,
                             log_cfg.queue,
                             stop_event,
-                            self._loglevel
+                            self._logscope
                         ),
                         daemon=False,
                     )

@@ -219,11 +219,12 @@ The precise mapping between graph layers, nodes, and simprocs is described in a 
   class WorkerState(IntEnum):
       CREATED = 0
       AVAILABLE = 1
-      INITIALIZING = 2
-      READY = 3
-      ACTIVE = 4
-      PAUSED = 5
-      TERMINATED = 6
+      RESERVED = 2
+      INITIALIZING = 3
+      READY = 4
+      ACTIVE = 5
+      PAUSED = 6
+      TERMINATED = 7
       EXITED = 8
       BROKEN = 9
   ```
@@ -238,6 +239,7 @@ The precise mapping between graph layers, nodes, and simprocs is described in a 
   - Ingress rejected or failed for:
     - `CREATED`
     - `AVAILABLE`
+    - `RESERVED`
     - `INITIALIZING`
     - `TERMINATED`
     - `EXITED`
@@ -537,11 +539,12 @@ The value is an integer representing `WorkerState`:
 ```
 0 CREATED
 1 AVAILABLE
-2 INITIALIZING
-3 READY
-4 ACTIVE
-5 PAUSED
-6 TERMINATED
+2 RESERVED
+3 INITIALIZING
+4 READY
+5 ACTIVE
+6 PAUSED
+7 TERMINATED
 9 BROKEN
 ```
 
@@ -751,6 +754,7 @@ The WorkerState enum is:
 
 - `CREATED`
 - `AVAILABLE`
+- `RESERVED`
 - `INITIALIZING`
 - `READY`
 - `ACTIVE`
@@ -763,7 +767,8 @@ Definitions:
 
 - **CREATED** -- process started and registered, not yet available for work.
 - **AVAILABLE** -- idle and ready to accept a new assignment.
-- **INITIALIZING** -- preparing a specific assignment (loading inputs, creating NodeRuntimes).
+- **RESERVED** -- claimed by the Orchestrator for an upcoming run. The assignment `(expid, repid, partition)` is bound and published to the Cluster, but no heavy initialization has started. This is a lightweight transition (no I/O beyond ZK state publish) so the Orchestrator can wait for it synchronously before proceeding to the next submission, preventing double-assignment of workers.
+- **INITIALIZING** -- preparing the assigned run (loading experiment, graph, partitioning, model; creating NodeRuntimes).
 - **READY** -- run is initialized; waiting for command to start executing.
 - **ACTIVE** -- simulation executing; NodeRuntimes are stepped repeatedly.
 - **PAUSED** -- simulation not stepped; run state preserved.
@@ -825,21 +830,23 @@ High-level pseudocode (not exact code):
 
 ### 5.7 Applying Desired-WorkerState Commands
 
-Desired-state commands include an assignment and a target WorkerState.
+Desired-state commands include a target WorkerState and, for `RESERVED`, an assignment.
 
 Core invariants:
 
-1. **Assignment is set only on transition to `READY`.**
-2. **Runners are created only on `READY -> ACTIVE`.**
-3. **During `ACTIVE`, the runner loop never calls setup/teardown/control helpers.**
-4. **Pending desired-state updates overwrite earlier ones (latest wins).**
+1. **Assignment is set only on transition to `RESERVED`.**
+2. **Heavy initialization happens only on `RESERVED -> READY` (via `INITIALIZING`).**
+3. **Runners are created only on `READY -> ACTIVE`.**
+4. **During `ACTIVE`, the runner loop never calls setup/teardown/control helpers.**
+5. **Pending desired-state updates overwrite earlier ones (latest wins).**
 
 State transitions (summary):
 
-- `READY`: validate, set assignment, enter `INITIALIZING`, run setup, publish `READY`.
+- `RESERVED`: validate, set assignment, publish worker info, publish `RESERVED`. This is intentionally lightweight (no model/DB I/O) so the Orchestrator can wait for it synchronously.
+- `READY`: enter `INITIALIZING`, run setup (load experiment/graph/partitioning/model, create NodeRuntimes), publish `READY`. Only valid from `RESERVED`; assignment must already be bound.
 - `ACTIVE`: if coming from `READY`, create runners once; publish `ACTIVE` and set partition status ACTIVE.
 - `PAUSED`: publish `PAUSED` and set partition status PAUSED.
-- `TERMINATED`: abort run, set partition status to CANCELED (when applicable), teardown, return to `AVAILABLE`.
+- `TERMINATED`: abort run, set partition status to CANCELED (when the run was past `RESERVED`), teardown, return to `AVAILABLE`. Valid from `RESERVED`, `READY`, `ACTIVE`, or `PAUSED`.
 - `EXITED`: teardown and stop the runner loop.
 
 ### 5.8 ExperimentStatus Lifecycle for a Partition
@@ -873,7 +880,7 @@ Ingress messages arrive via IPC and gRPC and are queued for the Worker.
 
 - In `ACTIVE`, ingress is drained continuously (each hot-path cycle).
 - In `READY` / `PAUSED`, ingress may be drained opportunistically (e.g. on control ticks), but timely delivery is not required for correctness because the simulation is not stepping.
-- In states where the run is not configured (`CREATED`, `AVAILABLE`, `INITIALIZING`, `TERMINATED`, `EXITED`, `BROKEN`), ingress is effectively rejected or ignored.
+- In states where the run is not configured (`CREATED`, `AVAILABLE`, `RESERVED`, `INITIALIZING`, `TERMINATED`, `EXITED`, `BROKEN`), ingress is effectively rejected or ignored.
 
 Backpressure is implemented by transports and queue limits.
 
@@ -3838,8 +3845,9 @@ It is deliberately **scheduling-only**:
   - dequeue submissions in FIFO order
   - select a partitioning scheme (once per experiment)
   - wait for sufficient worker availability for an *all-at-once* assignment
+  - reserve workers by requesting **RESERVED** (with assignment) and waiting for confirmation synchronously, preventing double-assignment across consecutive submissions
   - persist assignments (which sets replication status to **ASSIGNED**)
-  - request worker desired states (**READY → ACTIVE**) to start execution
+  - request worker desired states (**READY → ACTIVE**) to start execution (in a launch thread)
 - It **does not**:
   - manage execution progress
   - update statuses beyond **ASSIGNED** (handled by Workers)
@@ -3896,7 +3904,7 @@ Leader loop (`_on_lead()`):
 
 This ensures the queue remains FIFO and the orchestrator never skips ahead.
 
-### 14.5 Submission Handling and Assignment Commit Point
+### 14.5 Submission Handling, Reservation, and Assignment Commit Point
 
 `_handle_submission(entity)` performs:
 
@@ -3909,15 +3917,23 @@ This ensures the queue remains FIFO and the orchestrator never skips ahead.
    - `store.ensure_replication_seeds(expid, repid, num_partitions)`
 5. Wait for a full assignment plan (all partitions at once):
    - `assignments = _await_full_assignment_plan(expid, num_partitions)`
-6. Persist the assignment mapping:
+6. **Reserve workers** (synchronous, in the leader thread):
+   - `_reserve_workers(expid, repid, assignments)`
+   - For each partition, send `Cluster.set_desired_state(worker, state=RESERVED, expid, repid, partition)`.
+   - Poll `Cluster.worker_states` until all assigned workers report `WorkerState.RESERVED`.
+   - On timeout, send best-effort `TERMINATED` to any workers that reached `RESERVED` and raise.
+   - **This step removes workers from the AVAILABLE pool before the leader thread processes the next submission, preventing double-assignment.**
+7. Persist the assignment mapping:
    - `exp = store.assign_partitions(expid, repid, assignments)`
    - **This call also transitions replication status to `ASSIGNED`.**
-7. **Commit point:** consume the queue entity:
+8. **Commit point:** consume the queue entity:
    - `entity.consume()`
-8. Start launch in a daemon thread:
+9. Start launch in a daemon thread:
    - `Thread(target=_launch_replication, args=(exp, repid), daemon=True).start()`
 
-**Rationale for consuming before launch:** launch runs in a different thread and the leader cannot reliably determine whether the start sequence completed correctly; re-queuing could trigger duplicate or inconsistent execution. The conservative policy is “no retry; mark failed if start cannot be confirmed”.
+**Rationale for consuming before launch:** launch runs in a different thread and the leader cannot reliably determine whether the start sequence completed correctly; re-queuing could trigger duplicate or inconsistent execution. The conservative policy is "no retry; mark failed if start cannot be confirmed".
+
+**Rationale for synchronous reservation:** the leader loop is single-threaded (one submission at a time). If the leader were to spawn the launch thread *before* workers leave `AVAILABLE`, the next iteration of the leader loop could pick the same workers via `_await_full_assignment_plan`. By waiting for `RESERVED` confirmation synchronously, the leader guarantees that `get_available()` will not return those workers on the next call. The `RESERVED` transition is lightweight on the worker side (no model/DB I/O), so the wait is bounded by ZK round-trip latency (typically < 100 ms).
 
 ### 14.6 Partitioning Selection Policy
 
@@ -3954,15 +3970,15 @@ Output is an ordered list of workers by partition index:
 
 ### 14.8 Launch Thread and Worker Start Protocol
 
-`_launch_replication(exp, repid)` requests worker desired states and waits for confirmation via observed worker states:
+`_launch_replication(exp, repid)` requests worker desired states and waits for confirmation via observed worker states. The assignment `(expid, repid, partition)` is already bound on each worker since the `RESERVED` step (Section 14.5), so the launch thread sends only the target state:
 
 1. Request READY for all assigned workers:
-   - `Cluster.set_desired_state(..., state=READY, expid, repid, partition)`
+   - `Cluster.set_desired_state(worker_address=w, state=READY)`
 2. Barrier wait until all assigned workers report `WorkerState.READY`
    - bounded by `settings.launch_timeout_s`
    - polled using `Cluster.await_available(timeout=READY_POLL_S)`
-3. Request ACTIVE for all partitions:
-   - `Cluster.set_desired_state(..., state=ACTIVE, ...)`
+3. Request ACTIVE for all workers:
+   - `Cluster.set_desired_state(worker_address=w, state=ACTIVE)`
 4. Barrier wait until all assigned workers report `WorkerState.ACTIVE`
    - also bounded by `settings.launch_timeout_s`
 
@@ -4008,6 +4024,8 @@ Orchestrator tests should avoid real ZooKeeper:
 
 Key scenarios:
 - FIFO dequeue and commit: consume before launching
+- reservation: workers receive RESERVED with assignment and transition out of AVAILABLE before launch thread starts
+- reservation timeout: workers that fail to reach RESERVED are cleaned up (TERMINATED) and the submission fails
 - stop while waiting for availability: release and exit
 - unexpected scheduling exception: mark failed and consume
 - launch timeouts: mark failed (without re-queue)

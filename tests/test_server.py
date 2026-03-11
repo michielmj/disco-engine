@@ -19,15 +19,34 @@ from disco.worker import WorkerState
 class FakeGrpcSettings:
     bind_host: str | None = None
     grace_s: float = 60.0
+    loglevel: str = "DEBUG"
 
 
 @dataclass(slots=True)
 class FakeZookeeperSettings:
     default_group: str = "default"
+    loglevel: str = "INFO"
+
 
 @dataclass(slots=True)
 class FakeLoggingSettings:
-    level: str = "DEBUG"
+    loglevel: str = "DEBUG"
+
+
+@dataclass(slots=True)
+class FakeDatabaseSettings:
+    loglevel: str = "DEBUG"
+
+
+@dataclass(slots=True)
+class FakeLoggingSettings:
+    loglevel: str = "DEBUG"
+
+
+@dataclass(slots=True)
+class FakeDataLoggerSettings:
+    loglevel: str = "DEBUG"
+
 
 @dataclass(slots=True)
 class FakeAppSettings:
@@ -35,6 +54,8 @@ class FakeAppSettings:
     grpc: FakeGrpcSettings = field(default_factory=FakeGrpcSettings)
     zookeeper: FakeZookeeperSettings = field(default_factory=FakeZookeeperSettings)
     logging: FakeLoggingSettings = field(default_factory=FakeLoggingSettings)
+    database: FakeDatabaseSettings = field(default_factory=FakeDatabaseSettings)
+    data_logger: FakeDatabaseSettings = field(default_factory=FakeDataLoggerSettings)
 
 
 # ---------------------------------------------------------------------------
@@ -88,13 +109,13 @@ class FakeProcess:
     _pid_seq = 1000
 
     def __init__(
-        self,
-        *,
-        name: str,
-        target: Any,
-        args: Tuple[Any, ...],
-        daemon: bool,
-        autorun: bool,
+            self,
+            *,
+            name: str,
+            target: Any,
+            args: Tuple[Any, ...],
+            daemon: bool,
+            autorun: bool,
     ) -> None:
         self.name = name
         self._target = target
@@ -167,14 +188,14 @@ class FakeWorker:
     instances: List["FakeWorker"] = []
 
     def __init__(
-        self,
-        *,
-        address: str,
-        cluster: Any,
-        event_queues: Mapping[str, Any],
-        promise_queues: Mapping[str, Any],
-        settings: Any,
-        name: Optional[str] = None,
+            self,
+            *,
+            address: str,
+            cluster: Any,
+            event_queues: Mapping[str, Any],
+            promise_queues: Mapping[str, Any],
+            settings: Any,
+            name: Optional[str] = None,
     ) -> None:
         self.address = address
         self.cluster = cluster
