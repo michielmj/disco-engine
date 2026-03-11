@@ -316,7 +316,7 @@ class Partitioning:
         metastore.update_key(self._manifest_path(self.partitioning_id), self.manifest_list())
 
         for i, ns in enumerate(self.node_specs):
-            row_vec = self.incidence[i, :].new()
+            row_vec = self.incidence[i, :].select("!=", 0).new()
             metastore.update_key(
                 self._node_assignments_path(self.partitioning_id, ns.partition, ns.node_name),
                 row_vec,
@@ -377,10 +377,11 @@ class Partitioning:
                 raise PartitioningCorruptError(
                     f"partitioning '{partitioning_id}': assignments for node '{ns.node_name}' is not a graphblas.Vector"
                 )
-            idx, _ = v.to_coo()
-            if idx.size:
-                rows.extend([i] * int(idx.size))
-                cols.extend(idx.tolist())
+            idx, vals = v.to_coo()
+            true_idx = idx[vals != 0]
+            if true_idx.size:
+                rows.extend([i] * int(true_idx.size))
+                cols.extend(true_idx.tolist())
 
         incidence = gb.Matrix.from_coo(
             rows,
