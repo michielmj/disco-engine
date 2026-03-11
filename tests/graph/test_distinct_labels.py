@@ -62,8 +62,8 @@ def test_by_distinct_labels_and_matrix() -> None:
     # ------------------------------------------------------------------
     # Matrix-returning API
     # ------------------------------------------------------------------
-    combos_matrix = g.by_distinct_labels(distinct)
-    assert combos_matrix.shape[1] == len(distinct)
+    combos_list = g.by_distinct_labels(distinct)
+    assert all(c.shape[0] == len(distinct) for c in combos_list)
 
-    combos_matrix_set = {tuple(row) for row in combos_matrix.tolist()}
+    combos_matrix_set = {tuple(row) for row in combos_list}
     assert combos_matrix_set == expected_combos

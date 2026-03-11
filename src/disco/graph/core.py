@@ -493,38 +493,94 @@ class Graph:
             M = cls._rowwise_and_kron(M, X)
         return M
 
-    def by_distinct_labels(self, distinct: Sequence[str]) -> np.ndarray:
+    @classmethod
+    def _augment_with_unlabelled(
+        cls, sub_mat: Matrix, num_vertices: int,
+    ) -> Tuple[Matrix, bool]:
+        """
+        Augment a per-type label sub-matrix with an extra "unlabelled" column.
+
+        The extra column (at index ``sub_mat.ncols``) is ``True`` for every
+        vertex that has **no** label of this type (i.e. its row in *sub_mat*
+        is entirely empty).
+
+        Returns ``(augmented_matrix, has_unlabelled)`` where *has_unlabelled*
+        indicates whether any unlabelled vertices were found.  When all
+        vertices carry at least one label of this type the original matrix
+        is returned unchanged to avoid unnecessary copies.
+        """
+        has_label: Vector = sub_mat.reduce_rowwise("lor").new()
+        labelled_indices, _ = has_label.to_coo()
+
+        if labelled_indices.size == num_vertices:
+            # Every vertex is labelled for this type — nothing to augment.
+            return sub_mat, False
+
+        # Identify unlabelled vertices.
+        unlabelled_mask = np.ones(num_vertices, dtype=bool)
+        unlabelled_mask[labelled_indices] = False
+        unlabelled_indices = np.nonzero(unlabelled_mask)[0].astype(np.int64)
+
+        # Build augmented matrix: original columns + one extra column.
+        rows, cols, vals = sub_mat.to_coo()
+        rows = rows.astype(np.int64, copy=False)
+        cols = cols.astype(np.int64, copy=False)
+        vals = vals.astype(bool, copy=False)
+
+        extra_col = np.full(unlabelled_indices.size, sub_mat.ncols, dtype=np.int64)
+        extra_vals = np.ones(unlabelled_indices.size, dtype=bool)
+
+        aug_mat = gb.Matrix.from_coo(
+            np.concatenate([rows, unlabelled_indices]),
+            np.concatenate([cols, extra_col]),
+            np.concatenate([vals, extra_vals]),
+            nrows=num_vertices,
+            ncols=sub_mat.ncols + 1,
+            dtype=gb.dtypes.BOOL,
+        )
+        return aug_mat, True
+
+    def by_distinct_labels(self, distinct: Sequence[str]) -> List[np.ndarray]:
         """
         Compute distinct combinations of labels across one or more label types.
 
+        Vertices that lack a label for one or more of the requested types are
+        still included: the missing type is simply omitted from that combo.
+        Because global label indices are unique across types, each combo is
+        unambiguous regardless of length.
+
         Returns
         -------
-        np.ndarray
-            2D array of shape (num_combinations, len(distinct)).
-            Each row is a tuple of *global* label indices (one per label type
-            in `distinct`) for which there exists at least one vertex that has
-            all of those labels.
+        list[np.ndarray]
+            Each array contains the *global* label indices (one per label type
+            that is present on the supporting vertices) for which at least one
+            vertex exists carrying exactly that combination.  Arrays may be
+            shorter than ``len(distinct)`` when some vertices lack labels for
+            one or more of the requested types, and may be empty if vertices
+            exist that carry none of the requested label types.
 
         If a vertex has at most one label per label type, no vertex occurs in
         more than one combination.
         """
         if self._label_matrix is None or self._num_labels == 0:
-            return np.empty((0, len(distinct)), dtype=np.int64)
+            return []
 
-        # Split the label matrix into one sub-matrix per label type.
-        # Each element is (label_indices, label_submatrix) where:
-        #   - label_indices: np.ndarray of global label indices for that type
-        #   - label_submatrix: Matrix[BOOL] with shape (num_vertices x num_labels_of_type)
-        label_indices_and_matrices: List[Tuple[np.ndarray, Matrix]] = [
-            self.labels_for_type(label_type) for label_type in distinct
-        ]
+        # Per label type: (global_label_indices, original_width, augmented_matrix)
+        label_indices_list: List[np.ndarray] = []
+        original_widths: List[int] = []
+        augmented_matrices: List[Matrix] = []
 
-        # Make an expanded label matrix with all possible combinations of labels
-        # across the different label types.
-        # S has shape (num_vertices x num_combinations).
-        S: Matrix = self._rowwise_and_kron_many(
-            *[lbl_mat for (_, lbl_mat) in label_indices_and_matrices]
-        )
+        for label_type in distinct:
+            idxs, sub_mat = self.labels_for_type(label_type)
+            label_indices_list.append(idxs)
+            original_widths.append(int(sub_mat.ncols))
+
+            aug_mat, _ = self._augment_with_unlabelled(sub_mat, self.num_vertices)
+            augmented_matrices.append(aug_mat)
+
+        # Row-wise AND Kronecker product across all (augmented) type matrices.
+        # S has shape (num_vertices × product_of_augmented_widths).
+        S: Matrix = self._rowwise_and_kron_many(*augmented_matrices)
 
         # Determine which combination-columns have at least one supporting vertex.
         combo_support: Vector = S.reduce_columnwise("lor")
@@ -532,19 +588,28 @@ class Graph:
         combo_indices = combo_indices[combo_vals]
 
         if combo_indices.size == 0:
-            return np.empty((0, len(distinct)), dtype=np.int64)
+            return []
 
-        # Decode combination indices back into original global label indices.
+        # Decode combination indices back into per-type global label indices,
+        # using -1 as a sentinel for the unlabelled column.
         rows_per_type: List[np.ndarray] = []
         base = int(S.ncols)
-        for label_indices, label_matrix in label_indices_and_matrices:
+        for label_indices, aug_mat, orig_width in zip(
+            label_indices_list, augmented_matrices, original_widths,
+        ):
             local = combo_indices % base
-            base //= int(label_matrix.ncols)
+            base //= int(aug_mat.ncols)
             local = local // base
-            rows_per_type.append(label_indices[local])
 
-        # Shape: (num_combinations, len(distinct))
-        return np.stack(rows_per_type, axis=1)
+            # local < orig_width  → real label;  local == orig_width → unlabelled
+            global_indices = np.full(combo_indices.shape, -1, dtype=np.int64)
+            real_mask = local < orig_width
+            if real_mask.any():
+                global_indices[real_mask] = label_indices[local[real_mask]]
+            rows_per_type.append(global_indices)
+
+        result = np.stack(rows_per_type, axis=1)
+        return [r[r >= 0] for r in result]
 
     # ------------------------------------------------------------------ #
     # Structural accessors

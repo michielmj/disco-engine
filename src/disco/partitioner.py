@@ -72,7 +72,7 @@ class SimplePartitioner:
         for node_type, nts in self._spec.node_types.items():
             distinct = [NODE_TYPE] + list(nts.distinct_nodes)
 
-            combos: np.ndarray = self._graph.by_distinct_labels(distinct=distinct)
+            combos: List[np.ndarray] = self._graph.by_distinct_labels(distinct=distinct)
 
             # combos shape: (n_combos, len(distinct))
             # combos[:, 0] corresponds to NODE_TYPE label ids
@@ -92,7 +92,6 @@ class SimplePartitioner:
                 cnt = self._graph.label_matrix[:, co].new(dtype=gb.dtypes.INT64).reduce_rowwise(gb.monoid.plus)
                 v = cnt == len(co)
 
-                # .reduce_rowwise("land")
                 row_vectors.append(v.new())
 
                 # Node name: p0-<node_type>-<distinct_value_1>-...
