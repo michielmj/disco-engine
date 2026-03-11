@@ -27,6 +27,12 @@ DEQUEUE_TIMEOUT_S = 1.0
 # How long we wait between subsequent worker availability checks
 AVAILABLE_POLL_S = 0.5
 
+# How long we wait for all workers to reach RESERVED after requesting reservation
+RESERVE_TIMEOUT_S = 10.0
+
+# How long we wait between polling worker states during reservation
+RESERVE_POLL_S = 0.05
+
 
 class _StopRequested(RuntimeError):
     pass
@@ -39,10 +45,13 @@ class Orchestrator:
     Key properties (per requirements):
     - Leader-elected: multiple instances may exist, only the leader is active.
     - Scheduling-only: updates experiment.selected_partitioning and assignment mapping,
-      and drives desired worker states (READY -> ACTIVE). No locality awareness yet.
+      and drives desired worker states (RESERVED -> READY -> ACTIVE). No locality awareness yet.
     - FIFO: consumes submitted replications in queue order and does not skip ahead.
     - All-at-once assignment: never assigns a subset of partitions for a replication.
     - Reuse-aware: prefers workers already set up for (expid, partition) via Cluster.get_available(expid).
+    - Reservation protocol: workers are transitioned to RESERVED (with assignment) synchronously
+      in the leader thread before spawning the launch thread. This prevents double-assignment
+      because RESERVED workers are no longer AVAILABLE.
     """
 
     def __init__(
@@ -131,6 +140,9 @@ class Orchestrator:
         - Ensure experiment has selected_partitioning (choose once and keep).
         - Ensure seeds for this replication after partitioning is selected.
         - Wait until sufficient AVAILABLE workers exist for *all partitions*.
+        - Reserve workers (desired state RESERVED with assignment) and wait
+          for all workers to confirm. This removes them from the AVAILABLE pool
+          so the next submission cannot claim them again.
         - Assign all partitions in one go (reuse-aware).
         - Start a launch thread that waits for all READY then sets ACTIVE.
         """
@@ -155,6 +167,13 @@ class Orchestrator:
         if self._stop.is_set():
             raise _StopRequested()
 
+        # Reserve workers: send desired state RESERVED with assignment and wait for
+        # all workers to leave AVAILABLE. This happens synchronously in the leader
+        # thread so that the next _await_full_assignment_plan cannot pick them again.
+        self._reserve_workers(expid=expid, repid=repid, assignments=assignments)
+        if self._stop.is_set():
+            raise _StopRequested()
+
         # Persist assignments (scheduling-side truth).
         exp = self._store.assign_partitions(expid, repid, assignments)
 
@@ -165,6 +184,62 @@ class Orchestrator:
         t = Thread(target=self._launch_replication, args=(exp, repid), daemon=True)
         self._launch_threads.append(t)
         t.start()
+
+    def _reserve_workers(self, *, expid: str, repid: str, assignments: list[str]) -> None:
+        """
+        Send desired state RESERVED (with assignment) to each worker and wait
+        until all have transitioned to RESERVED.
+
+        This runs synchronously in the leader thread so that the next call to
+        _await_full_assignment_plan cannot pick the same workers.
+
+        assignments is ordered by partition index: assignments[p] is the worker
+        address for partition p.
+
+        Raises:
+        - _StopRequested if the orchestrator is stopping.
+        - RuntimeError if the reservation times out.
+        """
+        for partition, worker in enumerate(assignments):
+            self._cluster.set_desired_state(
+                worker_address=worker,
+                state=WorkerState.RESERVED,
+                expid=expid,
+                repid=repid,
+                partition=partition,
+            )
+
+        deadline = monotonic() + RESERVE_TIMEOUT_S
+
+        while not self._stop.is_set():
+            if monotonic() > deadline:
+                # Best-effort cleanup: request TERMINATED for workers that did reach RESERVED
+                # so they return to AVAILABLE rather than being stuck.
+                states = self._cluster.worker_states
+                for worker in assignments:
+                    if states.get(worker) == WorkerState.RESERVED:
+                        try:
+                            self._cluster.set_desired_state(worker_address=worker, state=WorkerState.TERMINATED)
+                        except Exception:
+                            logger.warning("Failed to send TERMINATED to worker %s after reservation timeout.", worker)
+                raise RuntimeError(
+                    f"Timed out waiting for workers to reach RESERVED for "
+                    f"expid={expid!r} repid={repid!r}: {assignments}"
+                )
+
+            states = self._cluster.worker_states
+            if all(states.get(w) == WorkerState.RESERVED for w in assignments):
+                logger.info(
+                    "All %d workers reserved for expid=%s repid=%s.",
+                    len(assignments),
+                    expid,
+                    repid,
+                )
+                return
+
+            self._cluster.await_available(timeout=RESERVE_POLL_S)
+
+        raise _StopRequested()
 
     def _select_partitioning_for_experiment(self, exp: Experiment) -> str:
         """
@@ -299,15 +374,17 @@ class Orchestrator:
 
     def _launch_replication(self, exp: Experiment, repid: str) -> None:
         """
-        Launch a replication:
-          1) set desired state to READY for all assigned workers
+        Launch a replication (runs in a daemon thread):
+          1) set desired state to READY for all assigned workers (assignment already bound during RESERVED)
           2) wait until all workers are READY
           3) set desired state to ACTIVE for all assigned workers
+          4) wait until all workers are ACTIVE
         """
 
         deadline = monotonic() + self._settings.launch_timeout_s
 
         assignments = {ass.partition: ass.worker for ass in exp.replications[repid].assignments.values()}
+        workers = list(assignments.values())
 
         logger.info(
             "Launching replication expid=%s repid=%s partitions=%d",
@@ -316,26 +393,23 @@ class Orchestrator:
             len(assignments),
         )
 
-        # Step 1: request READY for all partitions (worker performs INITIALIZING internally).
-        for partition, worker in assignments.items():
+        # Step 1: request READY for all workers (worker performs INITIALIZING internally).
+        # Assignment (expid/repid/partition) was already set during RESERVED.
+        for worker in workers:
             self._cluster.set_desired_state(
                 worker_address=worker,
                 state=WorkerState.READY,
-                expid=exp.expid,
-                repid=repid,
-                partition=int(partition),
             )
 
         # Step 2: READY barrier
         timeout = False
         while not self._stop.is_set() and not (timeout := (monotonic() > deadline)):
             states = self._cluster.worker_states
-            if all(states.get(w) == WorkerState.READY for w in assignments.values()):
+            if all(states.get(w) == WorkerState.READY for w in workers):
                 break
             self._cluster.await_available(timeout=READY_POLL_S)
 
         if self._stop.is_set():
-            # shutdown requested while initializing
             self._mark_replication_failed(
                 expid=exp.expid,
                 repid=repid,
@@ -346,7 +420,6 @@ class Orchestrator:
             return
 
         if timeout:
-            # timeout while initializing
             self._mark_replication_failed(
                 expid=exp.expid,
                 repid=repid,
@@ -356,25 +429,21 @@ class Orchestrator:
                            "due to timeout.", exp.expid, repid)
             return
 
-        # Step 3: request ACTIVE for all partitions.
-        for partition, worker in assignments.items():
+        # Step 3: request ACTIVE for all workers.
+        for worker in workers:
             self._cluster.set_desired_state(
                 worker_address=worker,
                 state=WorkerState.ACTIVE,
-                expid=exp.expid,
-                repid=repid,
-                partition=int(partition),
             )
 
         # Step 4: monitor for successful worker start
         while not self._stop.is_set() and not (timeout := (monotonic() > deadline)):
             states = self._cluster.worker_states
-            if all(states.get(w) == WorkerState.ACTIVE for w in assignments.values()):
+            if all(states.get(w) == WorkerState.ACTIVE for w in workers):
                 break
             self._cluster.await_available(timeout=READY_POLL_S)
 
         if self._stop.is_set():
-            # shutdown requested while initializing
             self._mark_replication_failed(
                 expid=exp.expid,
                 repid=repid,
@@ -385,7 +454,6 @@ class Orchestrator:
             return
 
         if timeout:
-            # timeout while initializing
             self._mark_replication_failed(
                 expid=exp.expid,
                 repid=repid,

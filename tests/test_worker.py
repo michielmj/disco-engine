@@ -105,8 +105,8 @@ class FakeDesired:
     partition: Optional[int] = None
 
     def validate_assignment(self) -> bool:
-        # Your current Worker invariant: assignment is only set/required on READY.
-        if self.state == WorkerState.READY:
+        # Assignment is required on RESERVED (where it is bound).
+        if self.state == WorkerState.RESERVED:
             return self.expid is not None and self.repid is not None and self.partition is not None
         return True
 
@@ -222,6 +222,11 @@ def worker_env(monkeypatch: pytest.MonkeyPatch):
     # if _setup_run_locked is bypassed, ensure it exists.
     w._dlogger = None  # type: ignore[attr-defined]
 
+    # Worker.__init__ leaves state as CREATED; run_forever() transitions to
+    # AVAILABLE as its first action.  Since these tests call _apply_desired_locked
+    # directly (bypassing run_forever), we simulate that initial transition here.
+    w._state = WorkerState.AVAILABLE
+
     return w, cluster, store, ev_q, pr_q
 
 
@@ -234,7 +239,7 @@ def test_on_desired_state_change_sets_pending_and_kicks(worker_env):
 
     desired = FakeDesired(
         request_id="r1",
-        state=WorkerState.READY,
+        state=WorkerState.RESERVED,
         expid="e1",
         repid="rep1",
         partition=0,
@@ -248,7 +253,7 @@ def test_on_desired_state_change_sets_pending_and_kicks(worker_env):
     assert w._kick.is_set()
 
 
-def test_apply_desired_ready_transitions_and_calls_setup(monkeypatch: pytest.MonkeyPatch, worker_env):
+def test_apply_desired_reserved_then_ready_transitions_and_calls_setup(monkeypatch: pytest.MonkeyPatch, worker_env):
     w, cluster, store, ev_q, pr_q = worker_env
 
     called = {"setup": 0}
@@ -267,12 +272,35 @@ def test_apply_desired_ready_transitions_and_calls_setup(monkeypatch: pytest.Mon
 
     monkeypatch.setattr(w, "_setup_run_locked", fake_setup_locked)
 
-    desired_ready = FakeDesired(
-        request_id="r-ready",
-        state=WorkerState.READY,
+    # Step 1: RESERVED — binds assignment, no heavy work.
+    desired_reserved = FakeDesired(
+        request_id="r-reserved",
+        state=WorkerState.RESERVED,
         expid="e1",
         repid="rep1",
         partition=0,
+    )
+
+    with w._lock:
+        w._apply_desired_locked(desired_reserved)
+
+    assert w.state == WorkerState.RESERVED
+    assert w._assignment is not None
+    assert w._assignment.expid == "e1"
+    assert w._assignment.repid == "rep1"
+    assert w._assignment.partition == 0
+    assert (w.address, WorkerState.RESERVED) in cluster.worker_state_calls
+    # Should have published worker info with assignment.
+    assert any(
+        (w.address, 0, "e1", "rep1") == call for call in cluster.worker_info_calls
+    )
+    # No setup should have happened yet.
+    assert called["setup"] == 0
+
+    # Step 2: READY — triggers heavy initialization (INITIALIZING → setup → READY).
+    desired_ready = FakeDesired(
+        request_id="r-ready",
+        state=WorkerState.READY,
     )
 
     with w._lock:
@@ -280,16 +308,12 @@ def test_apply_desired_ready_transitions_and_calls_setup(monkeypatch: pytest.Mon
 
     assert called["setup"] == 1
     assert w.state == WorkerState.READY
-    assert w._assignment is not None
-    assert w._assignment.expid == "e1"
-    assert w._assignment.repid == "rep1"
-    assert w._assignment.partition == 0
 
-    # Should have published worker state at least INITIALIZING then READY
+    # Should have published worker state INITIALIZING then READY.
     assert (w.address, WorkerState.INITIALIZING) in cluster.worker_state_calls
     assert (w.address, WorkerState.READY) in cluster.worker_state_calls
 
-    # Should have reported partition statuses
+    # Should have reported partition statuses.
     assert ("e1", "rep1", 0, ExperimentStatus.LOADED) in store.status_calls
     assert ("e1", "rep1", 0, ExperimentStatus.INITIALIZED) in store.status_calls
 
@@ -307,7 +331,15 @@ def test_active_creates_runners_only_on_ready_to_active(monkeypatch: pytest.Monk
 
     monkeypatch.setattr(w, "_setup_run_locked", fake_setup_locked)
 
-    desired_ready = FakeDesired("r-ready", WorkerState.READY, "e1", "rep1", 0)
+    # RESERVED first (binds assignment).
+    desired_reserved = FakeDesired("r-reserved", WorkerState.RESERVED, "e1", "rep1", 0)
+    with w._lock:
+        w._apply_desired_locked(desired_reserved)
+
+    assert w.state == WorkerState.RESERVED
+
+    # READY (triggers setup).
+    desired_ready = FakeDesired("r-ready", WorkerState.READY)
     with w._lock:
         w._apply_desired_locked(desired_ready)
 
@@ -315,7 +347,7 @@ def test_active_creates_runners_only_on_ready_to_active(monkeypatch: pytest.Monk
     assert w._runners == ()
     assert w._active_runners == []
 
-    # ACTIVE carries NO assignment in your current Worker design.
+    # ACTIVE carries NO assignment (already bound during RESERVED).
     desired_active = FakeDesired("r-active", WorkerState.ACTIVE)
     with w._lock:
         w._apply_desired_locked(desired_active)
@@ -336,6 +368,56 @@ def test_active_creates_runners_only_on_ready_to_active(monkeypatch: pytest.Monk
 
     assert w._runners is old_runners
     assert w._active_runners == old_active
+
+
+def test_reserved_sets_assignment_and_publishes_info(worker_env):
+    """RESERVED should bind the assignment and publish worker info, with no heavy I/O."""
+    w, cluster, store, ev_q, pr_q = worker_env
+
+    desired = FakeDesired("r-reserved", WorkerState.RESERVED, "e1", "rep1", 0)
+
+    with w._lock:
+        w._apply_desired_locked(desired)
+
+    assert w.state == WorkerState.RESERVED
+    assert w._assignment is not None
+    assert (w._assignment.expid, w._assignment.repid, w._assignment.partition) == ("e1", "rep1", 0)
+    assert (w.address, WorkerState.RESERVED) in cluster.worker_state_calls
+    assert any((w.address, 0, "e1", "rep1") == call for call in cluster.worker_info_calls)
+    # No experiment-status updates: setup hasn't happened.
+    assert store.status_calls == []
+
+
+def test_ready_from_available_raises(worker_env):
+    """READY without a preceding RESERVED should be rejected."""
+    w, cluster, store, ev_q, pr_q = worker_env
+
+    desired_ready = FakeDesired("r-ready", WorkerState.READY)
+    with w._lock:
+        with pytest.raises(worker_mod.WorkerError, match="Cannot transition to READY from AVAILABLE"):
+            w._apply_desired_locked(desired_ready)
+
+
+def test_terminated_from_reserved_returns_to_available(worker_env):
+    """TERMINATED from RESERVED should clear assignment and return to AVAILABLE without setting CANCELED."""
+    w, cluster, store, ev_q, pr_q = worker_env
+
+    # Enter RESERVED.
+    desired_reserved = FakeDesired("r-reserved", WorkerState.RESERVED, "e1", "rep1", 0)
+    with w._lock:
+        w._apply_desired_locked(desired_reserved)
+
+    assert w.state == WorkerState.RESERVED
+
+    # Terminate.
+    desired_term = FakeDesired("r-term", WorkerState.TERMINATED)
+    with w._lock:
+        w._apply_desired_locked(desired_term)
+
+    assert w.state == WorkerState.AVAILABLE
+    assert w._assignment is None
+    # CANCELED should NOT be set (we never started the run).
+    assert all(s != ExperimentStatus.CANCELED for (_, _, _, s) in store.status_calls)
 
 
 def test_step_runners_once_removes_finished(worker_env):

@@ -71,9 +71,9 @@ class FakeCluster:
         *,
         worker_address: str,
         state: WorkerState,
-        expid: str,
-        repid: str,
-        partition: int,
+        expid: str | None = None,
+        repid: str | None = None,
+        partition: int | None = None,
     ) -> None:
         self.desired_calls.append(
             dict(
@@ -84,6 +84,11 @@ class FakeCluster:
                 partition=partition,
             )
         )
+        # Simulate fast worker round-trip for RESERVED: the worker publishes
+        # RESERVED immediately (no heavy I/O), so the orchestrator's poll loop
+        # sees the transition on its first check.
+        if state == WorkerState.RESERVED:
+            self._states[worker_address] = WorkerState.RESERVED
 
     def make_orchestrator_election(self, *, address: str) -> FakeElection:
         return self._election
@@ -281,7 +286,7 @@ def test_on_unexpected_exception_marks_failed_and_consumes(
 # Tests: _handle_submission handover rules
 # ---------------------------------------------------------------------------
 
-def test_handle_submission_consumes_before_launch_and_starts_thread(
+def test_handle_submission_reserves_consumes_and_starts_thread(
     orch: orchestrator_mod.Orchestrator,
     fake_cluster: FakeCluster,
     fake_store: FakeStore,
@@ -301,6 +306,17 @@ def test_handle_submission_consumes_before_launch_and_starts_thread(
 
     # Act
     orch._handle_submission(entity=entity)  # type: ignore[arg-type]
+
+    # Assert: reservation desired-state calls were made with assignment.
+    reserved_calls = [c for c in fake_cluster.desired_calls if c["state"] == WorkerState.RESERVED]
+    assert len(reserved_calls) == 2
+    assert {c["worker_address"] for c in reserved_calls} == {"w1", "w2"}
+    assert all(c["expid"] == "exp1" and c["repid"] == "rep1" for c in reserved_calls)
+    assert {c["partition"] for c in reserved_calls} == {0, 1}
+
+    # Assert: both workers transitioned to RESERVED (via FakeCluster auto-transition).
+    assert fake_cluster.worker_states.get("w1") == WorkerState.RESERVED
+    assert fake_cluster.worker_states.get("w2") == WorkerState.RESERVED
 
     # Assert: assignment happened, entity consumed, and a launch thread was started.
     assert fake_store.assigned == [("exp1", "rep1", ["w1", "w2"])]
@@ -391,3 +407,95 @@ def test_launch_replication_stop_marks_failed(
     assert calls, "Expected replication to be marked failed on stop"
     assert calls[0] is not None
     assert "stopped" in calls[0]["description"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Tests: reservation
+# ---------------------------------------------------------------------------
+
+def test_reserve_workers_timeout_raises_and_cleans_up(
+    orch: orchestrator_mod.Orchestrator,
+    fake_cluster: FakeCluster,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    When one worker fails to reach RESERVED within the timeout,
+    _reserve_workers should send TERMINATED to workers that did reach
+    RESERVED and raise RuntimeError.
+    """
+    # Disable auto-transition so we can control which workers reach RESERVED.
+    original_set = fake_cluster.set_desired_state.__func__  # type: ignore[attr-defined]
+
+    def set_desired_no_auto(self, *, worker_address, state, expid=None, repid=None, partition=None):
+        self.desired_calls.append(dict(
+            worker_address=worker_address, state=state,
+            expid=expid, repid=repid, partition=partition,
+        ))
+        # Only w1 transitions to RESERVED; w2 stays stuck.
+        if state == WorkerState.RESERVED and worker_address == "w1":
+            self._states[worker_address] = WorkerState.RESERVED
+
+    monkeypatch.setattr(type(fake_cluster), "set_desired_state", set_desired_no_auto)
+
+    # Ensure w2 is stuck as AVAILABLE.
+    fake_cluster._states["w2"] = WorkerState.AVAILABLE
+
+    # Make timeout very short.
+    monkeypatch.setattr(orchestrator_mod, "RESERVE_TIMEOUT_S", 0.05)
+
+    with pytest.raises(RuntimeError, match="Timed out"):
+        orch._reserve_workers(expid="exp1", repid="rep1", assignments=["w1", "w2"])
+
+    # w1 reached RESERVED, so it should receive a TERMINATED cleanup call.
+    terminated_calls = [
+        c for c in fake_cluster.desired_calls if c["state"] == WorkerState.TERMINATED
+    ]
+    assert any(c["worker_address"] == "w1" for c in terminated_calls)
+
+
+def test_launch_sends_ready_and_active_without_assignment(
+    orch: orchestrator_mod.Orchestrator,
+    fake_cluster: FakeCluster,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    After the RESERVED step, _launch_replication should send READY and ACTIVE
+    without assignment parameters (expid/repid/partition are None).
+    """
+    exp = FakeExperiment(
+        expid="exp1",
+        allowed_partitionings=["p1"],
+        selected_partitioning="p1",
+        replications={
+            "rep1": FakeReplication(assignments={
+                0: FakeAssignment(0, "w1"),
+            })
+        },
+    )
+
+    # Simulate workers reaching READY then ACTIVE instantly.
+    fake_cluster._states["w1"] = WorkerState.RESERVED
+
+    def fake_set_desired(*, worker_address, state, expid=None, repid=None, partition=None):
+        fake_cluster.desired_calls.append(dict(
+            worker_address=worker_address, state=state,
+            expid=expid, repid=repid, partition=partition,
+        ))
+        fake_cluster._states[worker_address] = state
+
+    monkeypatch.setattr(fake_cluster, "set_desired_state", fake_set_desired)
+
+    orch._launch_replication(exp, "rep1")  # type: ignore[arg-type]
+
+    ready_calls = [c for c in fake_cluster.desired_calls if c["state"] == WorkerState.READY]
+    active_calls = [c for c in fake_cluster.desired_calls if c["state"] == WorkerState.ACTIVE]
+
+    assert len(ready_calls) == 1
+    assert ready_calls[0]["expid"] is None
+    assert ready_calls[0]["repid"] is None
+    assert ready_calls[0]["partition"] is None
+
+    assert len(active_calls) == 1
+    assert active_calls[0]["expid"] is None
+    assert active_calls[0]["repid"] is None
+    assert active_calls[0]["partition"] is None

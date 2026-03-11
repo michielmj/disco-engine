@@ -21,11 +21,12 @@ logger = getLogger(__name__)
 class WorkerState(IntEnum):
     CREATED = 0
     AVAILABLE = 1
-    INITIALIZING = 2
-    READY = 3
-    ACTIVE = 4
-    PAUSED = 5
-    TERMINATED = 6
+    RESERVED = 2        # claimed by orchestrator; assignment set, no heavy init yet
+    INITIALIZING = 3
+    READY = 4
+    ACTIVE = 5
+    PAUSED = 6
+    TERMINATED = 7
     EXITED = 8
     BROKEN = 9
 
@@ -51,7 +52,8 @@ class DesiredWorkerState:
 
     def validate_state(self):
         return self.state in (
-            WorkerState.READY, WorkerState.ACTIVE, WorkerState.PAUSED, WorkerState.TERMINATED, WorkerState.EXITED
+            WorkerState.RESERVED, WorkerState.READY, WorkerState.ACTIVE,
+            WorkerState.PAUSED, WorkerState.TERMINATED, WorkerState.EXITED,
         )
 
 

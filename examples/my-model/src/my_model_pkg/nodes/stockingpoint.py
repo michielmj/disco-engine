@@ -3,6 +3,7 @@ import numpy as np
 from typing import Iterable
 
 from tools.mp_logging import getLogger
+from tools.errsnap import capture
 from toolbox.orderbook import Orderbook
 import graphblas as gb
 
@@ -109,22 +110,26 @@ class StockingPoint(Node):
         self.dl_inv_pos.record(self.epoch, self.ixs, self.inv_oh)
 
     def place_orders(self):
-        sample = sample_dists(
-            rng=self.rng,
-            dists=self.demand_dists,
-            sample_indices=self.ixs,
-            num_vertices=self.data.num_vertices,
-            lower=0
-        )
-
-        order_qty = gb.op.plus_times(sample @ self.demand_map)
-        for node, order in self.data.by_node(order_qty):
-            self.send_event(
-                target_node=node,
-                target_simproc='demand',
-                epoch=self.epoch,
-                data=order,
-                headers={
-                    "delivery_node_idx": str(self.data.node_index)
-                }
+        with capture({"data": self.data, "demand_map": self.demand_map}):
+            sample = sample_dists(
+                rng=self.rng,
+                dists=self.demand_dists,
+                sample_indices=self.ixs,
+                num_vertices=self.data.num_vertices,
+                lower=0
             )
+
+            order_qty = gb.op.plus_times(sample @ self.demand_map)
+            for node, order in self.data.by_node(order_qty):
+                try:
+                    self.send_event(
+                        target_node=node,
+                        target_simproc='demand',
+                        epoch=self.epoch,
+                        data=order,
+                        headers={
+                            "delivery_node_idx": str(self.data.node_index)
+                        }
+                    )
+                except:
+                    raise

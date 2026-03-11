@@ -229,3 +229,4 @@ scripts/
 
 uv.lock
 /dlogger
+*.errsnap

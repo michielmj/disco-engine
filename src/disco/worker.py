@@ -56,7 +56,7 @@ class Assignment:
     The current (expid, repid, partition) assigned to this worker.
 
     Lifecycle:
-    - Set when we receive desired state READY with a valid assignment.
+    - Set when we receive desired state RESERVED with a valid assignment.
     - Cleared when the run ends (FINISHED / CANCELED / FAILED) or when we go AVAILABLE.
     - Used for:
         * loading Experiment, Graph, Partitioning
@@ -101,8 +101,12 @@ class Worker:
 
     Core lifecycle (one partition run)
     ---------------------------------
-    - Desired READY(expid, repid, partition):
-        * assignment set
+    - Desired RESERVED(expid, repid, partition):
+        * assignment set + worker info published
+        * state -> RESERVED
+        (lightweight; orchestrator waits for this synchronously to prevent
+         double-assignment before proceeding to the next submission)
+    - Desired READY:
         * INITIALIZING
         * _setup_run_locked(): load experiment/graph/partitioning/model, build nodes
         * set ExperimentStatus.LOADED then INITIALIZED
@@ -120,7 +124,7 @@ class Worker:
         * set ExperimentStatus.PAUSED
         * runner stepping stops (but messages may still be drained)
     - Desired TERMINATED:
-        * set ExperimentStatus.CANCELED (when appropriate)
+        * set ExperimentStatus.CANCELED (when appropriate, i.e. past RESERVED)
         * teardown + AVAILABLE
 
     "Fail partition vs break worker" rule of thumb
@@ -687,13 +691,14 @@ class Worker:
 
         This method is the "control-plane brain":
         - validates desired state
-        - updates assignment (only on READY)
+        - updates assignment (only on RESERVED)
         - calls setup/start/teardown helpers
         - reports worker state to Cluster
         - advances ExperimentStatus via ExperimentStore
 
         Important invariants:
-        - Assignment is set ONLY on READY.
+        - Assignment is set ONLY on RESERVED.
+        - Heavy initialization happens ONLY on RESERVED -> READY (via INITIALIZING).
         - Runners are created ONLY on READY -> ACTIVE.
         - ACTIVE hot path does not call control-plane helpers.
         """
@@ -732,15 +737,32 @@ class Worker:
             self._kick.set()
             return
 
-        # READY: load everything needed to later run ACTIVE.
-        if target == WorkerState.READY:
-            if self._state not in (WorkerState.CREATED, WorkerState.AVAILABLE, WorkerState.TERMINATED):
-                raise WorkerError(f"Cannot transition to READY from {self._state.name}")
+        # RESERVED: orchestrator claims this worker for an upcoming run.
+        # Assignment is bound here; heavy initialization is deferred to READY.
+        # This is a lightweight transition (no I/O beyond ZK state publish) so
+        # the orchestrator can wait for it synchronously before moving to the
+        # next submission, preventing double-assignment of the same worker.
+        if target == WorkerState.RESERVED:
+            if self._state != WorkerState.AVAILABLE:
+                raise WorkerError(f"Cannot transition to RESERVED from {self._state.name}")
 
             if new_assignment is None:
-                raise WorkerError("READY requires an assignment")
+                raise WorkerError("RESERVED requires an assignment")
 
             self._assignment = new_assignment
+            self._update_worker_info_locked()
+            self._set_state_locked(WorkerState.RESERVED)
+            return
+
+        # READY: load everything needed to later run ACTIVE.
+        # Assignment must already be set (during RESERVED).
+        if target == WorkerState.READY:
+            if self._state != WorkerState.RESERVED:
+                raise WorkerError(f"Cannot transition to READY from {self._state.name}")
+
+            if self._assignment is None:
+                raise WorkerError("READY requires an assignment (must be set during RESERVED)")
+
             self._set_state_locked(WorkerState.INITIALIZING)
 
             ok = self._setup_run_locked()
@@ -757,9 +779,6 @@ class Worker:
         if target == WorkerState.ACTIVE:
             if self._state not in (WorkerState.READY, WorkerState.PAUSED):
                 raise WorkerError(f"Cannot transition to ACTIVE from {self._state.name}")
-
-            if new_assignment is not None and new_assignment != self._assignment:
-                raise WorkerError("Assignment can only be set for desired state READY")
 
             if self._state == WorkerState.READY:
                 self._start_runners_locked()
@@ -779,10 +798,12 @@ class Worker:
 
         # TERMINATED: cancel and teardown the current run (if any), return to AVAILABLE.
         if target == WorkerState.TERMINATED:
-            if self._state not in (WorkerState.ACTIVE, WorkerState.PAUSED, WorkerState.READY):
+            if self._state not in (WorkerState.ACTIVE, WorkerState.PAUSED, WorkerState.READY,
+                                   WorkerState.RESERVED):
                 raise WorkerError(f"Cannot terminate from {self._state.name}")
 
-            if self._state != WorkerState.READY:
+            # Only set CANCELED if we were past RESERVED (i.e. the run was actually started).
+            if self._state not in (WorkerState.READY, WorkerState.RESERVED):
                 self._set_partition_status_locked(ExperimentStatus.CANCELED)
 
             self._set_state_locked(WorkerState.TERMINATED)

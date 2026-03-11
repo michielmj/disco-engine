@@ -2,7 +2,7 @@ app_name = "disco"
 debug = false
 
 [logging]
-level = "INFO"
+loglevel = "INFO"
 format = "%(asctime)-20s %(processName)-30s %(name)-40s %(levelname)-8s: %(message)s"
 
 [grpc]
@@ -11,6 +11,7 @@ format = "%(asctime)-20s %(processName)-30s %(name)-40s %(levelname)-8s: %(messa
 timeout_s = 600.0
 max_workers = 10
 grace_s = 60.0
+loglevel = "INFO"
 
 # Message size limits (bytes)
 max_send_message_bytes = 10485760
@@ -34,6 +35,8 @@ connection_timeout_s = 5.0
 
 max_retries = 5
 retry_delay_s = 1.0
+
+loglevel = "INFO"
 
 # Optional auth (prefer secrets for credentials)
 # auth_scheme = "digest"
@@ -71,6 +74,8 @@ username = "disco"
 pool_size = 10
 max_overflow = 20
 pool_pre_ping = true
+
+loglevel = "INFO"
 
 [serialization]
 protocol = 5

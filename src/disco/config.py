@@ -111,7 +111,7 @@ def _config_file_context(path: Path | None) -> Any:
 
 
 class LoggingSettings(BaseModel):
-    level: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] = "INFO"
+    loglevel: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] = "INFO"
     format: str = (
         "%(asctime)-20s %(processName)-30s %(name)-40s "
         "%(levelname)-8s: %(message)s"
@@ -151,6 +151,8 @@ class GrpcSettings(BaseModel):
     )
     promise_retry_max_window_s: float = Field(3.0, description="Maximum time window for promise delivery retries in "
                                                                "seconds.")
+    loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
+        None, description="Logging level for gRPC (CRITICAL, WARNING, INFO, DEBUG)")
 
 
 class ZookeeperSettings(BaseModel):
@@ -167,6 +169,8 @@ class ZookeeperSettings(BaseModel):
     ca_cert: str | None = Field(default=None, description="Path to CA certificate file for TLS, if applicable.")
     client_cert: str | None = Field(default=None, description="Path to client certificate file for mutual TLS.")
     client_key: str | None = Field(default=None, description="Path to client private key for mutual TLS.")
+    loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
+        None, description="Logging level for Zookeeper / Kazoo (CRITICAL, WARNING, INFO, DEBUG)")
 
 
 Dialect = Literal["postgresql", "sqlite"]
@@ -216,6 +220,9 @@ class DatabaseSettings(BaseModel):
     max_overflow: int = 20
     pool_pre_ping: bool = True
 
+    loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
+        None, description="Logging level for sqlalchemy (CRITICAL, WARNING, INFO, DEBUG)")
+
     def sqlalchemy_url(self) -> URL:
         if self.dialect == "sqlite":
             if self.sqlite_path is None:
@@ -238,6 +245,8 @@ class DataLoggerSettings(BaseModel):
     ring_bytes: int = Field(1 << 27, description="Ring buffer size (default=128 MB)")
     rotate_bytes: int = Field(256 << 20, description="Segment file size (default=256 MB)")
     zstd_level: int = Field(1, description="ZSTD Compression level (default=1)")
+    loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
+        None, description="Logging level for data_logger (CRITICAL, WARNING, INFO, DEBUG)")
 
 
 class ModelSettings(BaseModel):
