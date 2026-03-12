@@ -559,6 +559,14 @@ class Graph:
             one or more of the requested types, and may be empty if vertices
             exist that carry none of the requested label types.
 
+        Raises
+        ------
+        ValueError
+            If any vertex carries more than one label of the same requested
+            type (e.g. both ``location=A`` and ``location=B``).  This can
+            occur on a :class:`SuperGraph` where compression merged vertices
+            with different labels of a type not used for compression.
+
         If a vertex has at most one label per label type, no vertex occurs in
         more than one combination.
         """
@@ -572,6 +580,22 @@ class Graph:
 
         for label_type in distinct:
             idxs, sub_mat = self.labels_for_type(label_type)
+
+            # Each vertex must have at most one label per type.  A vertex
+            # with two labels of the same type (e.g. location=A AND
+            # location=B) would produce spurious cross-product combinations.
+            # Cast to INT64 because BOOL "plus" in GraphBLAS is logical OR.
+            int_mat = sub_mat.dup(dtype=gb.dtypes.INT64)
+            row_counts: Vector = int_mat.reduce_rowwise("plus").new()
+            rc_indices, rc_values = row_counts.to_coo()
+            if rc_values.size > 0 and int(rc_values.max()) > 1:
+                violators = rc_indices[rc_values > 1]
+                raise ValueError(
+                    f"Vertex(es) {violators.tolist()} have more than one "
+                    f"label of type {label_type!r}; by_distinct_labels "
+                    f"requires at most one label per type per vertex"
+                )
+
             label_indices_list.append(idxs)
             original_widths.append(int(sub_mat.ncols))
 
