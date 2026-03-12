@@ -72,6 +72,7 @@ def _store_vertices_for_scenario(
         session: Session,
         scenario_id: str,
         vertex_keys: np.ndarray,
+        vertex_weight: np.ndarray,
         *,
         chunk_size: int = 10_000,
 ) -> None:
@@ -79,6 +80,8 @@ def _store_vertices_for_scenario(
     Insert vertex rows for a scenario into graph_vertices.
 
     vertex_keys is a 1D array where position i holds the key for vertex i.
+    vertex_weight is a float64 array of the same length; all-ones weights are
+    stored as NULL to save space.
     """
     keys_arr = np.asarray(vertex_keys)
     if keys_arr.ndim != 1:
@@ -88,6 +91,8 @@ def _store_vertices_for_scenario(
     if num_vertices_count == 0:
         return
 
+    all_ones = np.all(vertex_weight == 1.0)
+
     for start in range(0, num_vertices_count, chunk_size):
         end = min(start + chunk_size, num_vertices_count)
         rows = [
@@ -95,6 +100,7 @@ def _store_vertices_for_scenario(
                 "scenario_id": scenario_id,
                 "index": int(i),
                 "key": str(keys_arr[i]),
+                "weight": None if all_ones else float(vertex_weight[i]),
             }
             for i in range(start, end)
         ]
@@ -278,7 +284,9 @@ def store_graph(
     )
 
     # Step 3: write vertices
-    _store_vertices_for_scenario(session, scenario_id, graph.vertices, chunk_size=chunk_size)
+    _store_vertices_for_scenario(
+        session, scenario_id, graph.vertices, graph.vertex_weight, chunk_size=chunk_size
+    )
 
     # Step 4: write edges
     _store_edges_for_scenario(session, graph)
@@ -292,22 +300,30 @@ def store_graph(
 # ---------------------------------------------------------------------------
 
 
-def _load_vertices(session: Session, scenario_id: str) -> np.ndarray:
+def _load_vertices(
+    session: Session, scenario_id: str
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Load vertex keys for a scenario from graph_vertices, ordered by index.
+    Load vertex keys and weights for a scenario from graph_vertices, ordered by index.
 
-    Returns a 1D array of keys where position i is the key for vertex i.
+    Returns a tuple of:
+    - keys: 1D object array where position i is the key for vertex i.
+    - weights: 1D float64 array; NULL weights in DB are defaulted to 1.0.
     """
     rows = session.execute(
-        select(vertices.c.index, vertices.c.key)
+        select(vertices.c.index, vertices.c.key, vertices.c.weight)
         .where(vertices.c.scenario_id == literal(scenario_id))
         .order_by(vertices.c.index)
     ).all()
 
     if not rows:
-        return np.empty(0, dtype=object)
+        return np.empty(0, dtype=object), np.empty(0, dtype=np.float64)
 
-    return np.array([key for _, key in rows], dtype=object)
+    keys = np.array([key for _, key, _ in rows], dtype=object)
+    weights = np.array(
+        [1.0 if w is None else float(w) for _, _, w in rows], dtype=np.float64
+    )
+    return keys, weights
 
 
 def _load_edge_layers(
@@ -488,7 +504,7 @@ def load_graph_for_scenario(
     - Labels: from graph_labels and graph_vertex_labels, assembled into
       Graph.label_matrix and Graph.label_meta.
     """
-    vertex_keys = _load_vertices(session, scenario_id)
+    vertex_keys, vertex_weight = _load_vertices(session, scenario_id)
     num_vertices = len(vertex_keys)
     edge_layers = _load_edge_layers(session, scenario_id, num_vertices)
     label_matrix, label_meta = _load_labels_for_scenario(
@@ -500,6 +516,7 @@ def load_graph_for_scenario(
         num_vertices=num_vertices,
         scenario_id=scenario_id,
         vertices=vertex_keys if num_vertices > 0 else None,
+        vertex_weight=vertex_weight if num_vertices > 0 else None,
         label_matrix=label_matrix,
         label_meta=label_meta,
     )

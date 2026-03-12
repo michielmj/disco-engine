@@ -330,3 +330,65 @@ def test_store_and_load_graph_with_labels_and_mask(
     assert len(vm_rows) > 0
 
     session.close()
+
+
+# ---------------------------------------------------------------------------
+# vertex_weight roundtrip
+# ---------------------------------------------------------------------------
+
+
+def test_store_and_load_vertex_weight_roundtrip(
+    engine_and_session_factory: tuple[object, sessionmaker]
+) -> None:
+    """Custom vertex_weight values survive a store → load roundtrip."""
+    _, SessionLocal = engine_and_session_factory
+    session: Session = SessionLocal()
+
+    scenario_id = "vw_roundtrip"
+    vertex_keys = np.array(["a", "b", "c"], dtype=object)
+    weights = np.array([1.5, 2.0, 0.5], dtype=np.float64)
+
+    graph = Graph(
+        layers=tuple(),
+        num_vertices=3,
+        scenario_id=scenario_id,
+        vertices=vertex_keys,
+        vertex_weight=weights,
+    )
+    store_graph(session, graph)
+
+    loaded = load_graph_for_scenario(session, scenario_id)
+    np.testing.assert_allclose(loaded.vertex_weight, weights)
+
+    session.close()
+
+
+def test_store_and_load_default_vertex_weight_is_ones(
+    engine_and_session_factory: tuple[object, sessionmaker]
+) -> None:
+    """Default all-ones vertex_weight is stored as NULL and loaded back as ones."""
+    _, SessionLocal = engine_and_session_factory
+    session: Session = SessionLocal()
+
+    scenario_id = "vw_default"
+    vertex_keys = np.array(["x", "y"], dtype=object)
+
+    graph = Graph(
+        layers=tuple(),
+        num_vertices=2,
+        scenario_id=scenario_id,
+        vertices=vertex_keys,
+    )
+    store_graph(session, graph)
+
+    # NULL stored in DB
+    from disco.graph.schema import vertices as vtable
+    rows = session.execute(
+        select(vtable.c.weight).where(vtable.c.scenario_id == scenario_id).order_by(vtable.c.index)
+    ).all()
+    assert all(w is None for (w,) in rows), "Default weights should be stored as NULL"
+
+    loaded = load_graph_for_scenario(session, scenario_id)
+    np.testing.assert_array_equal(loaded.vertex_weight, np.ones(2))
+
+    session.close()
