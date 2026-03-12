@@ -612,6 +612,181 @@ class Graph:
         return [r[r >= 0] for r in result]
 
     # ------------------------------------------------------------------ #
+    # Graph compression
+    # ------------------------------------------------------------------ #
+    def compress(self, label_types: Sequence[str]) -> SuperGraph:
+        """
+        Compress the graph by merging vertices into supervertices based on
+        label structure.
+
+        The algorithm:
+
+        1. Build the label sub-matrix for the requested label types.
+        2. Extract per-label vertex groups from the CSC representation.
+        3. Iteratively merge any two groups that share a vertex, using a
+           bitmap key per group for fast overlap detection.
+        4. Each resulting non-overlapping group becomes one supervertex.
+        5. Vertices with **no** labels of the requested types each keep
+           their own 1:1 supervertex.
+
+        Edge weights between supervertices are the **sum** of the original
+        edge weights.  Edges that become self-loops after compression
+        (between vertices in the same supervertex) are discarded.
+
+        Labels are propagated: a supervertex carries a label if any of its
+        constituent vertices carries it.
+
+        Parameters
+        ----------
+        label_types
+            Label type names whose values define the grouping structure.
+
+        Returns
+        -------
+        SuperGraph
+
+        Raises
+        ------
+        RuntimeError
+            If the graph has no labels attached.
+        KeyError
+            If a requested label type does not exist.
+        """
+        if self._label_matrix is None:
+            raise RuntimeError("Graph has no labels attached (label_matrix is None)")
+
+        # --- 1. Collect selected label columns and build sub-matrix ---
+        selected_label_indices: List[np.ndarray] = []
+        for lt in label_types:
+            try:
+                idxs = self._label_indices_by_type[lt]
+            except KeyError:
+                raise KeyError(f"Unknown label_type {lt!r}") from None
+            selected_label_indices.append(idxs)
+
+        if not selected_label_indices:
+            # No label types requested → every vertex is its own supervertex.
+            vertex_map = np.arange(self.num_vertices, dtype=np.int64)
+            return self._build_supergraph(vertex_map, self.num_vertices)
+
+        all_selected = np.concatenate(selected_label_indices)
+        sub_mat = self._label_matrix[:, all_selected]
+
+        # --- 2. Merge overlapping label columns via CSC bitmap grouping ---
+        # In CSC format each column (label) gives the row indices (vertices)
+        # that carry it.  Groups sharing any vertex are merged iteratively
+        # using a bitmap key per group for fast overlap detection.
+        ofs, ixs, _ = sub_mat.to_csc()
+
+        groups: List[np.ndarray] = []
+        keys: List[int] = []
+        for i in range(len(ofs) - 1):
+            grp = ixs[ofs[i]:ofs[i + 1]]
+            if grp.size == 0:
+                continue
+            groups.append(grp)
+            keys.append(int(np.sum(1 << grp)))
+
+        if groups:
+            while True:
+                ckeys: List[int] = []
+                cgroups: List[np.ndarray] = []
+
+                seq = np.argsort([int(np.min(g)) for g in groups])
+                for s in seq:
+                    grp = groups[s]
+                    key = keys[s]
+
+                    merged = False
+                    for j, ck in enumerate(ckeys):
+                        if ck & key:
+                            cgroups[j] = np.union1d(cgroups[j], grp)
+                            ckeys[j] = int(np.sum(1 << cgroups[j]))
+                            merged = True
+                            break
+
+                    if not merged:
+                        cgroups.append(grp)
+                        ckeys.append(key)
+
+                if len(ckeys) == len(keys):
+                    break
+
+                groups = cgroups
+                keys = ckeys
+        else:
+            cgroups = []
+
+        # --- 3. Build vertex_map from merged groups ---
+        vertex_map = np.full(self.num_vertices, -1, dtype=np.int64)
+
+        for sv, grp in enumerate(cgroups):
+            vertex_map[grp] = sv
+        next_sv = len(cgroups)
+
+        # Unlabelled vertices: each gets its own supervertex.
+        unlabelled = vertex_map == -1
+        n_unlabelled = int(unlabelled.sum())
+        if n_unlabelled > 0:
+            vertex_map[unlabelled] = np.arange(
+                next_sv, next_sv + n_unlabelled, dtype=np.int64,
+            )
+            next_sv += n_unlabelled
+
+        num_super = next_sv
+        return self._build_supergraph(vertex_map, num_super)
+
+    def _build_supergraph(
+        self,
+        vertex_map: np.ndarray,
+        num_super: int,
+    ) -> SuperGraph:
+        """
+        Shared helper that builds the SuperGraph from a vertex_map.
+        """
+        orig_indices = np.arange(self.num_vertices, dtype=np.int64)
+
+        # --- projection matrix P (FP64): shape (num_super × num_vertices) ---
+        P = gb.Matrix.from_coo(
+            vertex_map, orig_indices,
+            np.ones(self.num_vertices, dtype=np.float64),
+            nrows=num_super, ncols=self.num_vertices,
+        )
+
+        # --- compress each layer: P @ A @ Pᵀ, then strip self-loops ---
+        compressed_layers: list[Matrix] = []
+        for layer in self._layers:
+            temp = P.mxm(layer, "plus_times").new()
+            compressed = temp.mxm(P.T, "plus_times").new()
+            compressed = compressed.select("offdiag").new()
+            compressed_layers.append(compressed)
+
+        # --- compress labels: P_bool @ label_matrix via lor_land ---
+        compressed_label_matrix: Matrix | None = None
+        compressed_label_meta: dict[int, tuple[str, str]] | None = None
+        if self._label_matrix is not None and self._num_labels > 0:
+            P_bool = gb.Matrix.from_coo(
+                vertex_map, orig_indices,
+                np.ones(self.num_vertices, dtype=bool),
+                nrows=num_super, ncols=self.num_vertices,
+                dtype=gb.dtypes.BOOL,
+            )
+            compressed_label_matrix = P_bool.mxm(
+                self._label_matrix, "lor_land",
+            ).new()
+            compressed_label_meta = dict(self._label_meta)
+
+        return SuperGraph(
+            layers=tuple(compressed_layers),
+            num_vertices=num_super,
+            scenario_id=self.scenario_id,
+            vertex_map=vertex_map,
+            num_original_vertices=self.num_vertices,
+            label_matrix=compressed_label_matrix,
+            label_meta=compressed_label_meta,
+        )
+
+    # ------------------------------------------------------------------ #
     # Structural accessors
     # ------------------------------------------------------------------ #
     @property
@@ -665,6 +840,152 @@ class Graph:
     def __repr__(self) -> str:
         return (
             f"Graph(num_vertices={self.num_vertices}, "
+            f"scenario_id={self.scenario_id}, "
+            f"num_layers={len(self._layers)}, "
+            f"num_labels={self._num_labels})"
+        )
+
+
+class SuperGraph(Graph):
+    """
+    A compressed graph where groups of original vertices are collapsed into
+    single supervertices via :meth:`Graph.compress`.
+
+    SuperGraph preserves the full Graph interface (layers, labels, masks)
+    but operates on supervertex indices.  It does **not** carry vertex keys
+    (``vertices`` is always ``None``).
+
+    The :meth:`decompress` method maps supervertex-indexed data back to the
+    original vertex space.
+    """
+
+    __slots__ = (
+        "_vertex_map",
+        "_num_original_vertices",
+    )
+
+    def __init__(
+        self,
+        layers: Tuple[Matrix, ...],
+        num_vertices: int,
+        scenario_id: str,
+        *,
+        vertex_map: np.ndarray,
+        num_original_vertices: int,
+        mask: Optional[Vector] = None,
+        label_matrix: Optional[Matrix] = None,
+        label_meta: Optional[Dict[int, Tuple[str, str]]] = None,
+    ) -> None:
+        self._vertex_map: np.ndarray = vertex_map
+        self._num_original_vertices: int = num_original_vertices
+        super().__init__(
+            layers=layers,
+            num_vertices=num_vertices,
+            scenario_id=scenario_id,
+            vertices=None,
+            mask=mask,
+            label_matrix=label_matrix,
+            label_meta=label_meta,
+        )
+
+    # ------------------------------------------------------------------ #
+    # Properties
+    # ------------------------------------------------------------------ #
+    @property
+    def vertex_map(self) -> np.ndarray:
+        """Original vertex index → supervertex index (read-only)."""
+        return self._vertex_map
+
+    @property
+    def num_original_vertices(self) -> int:
+        """Number of vertices in the original (uncompressed) graph."""
+        return self._num_original_vertices
+
+    # ------------------------------------------------------------------ #
+    # Decompression
+    # ------------------------------------------------------------------ #
+    def decompress(
+        self,
+        supervertices: Vector | np.ndarray | Sequence[int] | set[int],
+    ) -> Vector | np.ndarray:
+        """
+        Expand supervertex-indexed data to the original vertex space.
+
+        Two modes are supported:
+
+        1. **Value expansion** (``Vector`` input): returns a ``Vector`` of
+           size ``num_original_vertices`` where every original vertex
+           receives the value of its supervertex.  Supervertices that are
+           structurally absent in the input remain absent for all their
+           constituent original vertices.
+
+        2. **Index expansion** (array-like / set input): returns a
+           ``np.ndarray`` of original vertex indices that belong to the
+           given supervertices.
+
+        Parameters
+        ----------
+        supervertices
+            Either a GraphBLAS ``Vector`` of size ``num_vertices``
+            (supervertex count), or an array-like / set of supervertex
+            indices.
+
+        Returns
+        -------
+        Vector | np.ndarray
+            A ``Vector`` when the input is a ``Vector``, otherwise a
+            sorted ``np.ndarray[int64]`` of original vertex indices.
+        """
+        if isinstance(supervertices, Vector):
+            return self._decompress_vector(supervertices)
+        return self._decompress_indices(supervertices)
+
+    def _decompress_vector(self, vector: Vector) -> Vector:
+        """Expand a supervertex-indexed Vector to original vertex space."""
+        indices, values = vector.to_coo()
+
+        if indices.size == 0:
+            return gb.Vector.from_coo(
+                np.empty(0, dtype=np.int64),
+                np.empty(0, dtype=vector.dtype.numpy_type),
+                size=self._num_original_vertices,
+                dtype=vector.dtype,
+            )
+
+        # Dense lookup table for supervertex values.
+        sv_values = np.zeros(self.num_vertices, dtype=values.dtype)
+        sv_present = np.zeros(self.num_vertices, dtype=bool)
+        sv_values[indices] = values
+        sv_present[indices] = True
+
+        # Expand to original vertex space via the mapping.
+        orig_present = sv_present[self._vertex_map]
+        orig_indices = np.nonzero(orig_present)[0].astype(np.int64)
+        orig_values = sv_values[self._vertex_map[orig_indices]]
+
+        return gb.Vector.from_coo(
+            orig_indices,
+            orig_values,
+            size=self._num_original_vertices,
+            dtype=vector.dtype,
+        )
+
+    def _decompress_indices(
+        self,
+        supervertices: np.ndarray | Sequence[int] | set[int],
+    ) -> np.ndarray:
+        """Return original vertex indices belonging to the given supervertices."""
+        sv_set = np.asarray(sorted(supervertices), dtype=np.int64)
+        mask = np.isin(self._vertex_map, sv_set)
+        return np.nonzero(mask)[0].astype(np.int64)
+
+    # ------------------------------------------------------------------ #
+    # Introspection
+    # ------------------------------------------------------------------ #
+    def __repr__(self) -> str:
+        return (
+            f"SuperGraph(num_supervertices={self.num_vertices}, "
+            f"num_original_vertices={self._num_original_vertices}, "
             f"scenario_id={self.scenario_id}, "
             f"num_layers={len(self._layers)}, "
             f"num_labels={self._num_labels})"
