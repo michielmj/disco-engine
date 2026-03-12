@@ -1829,20 +1829,33 @@ multiple calls without re‑allocating the entire matrix from scratch in user co
 The method:
 
 ```python
-def by_distinct_labels(self, distinct: Sequence[str]) -> np.ndarray:
+def by_distinct_labels(self, distinct: Sequence[str]) -> list[np.ndarray]:
     ...
 ```
 
 computes distinct combinations of labels across one or more label types.
 
 - Input: a sequence of label types, e.g. `["location", "echelon"]`.
+
+- **Validation**: for each requested type, the method checks that no vertex
+  carries more than one label of that type.  If a vertex does (e.g. both
+  `location=A` and `location=B`), a `ValueError` is raised.  This situation
+  typically arises on a `SuperGraph` where compression merged vertices with
+  different labels of a type not used for compression.
+
 - For each type, `labels_for_type` gives:
 
   - `label_indices`: global label indices for that type.
   - `L_type`: boolean matrix `(num_vertices × num_labels_of_type)`.
 
-- These type‑specific matrices are combined row‑wise using a Kronecker‑like
-  operation implemented by `_rowwise_and_kron` and `_rowwise_and_kron_many`:
+- Each per-type sub-matrix is **augmented** with an extra "unlabelled" column
+  for vertices that have no label of that type (`_augment_with_unlabelled`).
+  This ensures all vertices participate in the Kronecker product, even if they
+  lack some label types.
+
+- These augmented type‑specific matrices are combined row‑wise using a
+  Kronecker‑like operation implemented by `_rowwise_and_kron` and
+  `_rowwise_and_kron_many`:
 
   - The result `S` has shape `(num_vertices × num_combinations)` and has `True`
     exactly at positions `(vertex, combination)` where the vertex has all labels
@@ -1852,12 +1865,20 @@ computes distinct combinations of labels across one or more label types.
   combinations are actually present in at least one vertex.
 
 - The column indices of such combinations are decoded back into the original
-  global label indices per type, and returned as a `np.ndarray` of shape
-  `(num_combinations, len(distinct))`.
+  global label indices per type, using `-1` as an internal sentinel for the
+  unlabelled column.  The sentinel positions are then **stripped** from each
+  row, producing variable-length arrays.
+
+- Returns a `list[np.ndarray]` where each array contains the global label
+  indices for one distinct combination.  Arrays may be shorter than
+  `len(distinct)` when vertices lack labels for some requested types, and may
+  be empty (`array([])`) when vertices carry none of the requested label types.
+
+Because global label indices are unique across types, each combination is
+unambiguous regardless of length.
 
 If each vertex carries at most one label per type, then each vertex contributes
-to at most one combination, but the implementation is generic enough to handle
-multiple labels per type as well.
+to at most one combination.
 
 
 #### 7.3.6 Graph Views
@@ -1875,6 +1896,72 @@ multiple labels per type as well.
 
 This is useful when computations need to work on different vertex subsets while
 sharing the same underlying adjacency matrices and labels.
+
+
+#### 7.3.7 Graph Compression and SuperGraph
+
+`Graph.compress(label_types: Sequence[str]) → SuperGraph` creates a compressed
+graph by merging groups of vertices into single **supervertices** based on label
+structure.
+
+**Algorithm:**
+
+1. Build the label sub-matrix containing only the columns for the requested
+   label types.
+2. Extract per-label vertex groups from the CSC (Compressed Sparse Column)
+   representation of the sub-matrix.
+3. Iteratively merge any two groups that share a vertex, using a **bitmap key**
+   per group (Python arbitrary-precision `int` with one bit per vertex index)
+   for O(1) overlap detection.  Groups are sorted by minimum vertex index to
+   improve convergence.  The merge loop repeats until no further merges occur.
+4. Each resulting non-overlapping group becomes one supervertex.
+5. Vertices with **no** labels of the requested types each receive their own
+   dedicated 1:1 supervertex (they are never merged with each other or with
+   labelled groups).
+
+**Structural compression** uses a projection matrix `P` of shape
+`(num_supervertices × num_vertices)`:
+
+- **Layers**: `P @ A @ Pᵀ` with semiring `plus_times` sums edge weights across
+  merged vertices.  `select("offdiag")` strips edges that become self-loops
+  after compression (i.e. edges between vertices in the same supervertex).
+- **Labels**: `P_bool @ label_matrix` with semiring `lor_land` propagates
+  labels to supervertices.  A supervertex carries a label if any of its
+  constituent vertices carries it.  Label metadata (`label_meta`) is shared
+  by value.
+
+**`SuperGraph`** is a subclass of `Graph` with two additional attributes:
+
+- `vertex_map: np.ndarray` — maps each original vertex index to its
+  supervertex index.
+- `num_original_vertices: int` — the vertex count of the source graph.
+
+`SuperGraph` does **not** carry vertex keys (`vertices` is always `None`).
+
+**Decompression** (`SuperGraph.decompress`) supports two modes:
+
+1. **Value expansion** (input: `Vector`): returns a `Vector` of size
+   `num_original_vertices` where every original vertex receives the value of
+   its supervertex.  Supervertices that are structurally absent in the input
+   remain absent for all their constituent original vertices.
+
+2. **Index expansion** (input: array-like or set): returns a sorted
+   `np.ndarray[int64]` of original vertex indices that belong to the given
+   supervertex indices.
+
+**Error conditions:**
+
+- `RuntimeError` if the graph has no labels attached.
+- `KeyError` if a requested label type does not exist.
+
+**Interaction with `by_distinct_labels`:**
+
+Compression via `lor_land` label propagation means a supervertex may inherit
+multiple labels of the same type from its constituent vertices (e.g. both
+`location=A` and `location=B` when compression was done on a different label
+type such as `resource`).  Calling `by_distinct_labels` on such a `SuperGraph`
+with the affected label type will correctly raise `ValueError` due to the
+per-type uniqueness validation (§7.3.5).
 
 
 ### 7.4 Graph Storage and Loading (`disco.graph.db`)
@@ -2191,6 +2278,11 @@ The graph subsystem cleanly separates concerns:
   directed graphs.  It now carries vertex keys (`_vertices`), labels, and
   masks in a single self‑contained object.  It requires a non‑empty
   `scenario_id` and validates structural invariants via `validate()`.
+- `SuperGraph` is a subclass of `Graph` produced by `Graph.compress()`.  It
+  collapses groups of vertices into supervertices based on label structure,
+  compresses adjacency matrices via a projection matrix, propagates labels,
+  and provides `decompress()` to map supervertex-indexed data back to the
+  original vertex space.  It does not carry vertex keys.
 - `graph.schema` defines the relational schema for scenarios, vertices, edges,
   labels, vertex labels, and vertex masks.
 - `graph.db` handles the full graph lifecycle: `store_graph` is the single
@@ -2202,8 +2294,8 @@ The graph subsystem cleanly separates concerns:
   model data and masks into Pandas and GraphBLAS structures.
 
 This separation allows simulation and optimization code to operate purely on
-`Graph` and GraphBLAS structures, while still supporting robust storage,
-querying, and integration with relational model data.
+`Graph` (or `SuperGraph`) and GraphBLAS structures, while still supporting
+robust storage, querying, and integration with relational model data.
 
 
 ## 8. Model
