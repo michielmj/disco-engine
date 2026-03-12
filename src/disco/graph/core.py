@@ -38,6 +38,7 @@ class Graph:
         "num_vertices",
         "scenario_id",
         "_vertices",                   # np.ndarray | None  (index i -> vertex key)
+        "_vertex_weight",              # np.ndarray[float64] of length num_vertices
         "_mask",                       # GraphMask | None
         "_label_matrix",               # Matrix[BOOL] | None
         "_label_meta",                 # dict[int, tuple[str, str]]
@@ -57,6 +58,7 @@ class Graph:
         scenario_id: str = "",
         *,
         vertices: Optional[np.ndarray] = None,
+        vertex_weight: Optional[np.ndarray] = None,
         mask: Optional[Vector] = None,
         label_matrix: Optional[Matrix] = None,
         label_meta: Optional[Dict[int, Tuple[str, str]]] = None,
@@ -71,6 +73,12 @@ class Graph:
         self._vertices: Optional[np.ndarray] = (
             np.asarray(vertices) if vertices is not None else None
         )
+
+        # vertex_weight: per-vertex compute weight, default 1.0
+        if vertex_weight is None:
+            self._vertex_weight: np.ndarray = np.ones(num_vertices, dtype=np.float64)
+        else:
+            self._vertex_weight = np.asarray(vertex_weight, dtype=np.float64)
 
         self.validate(check_cycles=False)
 
@@ -149,6 +157,12 @@ class Graph:
                 f"num_vertices ({self.num_vertices})"
             )
 
+        if len(self._vertex_weight) != self.num_vertices:
+            raise ValueError(
+                f"vertex_weight length ({len(self._vertex_weight)}) must match "
+                f"num_vertices ({self.num_vertices})"
+            )
+
         for idx, layer in enumerate(self._layers):
             if layer.ncols != self.num_vertices:
                 raise ValueError(f"Matrix layer {idx} has invalid number of columns.")
@@ -170,6 +184,14 @@ class Graph:
         if no vertex keys have been attached to this graph.
         """
         return self._vertices
+
+    @property
+    def vertex_weight(self) -> np.ndarray:
+        """
+        Per-vertex compute weight as a float64 array of length num_vertices.
+        Defaults to all-ones when not explicitly provided at construction.
+        """
+        return self._vertex_weight
 
     # ------------------------------------------------------------------ #
     # Mask handling (public API: Vector; internal: GraphMask)
@@ -800,12 +822,20 @@ class Graph:
             ).new()
             compressed_label_meta = dict(self._label_meta)
 
+        # --- compress vertex weights: sum per supervertex ---
+        super_weights = np.bincount(
+            vertex_map.astype(np.intp),
+            weights=self._vertex_weight,
+            minlength=num_super,
+        ).astype(np.float64)
+
         return SuperGraph(
             layers=tuple(compressed_layers),
             num_vertices=num_super,
             scenario_id=self.scenario_id,
             vertex_map=vertex_map,
             num_original_vertices=self.num_vertices,
+            vertex_weight=super_weights,
             label_matrix=compressed_label_matrix,
             label_meta=compressed_label_meta,
         )
@@ -853,6 +883,7 @@ class Graph:
             num_vertices=self.num_vertices,
             scenario_id=self.scenario_id,
             vertices=self._vertices,
+            vertex_weight=self._vertex_weight,
             mask=mask_vec,
             label_matrix=self._label_matrix,
             label_meta=self._label_meta,
@@ -896,6 +927,7 @@ class SuperGraph(Graph):
         *,
         vertex_map: np.ndarray,
         num_original_vertices: int,
+        vertex_weight: np.ndarray,
         mask: Optional[Vector] = None,
         label_matrix: Optional[Matrix] = None,
         label_meta: Optional[Dict[int, Tuple[str, str]]] = None,
@@ -907,6 +939,7 @@ class SuperGraph(Graph):
             num_vertices=num_vertices,
             scenario_id=scenario_id,
             vertices=None,
+            vertex_weight=vertex_weight,
             mask=mask,
             label_matrix=label_matrix,
             label_meta=label_meta,
