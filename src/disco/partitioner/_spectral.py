@@ -9,14 +9,15 @@ partitions while:
 
 Algorithm
 ---------
-1. Enumerate node instances via :func:`_iter_node_instances` (one instance =
-   all vertices sharing the same node-type + distinct-label combination).
-2. Build a *SuperGraph* where each node instance is one supervertex, using
-   :meth:`Graph._build_supergraph`.  Supervertex weights equal the summed
-   ``vertex_weight`` of constituent vertices.
-3. Build a symmetric affinity matrix from the SuperGraph layers
-   (sum of ``A + Aᵀ`` across all layers) via
-   ``graphblas.io.to_scipy_sparse``.
+1. Build a SuperGraph via :meth:`Graph.compress` using the union of all
+   ``same_node`` label types from the model's node types.  Vertices sharing
+   a same_node label value are merged into one supervertex, enforcing
+   co-location constraints.
+2. Enumerate node instances via :func:`_iter_node_instances` on the
+   SuperGraph (one instance = all supervertices sharing the same node-type +
+   distinct-label combination).
+3. Project supervertex-level affinity and weights to the node-instance level
+   using a scipy sparse projection matrix P of shape (n_instances × n_sv).
 4. Recursively split connected components using
    ``sklearn.cluster.SpectralClustering`` until every cluster weight ≤
    ``target_weight = total_weight / n_partitions + 2 * max_weight``.
@@ -31,6 +32,7 @@ from __future__ import annotations
 import heapq
 from typing import List, Tuple
 
+import graphblas as gb
 import numpy as np
 import scipy.sparse
 import scipy.sparse.csgraph
@@ -39,7 +41,6 @@ from graphblas import io as gb_io
 
 from disco.helpers import vstack_rows_from_coo
 from disco.graph import Graph
-from disco.graph.core import SuperGraph
 from disco.model import Model
 from disco.partitioning import NodeInstanceSpec, Partitioning
 
@@ -84,6 +85,22 @@ class SpectralClusteringPartitioner:
                         f"not found in graph.label_type_vectors"
                     )
 
+        self._combined_same_node: List[str] = sorted({
+            lt
+            for nts in self._spec.node_types.values()
+            for lt in nts.same_node
+        })
+        if not self._combined_same_node:
+            raise ValueError(
+                "SpectralClusteringPartitioner requires at least one node type to "
+                "specify 'same-node' label types."
+            )
+        for lt in self._combined_same_node:
+            if lt not in self._graph.label_indices_by_type:
+                raise KeyError(
+                    f"Label type {lt!r} (same_node) not found in graph labels"
+                )
+
     # ------------------------------------------------------------------ #
     # Public interface
     # ------------------------------------------------------------------ #
@@ -98,7 +115,12 @@ class SpectralClusteringPartitioner:
         if target_partition_count < 1:
             raise ValueError("target_partition_count must be >= 1")
 
-        instances = list(_iter_node_instances(self._graph, self._model))
+        # ---- Step 1: SuperGraph via public compress() ----
+        super_graph = self._graph.compress(self._combined_same_node)
+        n_sv = super_graph.num_vertices
+
+        # ---- Step 2: enumerate node instances from SuperGraph ----
+        instances = list(_iter_node_instances(super_graph, self._model))
 
         if not instances:
             raise ValueError(
@@ -108,18 +130,36 @@ class SpectralClusteringPartitioner:
 
         n_instances = len(instances)
 
-        # ---- Step 1: build SuperGraph (one supervertex per node instance) ----
-        vertex_map = np.empty(self._graph.num_vertices, dtype=np.int64)
-        for sv_idx, (_, _, _, vertex_indices) in enumerate(instances):
-            vertex_map[vertex_indices] = sv_idx
+        # ---- Step 3: project supervertex affinity and weights to instance level ----
+        # Extract True-valued sv indices from each instance's assignment_vector.
+        # (to_coo() on a BOOL vector includes all structural entries (True and False);
+        # select("==", True) restricts to only the True entries.)
+        inst_sv_indices = [
+            assignment_vector.select("==", True).to_coo()[0].astype(np.int64)
+            for _, _, assignment_vector, _ in instances
+        ]
 
-        super_graph = self._graph._build_supergraph(vertex_map, n_instances)
+        sv_to_inst = np.empty(n_sv, dtype=np.int64)
+        for inst_idx, sv_indices in enumerate(inst_sv_indices):
+            sv_to_inst[sv_indices] = inst_idx
 
-        # ---- Step 2: affinity matrix ----
-        affinity = self._extract_affinity(super_graph)
-        W = super_graph.vertex_weight  # shape (n_instances,)
+        P = scipy.sparse.csr_array(
+            (
+                np.ones(n_sv, dtype=np.float64),
+                (sv_to_inst, np.arange(n_sv, dtype=np.int64)),
+            ),
+            shape=(n_instances, n_sv),
+        )
 
-        # ---- Step 3: cluster + group ----
+        affinity_sv = self._extract_affinity(super_graph)
+        affinity = P @ affinity_sv @ P.T
+
+        W = np.array([
+            float(super_graph.vertex_weight[sv_indices].sum())
+            for sv_indices in inst_sv_indices
+        ])
+
+        # ---- Step 4: cluster + group ----
         if n_instances == 1 or affinity.nnz == 0:
             # Trivial: assign all instances to partition 0.
             partition_assignment = np.zeros(n_instances, dtype=np.int64)
@@ -129,15 +169,15 @@ class SpectralClusteringPartitioner:
             grouped = self._group_clusters(W, clusters, target_partition_count)
 
             partition_assignment = np.empty(n_instances, dtype=np.int64)
-            for part_idx, (_, sv_indices) in enumerate(grouped):
-                partition_assignment[sv_indices] = part_idx
+            for part_idx, (_, inst_indices) in enumerate(grouped):
+                partition_assignment[inst_indices] = part_idx
 
-        # ---- Step 4: build Partitioning ----
+        # ---- Step 5: build Partitioning ----
         node_specs: List[NodeInstanceSpec] = []
         row_vectors = []
 
-        for sv_idx, (node_type, label_values, assignment_vector, _) in enumerate(instances):
-            part_idx = int(partition_assignment[sv_idx])
+        for inst_idx, (node_type, label_values, _, _) in enumerate(instances):
+            part_idx = int(partition_assignment[inst_idx])
             node_name = "-".join([f"p{part_idx}", node_type] + label_values)
             node_specs.append(
                 NodeInstanceSpec(
@@ -146,7 +186,15 @@ class SpectralClusteringPartitioner:
                     node_type=node_type,
                 )
             )
-            row_vectors.append(assignment_vector)
+            orig_indices = super_graph.decompress(inst_sv_indices[inst_idx])
+            row_vectors.append(
+                gb.Vector.from_coo(
+                    orig_indices,
+                    np.ones(len(orig_indices), dtype=bool),
+                    size=self._graph.num_vertices,
+                    dtype=gb.dtypes.BOOL,
+                )
+            )
 
         incidence = vstack_rows_from_coo(row_vectors, ncols=self._graph.num_vertices)
 
@@ -162,7 +210,7 @@ class SpectralClusteringPartitioner:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _extract_affinity(super_graph: SuperGraph) -> scipy.sparse.csr_array:
+    def _extract_affinity(super_graph: Graph) -> scipy.sparse.csr_array:
         """
         Build a symmetric affinity matrix from the SuperGraph layers.
 

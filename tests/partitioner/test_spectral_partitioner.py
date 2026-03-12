@@ -4,7 +4,9 @@ Tests for SpectralClusteringPartitioner.
 
 Graph topology used in most tests
 ----------------------------------
-8 vertices, 2 node-types (A, B), 2 regions (north, south):
+8 vertices, 2 node-types (A, B), 2 regions (north, south).
+Each node type uses its own region label type to avoid cross-type merging
+when compress() is called:
 
   node instance  | vertices | vertex_weight
   A-north        | 0, 1     | 1.0, 1.0
@@ -12,14 +14,19 @@ Graph topology used in most tests
   B-north        | 4, 5     | 1.0, 1.0
   B-south        | 6, 7     | 1.0, 1.0
 
-Edge layer 0 (directed):
-  0→1, 1→0 treated as undirected inside A-north
-  The heavy_graph variant adds strong edges between A-north↔A-south and
-  weak edges between B-north↔B-south so the SCP can split them.
+Label columns:
+  0: (NODE_TYPE, "A")
+  1: (NODE_TYPE, "B")
+  2: ("region-A", "north")   -- only A vertices carry region-A
+  3: ("region-A", "south")
+  4: ("region-B", "north")   -- only B vertices carry region-B
+  5: ("region-B", "south")
+
+compress(["region-A", "region-B"]) produces 4 non-overlapping supervertices.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -37,6 +44,7 @@ from disco.partitioner import SpectralClusteringPartitioner, NODE_TYPE
 @dataclass(frozen=True, slots=True)
 class NodeTypeSpecStub:
     distinct_nodes: List[str]
+    same_node: List[str]
     self_relations: List[Tuple[str, str]]
 
 
@@ -55,16 +63,25 @@ class ModelStub:
 # Helpers
 # --------------------------------------------------------------------------- #
 
-def _make_model(distinct_nodes: List[str] | None = None, simprocs: List[str] | None = None) -> ModelStub:
-    """Model with node types A and B, each using the given distinct_nodes."""
-    dn: List[str] = distinct_nodes if distinct_nodes is not None else ["region"]
+def _make_model(
+    simprocs: List[str] | None = None,
+    dn_a: List[str] | None = None,
+    sn_a: List[str] | None = None,
+    dn_b: List[str] | None = None,
+    sn_b: List[str] | None = None,
+) -> ModelStub:
+    """Model with node types A and B, each using per-type region label types."""
     sp: List[str] = simprocs if simprocs is not None else []
+    dn_a = dn_a if dn_a is not None else ["region-A"]
+    sn_a = sn_a if sn_a is not None else ["region-A"]
+    dn_b = dn_b if dn_b is not None else ["region-B"]
+    sn_b = sn_b if sn_b is not None else ["region-B"]
     return ModelStub(
         spec=ModelSpecStub(
             simprocs=sp,
             node_types={
-                "A": NodeTypeSpecStub(distinct_nodes=dn, self_relations=[]),
-                "B": NodeTypeSpecStub(distinct_nodes=dn, self_relations=[]),
+                "A": NodeTypeSpecStub(distinct_nodes=dn_a, same_node=sn_a, self_relations=[]),
+                "B": NodeTypeSpecStub(distinct_nodes=dn_b, same_node=sn_b, self_relations=[]),
             },
         )
     )
@@ -88,7 +105,6 @@ def _make_labeled_graph(
     )
     layers: Tuple[gb.Matrix, ...] = tuple()
     if edge_layers:
-        from disco.graph import Graph as _G
         # Build layers sorted by index
         max_layer = max(edge_layers.keys())
         layers = tuple(
@@ -116,32 +132,34 @@ def _make_labeled_graph(
 
 def _four_instance_graph(edge_layers: Dict | None = None, vertex_weight: np.ndarray | None = None) -> Graph:
     """
-    8 vertices:
-      0,1: A-north   label ids: 0=node-type/A, 1=node-type/B, 2=region/north, 3=region/south
-      2,3: A-south
-      4,5: B-north
-      6,7: B-south
+    8 vertices with per-node-type region label types:
+      0,1: A-north   label ids: 0=node-type/A, 2=region-A/north
+      2,3: A-south   label ids: 0=node-type/A, 3=region-A/south
+      4,5: B-north   label ids: 1=node-type/B, 4=region-B/north
+      6,7: B-south   label ids: 1=node-type/B, 5=region-B/south
     """
     meta: Dict[int, Tuple[str, str]] = {
         0: (NODE_TYPE, "A"),
         1: (NODE_TYPE, "B"),
-        2: ("region", "north"),
-        3: ("region", "south"),
+        2: ("region-A", "north"),
+        3: ("region-A", "south"),
+        4: ("region-B", "north"),
+        5: ("region-B", "south"),
     }
     rows = []
     cols = []
-    # A-north: vertices 0,1  → node-type/A (col 0) + region/north (col 2)
+    # A-north: vertices 0,1  → node-type/A (col 0) + region-A/north (col 2)
     for v in (0, 1):
         rows += [v, v]; cols += [0, 2]
-    # A-south: vertices 2,3  → node-type/A (col 0) + region/south (col 3)
+    # A-south: vertices 2,3  → node-type/A (col 0) + region-A/south (col 3)
     for v in (2, 3):
         rows += [v, v]; cols += [0, 3]
-    # B-north: vertices 4,5  → node-type/B (col 1) + region/north (col 2)
+    # B-north: vertices 4,5  → node-type/B (col 1) + region-B/north (col 4)
     for v in (4, 5):
-        rows += [v, v]; cols += [1, 2]
-    # B-south: vertices 6,7  → node-type/B (col 1) + region/south (col 3)
+        rows += [v, v]; cols += [1, 4]
+    # B-south: vertices 6,7  → node-type/B (col 1) + region-B/south (col 5)
     for v in (6, 7):
-        rows += [v, v]; cols += [1, 3]
+        rows += [v, v]; cols += [1, 5]
 
     return _make_labeled_graph(
         num_vertices=8,
@@ -321,7 +339,11 @@ def test_scp_single_instance_always_partition_zero() -> None:
         spec=ModelSpecStub(
             simprocs=[],
             node_types={
-                "A": NodeTypeSpecStub(distinct_nodes=[], self_relations=[]),
+                "A": NodeTypeSpecStub(
+                    distinct_nodes=[],
+                    same_node=[NODE_TYPE],
+                    self_relations=[],
+                ),
             },
         )
     )

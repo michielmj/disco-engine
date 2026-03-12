@@ -2439,6 +2439,11 @@ Validation rules:
 - `node-data-table`: scenario table name containing node-instance data for this node type
 - `distinct-nodes`: optional list of vertex label attributes used by partitioning to split vertices into distinct
   node instances
+- `same-node`: optional list of vertex label attributes whose shared values indicate that the carrying vertices
+  **must be assigned to the same node instance**.  Vertices sharing any `same-node` label value are merged into
+  one supervertex before partitioning, enforcing co-location constraints.  Multiple supervertices may still belong
+  to the same node instance (a `same-node` label only constrains which vertices may *not* be split, not which
+  ones *must* be joined).
 - `self-relations`: optional list of `(higher_simproc_name, lower_simproc_name)` tuples representing relations from
   a higher-level simproc to a lower-level simproc *on the same node instance*; ordering constraint:
   `order(higher) < order(lower)`
@@ -4641,16 +4646,22 @@ minimising cross-partition event traffic.
 - `graph.label_matrix` is not `None`.
 - `NODE_TYPE` label type is present in the graph.
 - Every `distinct_nodes` label type referenced by the model is present.
+- At least one node type specifies a non-empty `same_node` list; the union of
+  all `same_node` label types across all node types must be present in the graph.
 
 **`partition(target_partition_count)` algorithm:**
 
-1. **Enumerate node instances** via `_iter_node_instances()` — one instance
-   per `(node_type, distinct-label-combo)` combination.
-2. **Build `vertex_map`** mapping each original vertex index to its node
-   instance index (one supervertex per instance).
-3. **Call `graph._build_supergraph(vertex_map, n_instances)`** to obtain a
-   `SuperGraph` where `vertex_weight[i]` = summed `vertex_weight` of all
-   original vertices in instance `i`.
+1. **Compress the graph** via `graph.compress(combined_same_node)` where
+   `combined_same_node` is the sorted union of `same_node` label types from
+   all `NodeTypeSpec` entries.  Vertices sharing any `same_node` label value
+   are merged into one supervertex, enforcing co-location constraints.
+2. **Enumerate node instances** via `_iter_node_instances(super_graph, model)` —
+   one instance per `(node_type, distinct-label-combo)` combination in
+   supervertex space.
+3. **Project to node-instance level** using a scipy sparse matrix
+   `P: (n_instances × n_sv)` where `P[inst, sv] = 1` if supervertex `sv`
+   belongs to instance `inst`.  Affinity: `P @ affinity_sv @ Pᵀ`.  Weight:
+   `W[inst] = sum(super_graph.vertex_weight[sv_indices])`.
 4. **Build a symmetric affinity matrix** from the SuperGraph layers:
    for each layer `A`, add `A + Aᵀ`; convert via
    `graphblas.io.to_scipy_sparse(layer, format="csr")`.
@@ -4663,8 +4674,9 @@ minimising cross-partition event traffic.
 7. **Greedily merge** clusters into `target_partition_count` groups
    (`_group_clusters`), always combining the lightest group with the heaviest
    remaining unmatched cluster to balance total partition weight.
-8. **Build `NodeInstanceSpec`** objects and the incidence matrix; return
-   `Partitioning.from_node_instance_spec(...)`.
+8. **Build `NodeInstanceSpec`** objects and the incidence matrix using
+   `super_graph.decompress(sv_indices)` to recover original vertex indices;
+   return `Partitioning.from_node_instance_spec(...)`.
 
 Node name format: `"p{part_idx}-{node_type}-{label_value_1}-..."`.
 
