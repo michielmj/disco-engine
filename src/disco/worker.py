@@ -969,7 +969,6 @@ class Worker:
                     router=self._router,
                     dlogger=dlogger,
                     seed_sequence=seed_sequence,
-                    graph=graph_view,
                     data=graph_data,
                 )
                 rt.initialize(**params)

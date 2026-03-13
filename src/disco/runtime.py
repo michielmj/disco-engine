@@ -4,7 +4,6 @@ from data_logger import DataLogger
 from numpy.random import SeedSequence, Generator as NpGenerator, default_rng
 
 from .exceptions import DiscoRuntimeError
-from .graph import Graph
 from .graph_data import GraphData
 from .partitioning import NodeInstanceSpec, Partitioning
 from .simproc import SimProc
@@ -37,7 +36,7 @@ from tools.mp_logging import getLogger
 from .envelopes import EventEnvelope, PromiseEnvelope
 from .model import Model
 from .router import Router
-from .node import NodeStatus, NodeRuntimeLike
+from .node import NodeStatus, NodeRuntimeLike, Node
 
 logger = getLogger(__name__)
 
@@ -69,7 +68,6 @@ class NodeRuntime(NodeRuntimeLike):
             router: Router,
             dlogger: DataLogger,
             seed_sequence: SeedSequence,
-            graph: Graph,
             data: GraphData,
     ) -> None:
         """
@@ -89,8 +87,6 @@ class NodeRuntime(NodeRuntimeLike):
             Data logger for gathering statistics.
         seed_sequence:
             SeedSequence for Monte Carlo simulations.
-        graph:
-            Graph object with node mask.
         data:
             GraphData object exposing the model data.
         """
@@ -98,11 +94,10 @@ class NodeRuntime(NodeRuntimeLike):
         self._name = spec.node_name
         self._router = router
         self._dlogger = dlogger
-        self._graph = graph
         self._data = data
 
         self._rng = default_rng(seed_sequence)
-        self._node = model.node_factory(spec.node_type, runtime=self)
+        self._node = model.node_factory(spec.node_type, self)
 
         self._simprocs = tuple(SimProc(
             name=s,
@@ -121,7 +116,7 @@ class NodeRuntime(NodeRuntimeLike):
         self._active_simproc: SimProc | None = None
         self._simproc_by_name = {s: i for i, s in enumerate(model.spec.simprocs)}
 
-        logger.info("Node created for node=%s repid=%s", self._name, self._repid)
+        logger.info("Runtime created for node=%s repid=%s", self._name, self._repid)
 
     # ------------------------------------------------------------------ #
     # Properties
@@ -134,6 +129,10 @@ class NodeRuntime(NodeRuntimeLike):
     @property
     def repid(self) -> str:
         return self._repid
+
+    @property
+    def node(self) -> Node:
+        return self._node
 
     # ------------------------------------------------------------------ #
     # Node API (used by Node, implements NodeRuntimeLike)
@@ -159,10 +158,6 @@ class NodeRuntime(NodeRuntimeLike):
             return None
         else:
             return self._active_simproc.number
-
-    @property
-    def graph(self) -> Graph:
-        return self._graph
 
     @property
     def data(self) -> GraphData:
@@ -290,10 +285,10 @@ class NodeRuntime(NodeRuntimeLike):
     # ------------------------------------------------------------------ #
     # Initialization / Runner hook
     # ------------------------------------------------------------------ #
-    def initialize(self, **kwargs) -> None:
-        self._node.initialize(**kwargs)
+    def initialize(self, *args, **kwargs) -> None:
+        self._node.__init__(*args, **kwargs)  # type: ignore[misc]
         self._status = NodeStatus.INITIALIZED
-        logger.debug("NodeRuntime[%s] initialized", self._name)
+        logger.debug("Node[%s] initialized", self._name)
 
     def runner(self, duration: float) -> Generator[None, None, None]:
         """

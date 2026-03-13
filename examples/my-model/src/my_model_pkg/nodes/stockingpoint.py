@@ -29,7 +29,7 @@ class StockingPoint(Node):
 
     """
 
-    def initialize(self, **init_args):
+    def __init__(self, **init_args):
 
         data = self.data.vertex_data(columns=['ip_target', 'dem_dist', 'dem_params'])
         self.ixs = data.index.array

@@ -142,7 +142,6 @@ class CapturingNodeRuntime:
         router: object,
         dlogger: object,
         seed_sequence: SeedSequence,
-        graph: object,
         data: object,
     ) -> None:
         self.repid = repid
@@ -152,7 +151,6 @@ class CapturingNodeRuntime:
         self.router = router
         self.dlogger = dlogger
         self.seed_sequence = seed_sequence
-        self.graph = graph
         self.data = data
 
         self.initialize_calls: List[Dict[str, Any]] = []

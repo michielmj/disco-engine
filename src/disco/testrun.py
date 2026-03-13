@@ -172,7 +172,6 @@ class TestRun:
                 router=self._router,
                 dlogger=self._dlogger,
                 seed_sequence=node_ss[i],  # SeedSequence per node (deterministic assignment)
-                graph=graph_view,
                 data=graph_data,
             )
 

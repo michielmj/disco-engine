@@ -3,7 +3,6 @@ try:
 except ModuleNotFoundError:
     __version__ = "0.0.0"
 
-from .node import Node
 
-__all__ = ["__version__", "Node"]
+__all__ = ["__version__"]
 
