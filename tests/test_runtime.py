@@ -87,21 +87,21 @@ class DummyModel:
 
     def node_factory(self, node_type: str, runtime) -> Node:
         # node_type is ignored in this dummy; tests validate wiring through behavior.
-        return self._node_cls(runtime=runtime)
+        node = object.__new__(self._node_cls)
+        node.__runtime__ = runtime
+
+        return node
 
 
 class RecordingNode(Node):
     """A Node used for integration tests; records handler context and can emit outputs."""
 
-    def __init__(self, runtime):
-        super().__init__(runtime=runtime)
-        self.init_kwargs: Dict[str, Any] | None = None
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.init_kwargs: Dict[str, Any] = dict(kwargs)
         self.calls: List[Tuple[str, float | None, str | None]] = []
         self.emit_event: Tuple[str, str, float, Any, Dict[str, str] | None] | None = None
         self.set_wakeup: Tuple[float, bool] | None = (1.0, False)  # default: keep simproc alive
-
-    def initialize(self, **kwargs) -> None:
-        self.init_kwargs = dict(kwargs)
 
     def on_events(self, simproc: str, events: Iterable[Event]) -> None:
         # Record runtime context visible to model code.
@@ -155,12 +155,11 @@ def make_runtime(
         partitioning=part,  # type: ignore[arg-type]
         router=router,  # type: ignore[arg-type]
         dlogger=DummyDataLogger(),  # type: ignore[arg-type]
-        seed_sequence=123,
-        graph=graph,  # type: ignore[arg-type]
+        seed_sequence=123,  # type: ignore[arg-type]
         data=data,    # type: ignore[arg-type]
     )
 
-    node = rt._node  # type: ignore[attr-defined]
+    node = rt.node  # type: ignore[attr-defined]
     assert isinstance(node, RecordingNode)
     return rt, router, node
 
@@ -191,7 +190,7 @@ def test_node_graph_is_property_accessor() -> None:
     rt, _router, node = make_runtime(simprocs=["L0"])
     # Access graph as a property (no parentheses). If the @property decorator
     # is missing, this will return a bound method instead of the graph object.
-    g = node.graph
+    g = node.data.graph
     assert isinstance(g, DummyGraph)
 
 
@@ -210,6 +209,7 @@ def test_send_event_requires_active_status() -> None:
 def test_epoch0_invoked_for_all_simprocs_and_context_is_set() -> None:
     # No predecessors; Node schedules a wakeup to avoid "no more events" errors in SimProc.
     rt, _router, node = make_runtime(simprocs=["H", "L"])
+    rt.initialize()
 
     # Only run long enough to execute epoch 0 for both simprocs.
     drain_runner(rt, duration=0.5)
@@ -231,6 +231,7 @@ def test_node_outputs_forwarded_to_active_simproc_and_promises_sent_before_event
     # One simproc with a successor so that promises/events are emitted.
     succs = {("node", "L0"): {("succ", "L0")}}
     rt, router, node = make_runtime(simprocs=["L0"], succs=succs)
+    rt.initialize()
 
     # Emit an event at epoch 1 during the epoch-0 callback.
     node.emit_event = ("succ", "L0", 1.0, b"payload", None)

@@ -13,6 +13,7 @@ import yaml
 
 from disco.database import DbHandle
 from disco.exceptions import DiscoRuntimeError
+from disco.node import Node, NodeRuntimeLike
 from .orm import ModelOrmError, OrmBundle, build_orm_bundle
 from .spec import ModelSpec
 
@@ -31,24 +32,25 @@ class Model:
     """
 
     spec: ModelSpec
-    node_classes: Dict[str, type]
+    node_classes: Dict[str, type[Node]]
     orm: OrmBundle
 
-    def node_class(self, node_type: str) -> type:
+    def node_class(self, node_type: str) -> type[Node]:
         try:
             return self.node_classes[node_type]
         except KeyError as e:
             raise KeyError(f"Unknown node type '{node_type}'. Known: {sorted(self.node_classes)}") from e
 
-    def node_factory(self, node_type: str, *args, **kwargs):
+    def node_factory(self, node_type: str, runtime: NodeRuntimeLike) -> Node:
         """
-        Return a constructed Node instance (not initialized with runtime resources).
+        Return a instantiated Node instance that is not yet initialized.
 
         NodeController will call node.initialize(experiment=..., replication=..., resources=..., params=...).
         """
         cls = self.node_class(node_type)
         try:
-            node = cls(*args, **kwargs)  # must be a lightweight, no-arg ctor by convention
+            node = object.__new__(cls)  # must be a lightweight, no-arg ctor by convention
+            node.__runtime__ = runtime
         except TypeError as e:
             raise ModelLoadError(
                 f"Failed to construct node type '{node_type}' from class "
@@ -137,7 +139,7 @@ def _import_node_class(ref: str) -> type:
     return cls
 
 
-def _validate_node_subclass(node_cls: type) -> None:
+def _validate_node_subclass(node_cls: type) -> type[Node]:
     """
     Validate class derives from disco.node.Node.
     (Import locally to avoid circular import.)
@@ -149,13 +151,14 @@ def _validate_node_subclass(node_cls: type) -> None:
             f"Node class '{node_cls.__module__}.{node_cls.__qualname__}' must subclass disco.node.Node"
         )
 
+    return node_cls
 
-def _build_node_registry(spec: ModelSpec) -> Dict[str, type]:
-    out: Dict[str, type] = {}
+
+def _build_node_registry(spec: ModelSpec) -> Dict[str, type[Node]]:
+    out: Dict[str, type[Node]] = {}
     for node_type_name, nts in spec.node_types.items():
         node_cls = _import_node_class(nts.python_class)
-        _validate_node_subclass(node_cls)
-        out[node_type_name] = node_cls
+        out[node_type_name] = _validate_node_subclass(node_cls)
     return out
 
 

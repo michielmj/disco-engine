@@ -22,6 +22,9 @@ except Exception:  # pragma: no cover
     im = None  # type: ignore
 
 
+class FakeRuntime:
+    pass
+
 def _engine():
     # In-memory SQLite is sufficient for install + reflection.
     return sa.create_engine("sqlite+pysqlite:///:memory:")
@@ -159,7 +162,8 @@ def test_load_model_from_path_success(tmp_path):
     assert m.spec.simproc_edge_data_tables == {"demand": "demand_edges"}
     assert "Warehouse" in m.node_classes
 
-    node = m.node_factory("Warehouse")
+    runtime = FakeRuntime()
+    node = m.node_factory("Warehouse", runtime)
     assert hasattr(node, "initialize")
 
     # ORM bundle is attached and has the expected tables (DDL/metadata side)

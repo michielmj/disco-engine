@@ -44,7 +44,7 @@ These are the basic properties of simprocs:
 
 import dataclasses
 from heapq import heappush, heappop
-from typing import Any, Dict, Tuple, Callable, Iterable, Set, cast
+from typing import Any, Dict, Tuple, Callable, Iterable, Set
 
 from tools.ctypes import MAX_UINT32
 from tools.mp_logging import getLogger

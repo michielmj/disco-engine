@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, Any, Dict, Protocol
+from typing import Iterable, Any, Dict, Protocol, TYPE_CHECKING
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum
@@ -8,8 +8,9 @@ from numpy.random import Generator
 
 from data_logger import DataLogger
 
-from .graph import Graph
-from .graph_data import GraphData
+if TYPE_CHECKING:
+    from .graph import Graph
+    from .graph_data import GraphData
 
 
 class NodeStatus(IntEnum):
@@ -39,10 +40,6 @@ class NodeRuntimeLike(Protocol):
 
     @property
     def rng(self) -> Generator:
-        raise NotImplementedError
-
-    @property
-    def graph(self) -> Graph:
         raise NotImplementedError
 
     @property
@@ -80,13 +77,10 @@ class Node(ABC):
     Implementation of a Node.
     """
 
-    def __init__(self,
-                 runtime: NodeRuntimeLike,
-                 ):
-        self._runtime = runtime
+    __runtime__: NodeRuntimeLike
 
-    @abstractmethod
-    def initialize(self, **kwargs) -> None: ...
+    def __init__(self, **kwargs):
+        pass
 
     @abstractmethod
     def on_events(self, simproc: str, events: Iterable[Event]) -> None: ...
@@ -99,7 +93,7 @@ class Node(ABC):
             data: Any,
             headers: dict[str, str] | None = None
     ):
-        self._runtime.send_event(
+        self.__runtime__.send_event(
             target_node=target_node,
             target_simproc=target_simproc,
             epoch=epoch,
@@ -109,34 +103,30 @@ class Node(ABC):
 
     @property
     def name(self):
-        return self._runtime.name
+        return self.__runtime__.name
 
     @property
     def epoch(self):
-        return self._runtime.epoch
+        return self.__runtime__.epoch
 
     @property
     def active_simproc_name(self):
-        return self._runtime.active_simproc_name
+        return self.__runtime__.active_simproc_name
 
     @property
     def rng(self) -> Generator:
-        return self._runtime.rng
-
-    @property
-    def graph(self) -> Graph:
-        return self._runtime.graph
+        return self.__runtime__.rng
 
     @property
     def data(self) -> GraphData:
-        return self._runtime.data
+        return self.__runtime__.data
 
     @property
     def dlogger(self) -> DataLogger:
-        return self._runtime.dlogger
+        return self.__runtime__.dlogger
 
     def wakeup(self, epoch, hard=False):
-        self._runtime.wakeup(epoch=epoch, hard=hard)
+        self.__runtime__.wakeup(epoch=epoch, hard=hard)
 
     def advance_promise(self, target_node: str, target_simproc: str, epoch: float):
-        self._runtime.advance_promise(target_node=target_node, target_simproc=target_simproc, epoch=epoch)
+        self.__runtime__.advance_promise(target_node=target_node, target_simproc=target_simproc, epoch=epoch)
