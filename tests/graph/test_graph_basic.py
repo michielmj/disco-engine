@@ -113,16 +113,16 @@ def test_graph_labels_from_set_labels() -> None:
     graph.set_labels(label_matrix, label_meta)
 
     assert graph.num_labels == 3
-    assert graph.label_matrix is not None
-    assert graph.label_matrix.nrows == num_vertices
-    assert graph.label_matrix.ncols == 3
+    assert graph.label_matrix_masked is not None
+    assert graph.label_matrix_masked.nrows == num_vertices
+    assert graph.label_matrix_masked.ncols == 3
 
     # Vertices that have label id 0: vertices 0 and 3
-    vertices0 = graph.get_vertices_for_label(0)
+    vertices0 = graph.get_vertices_for_label_masked(0)
     assert set(vertices0.tolist()) == {0, 3}
 
     # Per-type helpers
-    idxs_type1, sub_type1 = graph.labels_for_type("type1")
+    idxs_type1, sub_type1 = graph.labels_for_type_masked("type1", keep_label_indices=False)
     assert set(idxs_type1.tolist()) == {0, 2}
     assert sub_type1.nrows == num_vertices
     assert sub_type1.ncols == 2
@@ -139,7 +139,7 @@ def test_graph_labels_from_set_labels() -> None:
 
     # Error path: unknown label_type and index
     with pytest.raises(KeyError):
-        graph.labels_for_type("does-not-exist")
+        graph.labels_for_type_masked("does-not-exist")
     with pytest.raises(IndexError):
         graph.label_info(10)
 
@@ -162,9 +162,9 @@ def test_add_labels_basic_and_metadata() -> None:
     )
 
     assert graph.num_labels == 2
-    assert graph.label_matrix is not None
-    assert graph.label_matrix.nrows == num_vertices
-    assert graph.label_matrix.ncols == 2
+    assert graph.label_matrix_masked is not None
+    assert graph.label_matrix_masked.nrows == num_vertices
+    assert graph.label_matrix_masked.ncols == 2
 
     # Metadata mappings
     assert graph.label_info(0) == ("kind", "A")
@@ -179,13 +179,13 @@ def test_add_labels_basic_and_metadata() -> None:
     assert index_to_value[1] == "B"
 
     # Vertex sets
-    verts_A = graph.get_vertices_for_label(0)
-    verts_B = graph.get_vertices_for_label(1)
+    verts_A = graph.get_vertices_for_label_masked(0)
+    verts_B = graph.get_vertices_for_label_masked(1)
     assert set(verts_A.tolist()) == {0, 2}
     assert set(verts_B.tolist()) == {3}
 
     # Per-type labels_for_type
-    idxs_kind, sub_kind = graph.labels_for_type("kind")
+    idxs_kind, sub_kind = graph.labels_for_type_masked("kind")
     assert set(idxs_kind.tolist()) == {0, 1}
     assert sub_kind.nrows == num_vertices
     assert sub_kind.ncols == 2
@@ -226,11 +226,11 @@ def test_add_labels_union_and_multiple_types() -> None:
     assert graph.num_labels == 4
 
     # Union semantics for label "kind:A" (index 0)
-    verts_A = graph.get_vertices_for_label(0)
+    verts_A = graph.get_vertices_for_label_masked(0)
     assert set(verts_A.tolist()) == {0, 2, 4}
 
     # "kind:B" (index 1) unchanged
-    verts_B = graph.get_vertices_for_label(1)
+    verts_B = graph.get_vertices_for_label_masked(1)
     assert set(verts_B.tolist()) == {3}
 
     # Region labels should exist and be mapped
@@ -244,13 +244,13 @@ def test_add_labels_union_and_multiple_types() -> None:
     idx_S = value_to_index_region["S"]
     assert {idx_N, idx_S} == {2, 3}
 
-    verts_N = graph.get_vertices_for_label(idx_N)
-    verts_S = graph.get_vertices_for_label(idx_S)
+    verts_N = graph.get_vertices_for_label_masked(idx_N)
+    verts_S = graph.get_vertices_for_label_masked(idx_S)
     assert set(verts_N.tolist()) == {0, 2}
     assert set(verts_S.tolist()) == {1}
 
     # labels_for_type for "region"
-    idxs_region, sub_region = graph.labels_for_type("region")
+    idxs_region, sub_region = graph.labels_for_type_masked("region", keep_label_indices=False)
     assert set(idxs_region.tolist()) == {idx_N, idx_S}
     assert sub_region.nrows == num_vertices
     assert sub_region.ncols == 2

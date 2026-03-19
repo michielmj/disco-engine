@@ -7,7 +7,9 @@ Layered graph + scenario subsystem.
 
 Public API (this subpackage):
 
-- Graph                  : core in-memory graph structure (layers, vertices, labels, mask).
+- Graph                  : core in-memory graph structure (layers, vertices, labels, mask, vertex_weight).
+- SuperGraph             : compressed graph produced by Graph.compress(); supervertices carry
+                           summed vertex_weight from their constituent original vertices.
 - GraphMask              : graph mask object.
 - create_graph_schema    : create the graph schema/tables in a database.
 - store_graph            : validate and persist a Graph (scenario + vertices + edges + labels)
@@ -34,7 +36,7 @@ top-level `disco.graph_data` module and are not part of this subpackage.
 
 from __future__ import annotations
 
-from .core import Graph
+from .core import Graph, SuperGraph
 from .schema import create_graph_schema
 from .db import (
     store_graph,
@@ -52,6 +54,7 @@ from .graph_mask import GraphMask
 
 __all__ = [
     "Graph",
+    "SuperGraph",
     "GraphMask",
     "create_graph_schema",
     "store_graph",

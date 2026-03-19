@@ -31,6 +31,7 @@ vertices = Table(
     Column("scenario_id", String, ForeignKey("graph_scenarios.scenario_id"), primary_key=True),
     Column("index", BigInteger, primary_key=True),  # 0..V-1
     Column("key", String, nullable=False),
+    Column("weight", Float, nullable=True),  # vertex compute weight; NULL means 1.0
 )
 
 edges = Table(

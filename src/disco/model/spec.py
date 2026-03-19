@@ -57,6 +57,7 @@ class NodeTypeSpec(BaseModel):
     python_class: str = Field(..., alias="class", min_length=1)
     node_data_table: str = Field(..., alias="node-data-table", min_length=1)
     distinct_nodes: List[str] = Field(default_factory=list, alias="distinct-nodes")
+    same_node: List[str] = Field(default_factory=list, alias="same-node")
     self_relations: List[Tuple[str, str]] = Field(default_factory=list, alias="self-relations")
 
     # noinspection PyNestedDecorators
@@ -97,6 +98,19 @@ class NodeTypeSpec(BaseModel):
                 raise ValueError(f"distinct-nodes contains duplicate attribute '{s}'")
             seen.add(s)
             cleaned.append(s)
+        return cleaned
+
+    # noinspection PyNestedDecorators
+    @field_validator("same_node", mode="before")
+    @classmethod
+    def _validate_same_node(cls, v: object) -> List[str]:
+        if not isinstance(v, list):
+            raise ValueError("same-node must be a list")
+        cleaned = [str(s).strip() for s in v]
+        if any(s == "" for s in cleaned):
+            raise ValueError("same-node entries must be non-empty strings")
+        if len(cleaned) != len(set(cleaned)):
+            raise ValueError("same-node entries must be unique")
         return cleaned
 
     # noinspection PyNestedDecorators

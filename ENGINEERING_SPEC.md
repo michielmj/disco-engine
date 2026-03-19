@@ -1689,6 +1689,13 @@ Key fields (via `__slots__`):
     is raised.
   - The constructor then calls `validate(check_cycles=False)`.
 
+- `Graph.__init__(layers, num_vertices, scenario_id, *, vertices=None, vertex_weight=None)`
+
+  - `vertex_weight` — optional `np.ndarray` of shape `(num_vertices,)`.
+    When `None`, defaults to an all-ones `float64` array (each vertex has
+    unit compute weight).  If provided, the array is cast to `float64`.
+    A `ValueError` is raised if the length does not equal `num_vertices`.
+
 - `Graph.validate(check_cycles: bool = True)`
 
   - Checks that `scenario_id` is non‑empty; raises `ValueError` otherwise.
@@ -1930,11 +1937,16 @@ structure.
   constituent vertices carries it.  Label metadata (`label_meta`) is shared
   by value.
 
-**`SuperGraph`** is a subclass of `Graph` with two additional attributes:
+**`SuperGraph`** is a subclass of `Graph` with three additional attributes:
 
 - `vertex_map: np.ndarray` — maps each original vertex index to its
   supervertex index.
 - `num_original_vertices: int` — the vertex count of the source graph.
+- `vertex_weight: np.ndarray` — `float64` array of length `num_supervertices`.
+  Each entry is the **sum** of the `vertex_weight` values of all constituent
+  original vertices, computed via `np.bincount(vertex_map, weights=vertex_weight)`.
+  When the source graph uses default all-ones weights the supervertex weight
+  equals the group size (number of merged vertices).
 
 `SuperGraph` does **not** carry vertex keys (`vertices` is always `None`).
 
@@ -2275,14 +2287,18 @@ allow future extensions (e.g. taking values from model edge tables).
 The graph subsystem cleanly separates concerns:
 
 - `Graph` is a DB‑agnostic, python‑graphblas‑based representation of layered
-  directed graphs.  It now carries vertex keys (`_vertices`), labels, and
-  masks in a single self‑contained object.  It requires a non‑empty
-  `scenario_id` and validates structural invariants via `validate()`.
-- `SuperGraph` is a subclass of `Graph` produced by `Graph.compress()`.  It
-  collapses groups of vertices into supervertices based on label structure,
-  compresses adjacency matrices via a projection matrix, propagates labels,
-  and provides `decompress()` to map supervertex-indexed data back to the
-  original vertex space.  It does not carry vertex keys.
+  directed graphs.  It carries vertex keys (`_vertices`), labels, masks, and
+  a `vertex_weight` array (`float64`, defaults to all-ones) in a single
+  self‑contained object.  It requires a non‑empty `scenario_id` and validates
+  structural invariants via `validate()`.
+- `SuperGraph` is a subclass of `Graph` produced by `Graph.compress()` or
+  `Graph._build_supergraph()`.  It collapses groups of vertices into
+  supervertices based on label structure (or an explicit vertex map), compresses
+  adjacency matrices via a projection matrix, propagates labels, and provides
+  `decompress()` to map supervertex-indexed data back to the original vertex
+  space.  It carries a `vertex_weight` array whose entries are the sums of the
+  original vertex weights within each supervertex.  It does not carry vertex
+  keys.
 - `graph.schema` defines the relational schema for scenarios, vertices, edges,
   labels, vertex labels, and vertex masks.
 - `graph.db` handles the full graph lifecycle: `store_graph` is the single
@@ -2423,6 +2439,11 @@ Validation rules:
 - `node-data-table`: scenario table name containing node-instance data for this node type
 - `distinct-nodes`: optional list of vertex label attributes used by partitioning to split vertices into distinct
   node instances
+- `same-node`: optional list of vertex label attributes whose shared values indicate that the carrying vertices
+  **must be assigned to the same node instance**.  Vertices sharing any `same-node` label value are merged into
+  one supervertex before partitioning, enforcing co-location constraints.  Multiple supervertices may still belong
+  to the same node instance (a `same-node` label only constrains which vertices may *not* be split, not which
+  ones *must* be joined).
 - `self-relations`: optional list of `(higher_simproc_name, lower_simproc_name)` tuples representing relations from
   a higher-level simproc to a lower-level simproc *on the same node instance*; ordering constraint:
   `order(higher) < order(lower)`
@@ -4548,6 +4569,156 @@ CLI behavior is tested under `tests/cli/`:
   - `disco-server ...`
 
 The CLI tests mock command handlers to avoid starting real worker processes or connecting to ZooKeeper.
+
+
+## 18. Partitioner subpackage (`disco.partitioner`)
+
+The `disco.partitioner` subpackage assigns graph vertices to simulation-node
+partitions so that compute load is balanced and cross-partition event traffic is
+minimised.
+
+### 18.1 Package layout
+
+```
+src/disco/partitioner/
+    __init__.py        # Re-exports public API
+    _protocol.py       # Partitioner Protocol + NODE_TYPE constant
+    _helpers.py        # _iter_node_instances() shared helper
+    _simple.py         # SimplePartitioner
+    _spectral.py       # SpectralClusteringPartitioner
+```
+
+All public names are importable directly from `disco.partitioner`:
+
+```python
+from disco.partitioner import (
+    NODE_TYPE,
+    Partitioner,
+    SimplePartitioner,
+    SpectralClusteringPartitioner,
+)
+```
+
+### 18.2 `Partitioner` Protocol
+
+```python
+class Partitioner(Protocol):
+    def partition(self, target_partition_count: int) -> Partitioning: ...
+```
+
+Any object that implements `partition(int) → Partitioning` satisfies the
+protocol.  The `target_partition_count` must be ≥ 1; implementations raise
+`ValueError` for values < 1.
+
+### 18.3 `NODE_TYPE` constant
+
+```python
+NODE_TYPE = "node-type"
+```
+
+This is the label-type name used in the graph's label matrix to tag vertex
+node-type memberships.  Both partitioners require this label type to be present
+on the graph.
+
+### 18.4 `SimplePartitioner`
+
+`SimplePartitioner(graph, model)` always produces a **single partition**
+(partition 0) containing all node instances.  It is the default partitioner
+used by `TestRun` when no explicit partitioning is requested.
+
+**Algorithm:**
+1. Enumerate node instances via `_iter_node_instances`.
+2. Assign all instances to partition index 0.
+3. Build `NodeInstanceSpec` objects and the incidence matrix.
+4. Return `Partitioning.from_node_instance_spec(...)`.
+
+Node name format: `"p0-{node_type}-{label_value_1}-{label_value_2}-..."`.
+
+### 18.5 `SpectralClusteringPartitioner`
+
+`SpectralClusteringPartitioner(graph, model)` distributes node instances across
+up to `target_partition_count` partitions, balancing compute weight while
+minimising cross-partition event traffic.
+
+**Dependencies:** `scipy >= 1.13`, `scikit-learn >= 1.5`
+
+**Construction validates:**
+- `graph.label_matrix` is not `None`.
+- `NODE_TYPE` label type is present in the graph.
+- Every `distinct_nodes` label type referenced by the model is present.
+- At least one node type specifies a non-empty `same_node` list; the union of
+  all `same_node` label types across all node types must be present in the graph.
+
+**`partition(target_partition_count)` algorithm:**
+
+1. **Compress the graph** via `graph.compress(combined_same_node)` where
+   `combined_same_node` is the sorted union of `same_node` label types from
+   all `NodeTypeSpec` entries.  Vertices sharing any `same_node` label value
+   are merged into one supervertex, enforcing co-location constraints.
+2. **Enumerate node instances** via `_iter_node_instances(super_graph, model)` —
+   one instance per `(node_type, distinct-label-combo)` combination in
+   supervertex space.
+3. **Project to node-instance level** using a scipy sparse matrix
+   `P: (n_instances × n_sv)` where `P[inst, sv] = 1` if supervertex `sv`
+   belongs to instance `inst`.  Affinity: `P @ affinity_sv @ Pᵀ`.  Weight:
+   `W[inst] = sum(super_graph.vertex_weight[sv_indices])`.
+4. **Build a symmetric affinity matrix** from the SuperGraph layers:
+   for each layer `A`, add `A + Aᵀ`; convert via
+   `graphblas.io.to_scipy_sparse(layer, format="csr")`.
+5. **Short-circuit** if there is only one instance or the affinity matrix is
+   all-zero: assign all instances to partition 0.
+6. **Recursively split** connected components (`_cluster`) until every
+   cluster weight ≤ `target_weight = total_weight / n_partitions + 2 × max_weight`.
+   Splitting uses `sklearn.cluster.SpectralClustering(affinity="precomputed",
+   assign_labels="discretize", random_state=0)`.
+7. **Greedily merge** clusters into `target_partition_count` groups
+   (`_group_clusters`), always combining the lightest group with the heaviest
+   remaining unmatched cluster to balance total partition weight.
+8. **Build `NodeInstanceSpec`** objects and the incidence matrix using
+   `super_graph.decompress(sv_indices)` to recover original vertex indices;
+   return `Partitioning.from_node_instance_spec(...)`.
+
+Node name format: `"p{part_idx}-{node_type}-{label_value_1}-..."`.
+
+### 18.6 `_iter_node_instances` helper
+
+```python
+def _iter_node_instances(
+    graph: Graph,
+    model: Model,
+) -> Iterator[Tuple[str, List[str], gb.Vector, np.ndarray]]
+```
+
+Yields one tuple `(node_type, label_values, assignment_vector, vertex_indices)`
+per node instance, where:
+- `node_type` — the node-type key (matches `model.spec.node_types`).
+- `label_values` — list of label values for each `distinct_nodes` type.
+- `assignment_vector` — GraphBLAS `Vector[INT64]` with `1` at each constituent
+  vertex index (used to build the incidence row for `Partitioning`).
+- `vertex_indices` — `np.ndarray[int64]` of constituent vertex indices.
+
+This helper is used by both `SimplePartitioner` and `SpectralClusteringPartitioner`
+to avoid duplicated label-iteration logic.
+
+### 18.7 Tests
+
+```
+tests/partitioner/
+    __init__.py
+    test_simple_partitioner.py    # SimplePartitioner regression tests
+    test_spectral_partitioner.py  # SpectralClusteringPartitioner tests
+```
+
+Key spectral partitioner tests:
+- `test_scp_single_partition_when_target_is_1` — target=1 always returns 1 partition.
+- `test_scp_respects_target_partition_count` — `num_partitions ≤ target`.
+- `test_scp_all_vertices_assigned_exactly_once` — union of incidence rows covers all vertices.
+- `test_scp_heavier_vertices_spread_across_partitions` — two heavy + two light instances → balanced split with target=2.
+- `test_scp_rejects_zero_target` — `ValueError` for `target_partition_count < 1`.
+- `test_scp_no_edges_produces_valid_partitioning` — graph with no edges → valid 1-partition output.
+- `test_scp_requires_labels` — `ValueError` if graph has no label matrix.
+- `test_scp_requires_node_type_label` — `KeyError` if `NODE_TYPE` label missing.
+- `test_scp_single_instance_always_partition_zero` — single node instance → partition 0.
 
 
 ---
