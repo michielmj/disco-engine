@@ -7,8 +7,7 @@ from tools.errsnap import capture
 from toolbox.orderbook import Orderbook
 import graphblas as gb
 
-from disco import Node
-from disco.node import Event
+from disco.node import Event, Node
 from my_model_pkg.sampling import get_dists, sample_dists
 
 logger = getLogger(__name__)
