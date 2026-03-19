@@ -283,16 +283,16 @@ def test_store_and_load_graph_with_labels_and_mask(
 
     # Label checks
     assert loaded.num_labels == 3
-    assert loaded.label_matrix is not None
-    assert loaded.label_matrix.nrows == num_vertices
-    assert loaded.label_matrix.ncols == 3
+    assert loaded.label_matrix_masked is not None
+    assert loaded.label_matrix_masked.nrows == num_vertices
+    assert loaded.label_matrix_masked.ncols == 3
 
     # Meta should match
     assert loaded.label_meta == label_meta
 
-    # Vertices that have label id 0: vertices 0 and 3
-    verts_for_label0 = loaded.get_vertices_for_label(0)
-    assert set(verts_for_label0.tolist()) == {0, 3}
+    # Vertices that have label id 1: vertices 1
+    verts_for_label1 = loaded.get_vertices_for_label_masked(1)
+    assert set(verts_for_label1.tolist()) == {1}
 
     # Per-type metadata should be reconstructed correctly:
     # For "type1", we expect indices 0 ("A") and 2 ("C")

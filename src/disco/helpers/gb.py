@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pickle
 from functools import lru_cache
+from typing import Any, Optional
 
 import numpy as np
 from graphblas import Vector, Matrix, dtypes, semiring, monoid, unary, op
@@ -31,6 +32,19 @@ def vstack_rows_from_coo(rows: list[Vector], *, ncols: int | None = None) -> Mat
     V = np.concatenate(vals) if vals else np.array([], dtype=dt.np_type)
 
     return Matrix.from_coo(R, C, V, nrows=m, ncols=n, dtype=dt)
+
+
+def submatrix(M: Matrix, rows: Optional[Any] = None, cols: Optional[Any] = None) -> Matrix:
+    if rows is None:
+        rows = slice(None, None, None)
+    if cols is None:
+        cols = slice(None, None, None)
+
+    S = Matrix(M.dtype, nrows=M.nrows, ncols=M.ncols)
+    # noinspection PyStatementEffect
+    S[rows, cols] << M[rows, cols]
+
+    return S
 
 
 def has_self_loop(M: Matrix) -> bool:
@@ -110,10 +124,10 @@ def _echelon_plus_times(ser: bytes) -> Vector:
 
     # In a DAG, series ends after at most n-1 steps
     for _ in range(A.nrows - 1):
-        w = semiring.plus_times(w @ A).new()   # w = wA  (next-hop accumulated demand)
+        w = semiring.plus_times(w @ A).new()  # w = wA  (next-hop accumulated demand)
         if w.nvals == 0:
             break
-        e(op.plus) << w                         # e += w
+        e(op.plus) << w  # e += w
     else:
         # If we didn't terminate in n-1 steps, there's likely a cycle (or zeros stored as edges)
         raise ValueError("No termination within n-1 iterations (cycle or stored zeros?)")

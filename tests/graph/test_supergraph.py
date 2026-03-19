@@ -356,7 +356,7 @@ def test_labels_propagated_via_lor():
 
     assert sg.num_vertices == 2
     sv = sg.vertex_map[0]
-    lm = sg.label_matrix
+    lm = sg.label_matrix_masked
     assert lm is not None
     assert lm[sv, 0].new().value is True
     assert lm[sv, 1].new().value is True

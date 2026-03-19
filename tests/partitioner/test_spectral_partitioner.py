@@ -1,45 +1,21 @@
 # tests/partitioner/test_spectral_partitioner.py
-"""
-Tests for SpectralClusteringPartitioner.
-
-Graph topology used in most tests
-----------------------------------
-8 vertices, 2 node-types (A, B), 2 regions (north, south).
-Each node type uses its own region label type to avoid cross-type merging
-when compress() is called:
-
-  node instance  | vertices | vertex_weight
-  A-north        | 0, 1     | 1.0, 1.0
-  A-south        | 2, 3     | 1.0, 1.0
-  B-north        | 4, 5     | 1.0, 1.0
-  B-south        | 6, 7     | 1.0, 1.0
-
-Label columns:
-  0: (NODE_TYPE, "A")
-  1: (NODE_TYPE, "B")
-  2: ("region-A", "north")   -- only A vertices carry region-A
-  3: ("region-A", "south")
-  4: ("region-B", "north")   -- only B vertices carry region-B
-  5: ("region-B", "south")
-
-compress(["region-A", "region-B"]) produces 4 non-overlapping supervertices.
-"""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
-import numpy as np
 import graphblas as gb
+import numpy as np
 import pytest
 
 from disco.graph import Graph
 from disco.partitioner import SpectralClusteringPartitioner, NODE_TYPE
 
 
-# --------------------------------------------------------------------------- #
+# ------------------------------------------------------------------ #
 # Stubs
-# --------------------------------------------------------------------------- #
+# ------------------------------------------------------------------ #
+
 
 @dataclass(frozen=True, slots=True)
 class NodeTypeSpecStub:
@@ -59,116 +35,25 @@ class ModelStub:
     spec: ModelSpecStub
 
 
-# --------------------------------------------------------------------------- #
+# ------------------------------------------------------------------ #
 # Helpers
-# --------------------------------------------------------------------------- #
+# ------------------------------------------------------------------ #
+
 
 def _make_model(
-    simprocs: List[str] | None = None,
-    dn_a: List[str] | None = None,
-    sn_a: List[str] | None = None,
-    dn_b: List[str] | None = None,
-    sn_b: List[str] | None = None,
+    node_types: Dict[str, NodeTypeSpecStub] | None = None,
+    simprocs: List[str] | None = None
 ) -> ModelStub:
-    """Model with node types A and B, each using per-type region label types."""
-    sp: List[str] = simprocs if simprocs is not None else []
-    dn_a = dn_a if dn_a is not None else ["region-A"]
-    sn_a = sn_a if sn_a is not None else ["region-A"]
-    dn_b = dn_b if dn_b is not None else ["region-B"]
-    sn_b = sn_b if sn_b is not None else ["region-B"]
-    return ModelStub(
-        spec=ModelSpecStub(
-            simprocs=sp,
-            node_types={
-                "A": NodeTypeSpecStub(distinct_nodes=dn_a, same_node=sn_a, self_relations=[]),
-                "B": NodeTypeSpecStub(distinct_nodes=dn_b, same_node=sn_b, self_relations=[]),
-            },
-        )
-    )
-
-
-def _make_labeled_graph(
-    num_vertices: int,
-    label_rows: List[int],
-    label_cols: List[int],
-    label_meta: Dict[int, Tuple[str, str]],
-    edge_layers: Dict[int, Tuple[List[int], List[int], List[float]]] | None = None,
-    vertex_weight: np.ndarray | None = None,
-) -> Graph:
-    label_matrix = gb.Matrix.from_coo(
-        label_rows,
-        label_cols,
-        [True] * len(label_rows),
-        nrows=num_vertices,
-        ncols=len(label_meta),
-        dtype=bool,
-    )
-    layers: Tuple[gb.Matrix, ...] = tuple()
-    if edge_layers:
-        # Build layers sorted by index
-        max_layer = max(edge_layers.keys())
-        layers = tuple(
-            gb.Matrix.from_coo(
-                np.asarray(edge_layers[i][0], dtype=np.int64),
-                np.asarray(edge_layers[i][1], dtype=np.int64),
-                np.asarray(edge_layers[i][2], dtype=np.float64),
-                nrows=num_vertices,
-                ncols=num_vertices,
-            )
-            if i in edge_layers
-            else gb.Matrix(float, nrows=num_vertices, ncols=num_vertices)
-            for i in range(max_layer + 1)
-        )
-
-    g = Graph(
-        layers=layers,
-        num_vertices=num_vertices,
-        scenario_id="test-scenario",
-        vertex_weight=vertex_weight,
-    )
-    g.set_labels(label_matrix=label_matrix, label_meta=label_meta)
-    return g
-
-
-def _four_instance_graph(edge_layers: Dict | None = None, vertex_weight: np.ndarray | None = None) -> Graph:
-    """
-    8 vertices with per-node-type region label types:
-      0,1: A-north   label ids: 0=node-type/A, 2=region-A/north
-      2,3: A-south   label ids: 0=node-type/A, 3=region-A/south
-      4,5: B-north   label ids: 1=node-type/B, 4=region-B/north
-      6,7: B-south   label ids: 1=node-type/B, 5=region-B/south
-    """
-    meta: Dict[int, Tuple[str, str]] = {
-        0: (NODE_TYPE, "A"),
-        1: (NODE_TYPE, "B"),
-        2: ("region-A", "north"),
-        3: ("region-A", "south"),
-        4: ("region-B", "north"),
-        5: ("region-B", "south"),
-    }
-    rows = []
-    cols = []
-    # A-north: vertices 0,1  → node-type/A (col 0) + region-A/north (col 2)
-    for v in (0, 1):
-        rows += [v, v]; cols += [0, 2]
-    # A-south: vertices 2,3  → node-type/A (col 0) + region-A/south (col 3)
-    for v in (2, 3):
-        rows += [v, v]; cols += [0, 3]
-    # B-north: vertices 4,5  → node-type/B (col 1) + region-B/north (col 4)
-    for v in (4, 5):
-        rows += [v, v]; cols += [1, 4]
-    # B-south: vertices 6,7  → node-type/B (col 1) + region-B/south (col 5)
-    for v in (6, 7):
-        rows += [v, v]; cols += [1, 5]
-
-    return _make_labeled_graph(
-        num_vertices=8,
-        label_rows=rows,
-        label_cols=cols,
-        label_meta=meta,
-        edge_layers=edge_layers,
-        vertex_weight=vertex_weight,
-    )
+    """Single node-type 'A' with region as distinct label, no same_node."""
+    if node_types is None:
+        node_types = {
+            "A": NodeTypeSpecStub(
+                distinct_nodes=["region"], same_node=[], self_relations=[],
+            ),
+        }
+    if simprocs is None:
+        simprocs = ['simproc']
+    return ModelStub(spec=ModelSpecStub(simprocs=simprocs, node_types=node_types))
 
 
 def _coo_indices(v: gb.Vector) -> set[int]:
@@ -176,180 +61,489 @@ def _coo_indices(v: gb.Vector) -> set[int]:
     return set(idx.tolist())
 
 
-def _all_assigned_vertex_indices(part) -> set[int]:  # type: ignore[no-untyped-def]
-    """Union of all vertex indices assigned to any node in the partitioning."""
-    result: set[int] = set()
+def _partition_vertex_sets(part) -> Dict[int, set[int]]:
+    """Group assigned vertex indices by partition number."""
+    result: Dict[int, set[int]] = {}
     for ns in part.node_specs:
-        result.update(_coo_indices(part.assignment_vector(ns.node_name)))
+        verts = _coo_indices(part.assignment_vector(ns.node_name))
+        result.setdefault(ns.partition, set()).update(verts)
     return result
 
 
-# --------------------------------------------------------------------------- #
-# Tests
-# --------------------------------------------------------------------------- #
-
-def test_scp_single_partition_when_target_is_1() -> None:
-    graph = _four_instance_graph()
-    model = _make_model(simprocs=[])
-    part = SpectralClusteringPartitioner(graph=graph, model=model).partition(
-        target_partition_count=1
-    )
-    assert part.num_partitions == 1
-    assert part.scenario_id == "test-scenario"
-    assert len(part.node_specs) == 4  # 4 node instances
+# ------------------------------------------------------------------ #
+# Graph factories
+# ------------------------------------------------------------------ #
 
 
-def test_scp_respects_target_partition_count() -> None:
-    """num_partitions must be in [1, target_partition_count]."""
-    # Build graph with inter-instance edges so clustering can split
-    edge_layers = {
-        0: (
-            [0, 1, 2, 4, 5, 6],  # src
-            [2, 3, 4, 5, 6, 7],  # dst
-            [10.0, 10.0, 5.0, 5.0, 5.0, 5.0],
-        )
-    }
-    graph = _four_instance_graph(edge_layers=edge_layers)
-    model = _make_model(simprocs=["sp0"])
-
-    for target in (1, 2, 3, 4):
-        part = SpectralClusteringPartitioner(graph=graph, model=model).partition(
-            target_partition_count=target
-        )
-        assert 1 <= part.num_partitions <= target, (
-            f"target={target} → num_partitions={part.num_partitions}"
-        )
-
-
-def test_scp_all_vertices_assigned_exactly_once() -> None:
-    """Every vertex must appear in exactly one node instance's incidence row."""
-    edge_layers = {
-        0: ([0, 2, 4], [2, 4, 6], [5.0, 5.0, 5.0])
-    }
-    graph = _four_instance_graph(edge_layers=edge_layers)
-    model = _make_model(simprocs=["sp0"])
-
-    part = SpectralClusteringPartitioner(graph=graph, model=model).partition(
-        target_partition_count=2
-    )
-
-    all_assigned = _all_assigned_vertex_indices(part)
-    assert all_assigned == set(range(graph.num_vertices))
-
-    # No vertex should appear in two different nodes
-    seen: set[int] = set()
-    for ns in part.node_specs:
-        node_verts = _coo_indices(part.assignment_vector(ns.node_name))
-        assert seen.isdisjoint(node_verts), f"Vertex overlap at {ns.node_name}"
-        seen.update(node_verts)
-
-
-def test_scp_heavier_vertices_spread_across_partitions() -> None:
+def _make_two_cluster_graph() -> Graph:
     """
-    Two heavy node instances (A-north, B-north, weight=10) and two light ones
-    (A-south, B-south, weight=1) with cross-instance edges.
-    With target=2, the SCP should produce 2 partitions with roughly balanced weight.
+    Two disconnected DAG clusters of 3 vertices each, one layer.
+
+    Cluster north: 0→1, 0→2, 1→2
+    Cluster south: 3→4, 3→5, 4→5
+
+    Labels:
+      node-type=A  on all vertices
+      region=north on 0, 1, 2
+      region=south on 3, 4, 5
     """
-    # Vertex weights: A-north=10,10; A-south=1,1; B-north=10,10; B-south=1,1
-    vw = np.array([10.0, 10.0, 1.0, 1.0, 10.0, 10.0, 1.0, 1.0])
+    nv = 6
+    src = np.array([0, 0, 1, 3, 3, 4], dtype=np.int64)
+    dst = np.array([1, 2, 2, 4, 5, 5], dtype=np.int64)
+    w = np.ones(6)
 
-    # Strong edges between all node instances to make them connected
-    edge_layers = {
-        0: ([0, 2, 4, 0, 4], [2, 4, 6, 6, 2], [1.0, 1.0, 1.0, 1.0, 1.0])
+    layer = gb.Matrix.from_coo(src, dst, w, nrows=nv, ncols=nv)
+    g = Graph(layers=(layer,), num_vertices=nv, scenario_id="s1")
+
+    label_meta = {
+        0: (NODE_TYPE, "A"),
+        1: ("region", "north"),
+        2: ("region", "south"),
     }
-    graph = _four_instance_graph(edge_layers=edge_layers, vertex_weight=vw)
-    model = _make_model(simprocs=["sp0"])
-
-    part = SpectralClusteringPartitioner(graph=graph, model=model).partition(
-        target_partition_count=2
-    )
-
-    assert 1 <= part.num_partitions <= 2
-
-    if part.num_partitions == 2:
-        # Compute weight per partition
-        weights_per_partition: dict[int, float] = {}
-        for ns in part.node_specs:
-            node_verts = list(_coo_indices(part.assignment_vector(ns.node_name)))
-            w = float(vw[node_verts].sum())
-            weights_per_partition[ns.partition] = (
-                weights_per_partition.get(ns.partition, 0.0) + w
-            )
-        # Both partitions should have substantial weight (not all in one)
-        min_w = min(weights_per_partition.values())
-        total_w = sum(weights_per_partition.values())
-        assert min_w / total_w >= 0.2, (
-            f"Partitions too unbalanced: {weights_per_partition}"
-        )
+    rows = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
+    cols = [0, 1, 0, 1, 0, 1, 0, 2, 0, 2, 0, 2]
+    lm = gb.Matrix.from_coo(rows, cols, [True] * 12, nrows=nv, ncols=3, dtype=bool)
+    g.set_labels(lm, label_meta)
+    return g
 
 
-def test_scp_rejects_zero_target() -> None:
-    graph = _four_instance_graph()
-    model = _make_model(simprocs=[])
-    with pytest.raises(ValueError):
-        SpectralClusteringPartitioner(graph=graph, model=model).partition(
-            target_partition_count=0
-        )
+def _make_four_pair_graph() -> Graph:
+    """
+    Four disconnected pairs: (0,1), (2,3), (4,5), (6,7).
+
+    Each pair has one DAG edge and a distinct region label.
+    All vertices are node-type=A.
+    """
+    nv = 8
+    src = np.array([0, 2, 4, 6], dtype=np.int64)
+    dst = np.array([1, 3, 5, 7], dtype=np.int64)
+    w = np.ones(4)
+
+    layer = gb.Matrix.from_coo(src, dst, w, nrows=nv, ncols=nv)
+    g = Graph(layers=(layer,), num_vertices=nv, scenario_id="s1")
+
+    label_meta = {
+        0: (NODE_TYPE, "A"),
+        1: ("region", "r0"),
+        2: ("region", "r1"),
+        3: ("region", "r2"),
+        4: ("region", "r3"),
+    }
+    rows: List[int] = []
+    cols: List[int] = []
+    for v in range(nv):
+        rows.append(v)
+        cols.append(0)
+    for pair_idx, (va, vb) in enumerate([(0, 1), (2, 3), (4, 5), (6, 7)]):
+        for v in (va, vb):
+            rows.append(v)
+            cols.append(1 + pair_idx)
+
+    lm = gb.Matrix.from_coo(rows, cols, [True] * len(rows), nrows=nv, ncols=5, dtype=bool)
+    g.set_labels(lm, label_meta)
+    return g
 
 
-def test_scp_no_edges_produces_valid_partitioning() -> None:
-    """Graph with no edges: all node instances are disconnected, still partitions."""
-    graph = _four_instance_graph(edge_layers=None)
-    model = _make_model(simprocs=[])
-    part = SpectralClusteringPartitioner(graph=graph, model=model).partition(
-        target_partition_count=2
-    )
-    assert 1 <= part.num_partitions <= 2
-    # All vertices should still be assigned
-    all_assigned = _all_assigned_vertex_indices(part)
-    assert all_assigned == set(range(graph.num_vertices))
+def _make_barbell_graph() -> Graph:
+    """
+    Two 4-clique DAGs connected by a weak bridge.
+
+    Clique north: vertices 0-3 (DAG edges weight 10.0)
+    Clique south: vertices 4-7 (DAG edges weight 10.0)
+    Bridge: 3→4 (weight 0.01)
+
+    After symmetrisation the two cliques are strongly intra-connected
+    and weakly inter-connected — spectral clustering should split cleanly.
+    """
+    nv = 8
+    src_a = [0, 0, 0, 1, 1, 2]
+    dst_a = [1, 2, 3, 2, 3, 3]
+    src_b = [4, 4, 4, 5, 5, 6]
+    dst_b = [5, 6, 7, 6, 7, 7]
+
+    src = np.array(src_a + src_b + [3], dtype=np.int64)
+    dst = np.array(dst_a + dst_b + [4], dtype=np.int64)
+    w = np.array([10.0] * 6 + [10.0] * 6 + [0.01])
+
+    layer = gb.Matrix.from_coo(src, dst, w, nrows=nv, ncols=nv)
+    g = Graph(layers=(layer,), num_vertices=nv, scenario_id="s1")
+
+    label_meta = {
+        0: (NODE_TYPE, "A"),
+        1: ("region", "north"),
+        2: ("region", "south"),
+    }
+    rows: List[int] = []
+    cols: List[int] = []
+    for v in range(nv):
+        rows.append(v)
+        cols.append(0)
+    for v in range(4):
+        rows.append(v)
+        cols.append(1)
+    for v in range(4, 8):
+        rows.append(v)
+        cols.append(2)
+
+    lm = gb.Matrix.from_coo(rows, cols, [True] * len(rows), nrows=nv, ncols=3, dtype=bool)
+    g.set_labels(lm, label_meta)
+    return g
 
 
-def test_scp_requires_labels() -> None:
-    """Construction should fail if graph has no labels attached."""
-    g = Graph(layers=tuple(), num_vertices=4, scenario_id="s")
-    model = _make_model()
-    with pytest.raises(ValueError):
-        SpectralClusteringPartitioner(graph=g, model=model)
+# ------------------------------------------------------------------ #
+# Constructor validation
+# ------------------------------------------------------------------ #
 
 
-def test_scp_requires_node_type_label() -> None:
-    """Construction should fail if NODE_TYPE label type is missing from graph."""
+def test_constructor_rejects_graph_without_labels() -> None:
     g = Graph(layers=tuple(), num_vertices=2, scenario_id="s")
-    label_meta = {0: ("region", "north")}
-    label_matrix = gb.Matrix.from_coo(
-        [0, 1], [0, 0], [True, True], nrows=2, ncols=1, dtype=bool
-    )
-    g.set_labels(label_matrix=label_matrix, label_meta=label_meta)
-    model = _make_model()
+    with pytest.raises(ValueError, match="no labels"):
+        SpectralClusteringPartitioner(g, _make_model())
+
+
+def test_constructor_rejects_missing_node_type_label() -> None:
+    g = Graph(layers=tuple(), num_vertices=1, scenario_id="s")
+    lm = gb.Matrix.from_coo([0], [0], [True], nrows=1, ncols=1, dtype=bool)
+    g.set_labels(lm, {0: ("region", "north")})
+
     with pytest.raises(KeyError):
-        SpectralClusteringPartitioner(graph=g, model=model)
+        SpectralClusteringPartitioner(g, _make_model())
 
 
-def test_scp_single_instance_always_partition_zero() -> None:
-    """If the graph has only one node instance, it goes to partition 0."""
-    meta: Dict[int, Tuple[str, str]] = {0: (NODE_TYPE, "A")}
-    rows = [0, 1, 2]
-    cols = [0, 0, 0]
-    label_matrix = gb.Matrix.from_coo(rows, cols, [True] * 3, nrows=3, ncols=1, dtype=bool)
-    g = Graph(layers=tuple(), num_vertices=3, scenario_id="s")
-    g.set_labels(label_matrix=label_matrix, label_meta=meta)
+def test_constructor_rejects_missing_distinct_label_type() -> None:
+    g = Graph(layers=tuple(), num_vertices=1, scenario_id="s")
+    lm = gb.Matrix.from_coo([0], [0], [True], nrows=1, ncols=1, dtype=bool)
+    g.set_labels(lm, {0: (NODE_TYPE, "A")})
 
-    model = ModelStub(
-        spec=ModelSpecStub(
-            simprocs=[],
-            node_types={
-                "A": NodeTypeSpecStub(
-                    distinct_nodes=[],
-                    same_node=[NODE_TYPE],
-                    self_relations=[],
-                ),
-            },
-        )
+    with pytest.raises(KeyError, match="region"):
+        SpectralClusteringPartitioner(g, _make_model())
+
+
+def test_constructor_rejects_missing_same_node_label_type() -> None:
+    g = Graph(layers=tuple(), num_vertices=1, scenario_id="s")
+    lm = gb.Matrix.from_coo([0], [0], [True], nrows=1, ncols=1, dtype=bool)
+    g.set_labels(lm, {0: (NODE_TYPE, "A")})
+
+    model = _make_model(
+        node_types={
+            "A": NodeTypeSpecStub(
+                distinct_nodes=[], same_node=["location"], self_relations=[],
+            ),
+        },
     )
+    with pytest.raises(KeyError, match="location"):
+        SpectralClusteringPartitioner(g, model)
 
-    part = SpectralClusteringPartitioner(graph=g, model=model).partition(
-        target_partition_count=3
-    )
-    assert part.num_partitions == 1
+
+def test_partition_rejects_zero_target() -> None:
+    g = _make_two_cluster_graph()
+    p = SpectralClusteringPartitioner(g, _make_model())
+    with pytest.raises(ValueError):
+        p.partition(target_partition_count=0)
+
+
+# ------------------------------------------------------------------ #
+# Integration: partition()
+# ------------------------------------------------------------------ #
+
+
+def test_single_partition_puts_everything_in_one() -> None:
+    g = _make_two_cluster_graph()
+    part = SpectralClusteringPartitioner(g, _make_model()).partition(1)
+
+    # Two node instances (A-north, A-south), both in partition 0.
+    assert len(part.node_specs) == 2
     assert all(ns.partition == 0 for ns in part.node_specs)
+
+    names = {ns.node_name for ns in part.node_specs}
+    assert "p0-A-north" in names
+    assert "p0-A-south" in names
+
+    # All 6 vertices accounted for, no overlap.
+    all_verts: set[int] = set()
+    for ns in part.node_specs:
+        verts = _coo_indices(part.assignment_vector(ns.node_name))
+        assert not (all_verts & verts)
+        all_verts |= verts
+    assert all_verts == set(range(6))
+
+
+def test_two_disconnected_clusters_into_two_partitions() -> None:
+    g = _make_two_cluster_graph()
+    part = SpectralClusteringPartitioner(g, _make_model()).partition(2)
+
+    assert len(part.node_specs) == 2
+
+    # Each node instance in a different partition.
+    partitions = {ns.partition for ns in part.node_specs}
+    assert len(partitions) == 2
+
+    # Vertex assignment matches cluster membership.
+    for ns in part.node_specs:
+        verts = _coo_indices(part.assignment_vector(ns.node_name))
+        if "north" in ns.node_name:
+            assert verts == {0, 1, 2}
+        else:
+            assert verts == {3, 4, 5}
+
+
+def test_four_components_combined_into_two_partitions() -> None:
+    """Four equal-weight components are balanced across two partitions."""
+    g = _make_four_pair_graph()
+    part = SpectralClusteringPartitioner(g, _make_model()).partition(2)
+
+    assert len(part.node_specs) == 4
+
+    pv = _partition_vertex_sets(part)
+    assert len(pv) == 2
+
+    # No overlap, full coverage.
+    all_verts: set[int] = set()
+    for verts in pv.values():
+        assert not (all_verts & verts)
+        all_verts |= verts
+    assert all_verts == set(range(8))
+
+    # Balanced: each partition gets 2 pairs = 4 vertices.
+    sizes = sorted(len(v) for v in pv.values())
+    assert sizes == [4, 4]
+
+
+def test_barbell_split_into_two_partitions() -> None:
+    """A single large component is split along the weak bridge."""
+    g = _make_barbell_graph()
+    part = SpectralClusteringPartitioner(g, _make_model()).partition(2)
+
+    assert len(part.node_specs) == 2
+
+    for ns in part.node_specs:
+        verts = _coo_indices(part.assignment_vector(ns.node_name))
+        if "north" in ns.node_name:
+            assert verts == {0, 1, 2, 3}
+        else:
+            assert verts == {4, 5, 6, 7}
+
+    partitions = {ns.partition for ns in part.node_specs}
+    assert len(partitions) == 2
+
+
+def test_incidence_shape_matches_node_specs_and_graph() -> None:
+    g = _make_two_cluster_graph()
+    part = SpectralClusteringPartitioner(g, _make_model()).partition(2)
+
+    assert int(part.incidence.nrows) == len(part.node_specs)
+    assert int(part.incidence.ncols) == g.num_vertices
+
+
+# ------------------------------------------------------------------ #
+# Unit: _get_connected_components
+# ------------------------------------------------------------------ #
+
+
+def test_get_connected_components_mixed() -> None:
+    """One connected pair and two isolated vertices."""
+    E = gb.Matrix.from_coo(
+        [0, 1], [1, 0], [1.0, 1.0],
+        nrows=4, ncols=4, dtype=gb.dtypes.FP64,
+    )
+    weights = np.array([1.0, 2.0, 3.0, 4.0])
+
+    cc = SpectralClusteringPartitioner._get_connected_components(E, weights)
+
+    comp_map = {frozenset(c.tolist()): w for w, c in cc}
+    assert len(comp_map) == 3
+    assert comp_map[frozenset({0, 1})] == pytest.approx(3.0)
+    assert comp_map[frozenset({2})] == pytest.approx(3.0)
+    assert comp_map[frozenset({3})] == pytest.approx(4.0)
+
+
+def test_get_connected_components_all_isolated() -> None:
+    """Empty matrix: every vertex is its own component."""
+    E = gb.Matrix(nrows=3, ncols=3, dtype=gb.dtypes.FP64)
+    weights = np.array([1.0, 2.0, 3.0])
+
+    cc = SpectralClusteringPartitioner._get_connected_components(E, weights)
+
+    assert len(cc) == 3
+    assert all(c.size == 1 for _, c in cc)
+
+
+def test_get_connected_components_single_component() -> None:
+    """Fully connected → one component."""
+    E = gb.Matrix.from_coo(
+        [0, 0, 1, 1, 2, 2],
+        [1, 2, 0, 2, 0, 1],
+        [1.0] * 6,
+        nrows=3, ncols=3, dtype=gb.dtypes.FP64,
+    )
+    weights = np.array([1.0, 1.0, 1.0])
+
+    cc = SpectralClusteringPartitioner._get_connected_components(E, weights)
+
+    assert len(cc) == 1
+    assert set(cc[0][1].tolist()) == {0, 1, 2}
+    assert cc[0][0] == pytest.approx(3.0)
+
+
+# ------------------------------------------------------------------ #
+# Unit: _split_component
+# ------------------------------------------------------------------ #
+
+
+def test_split_component_separates_barbell() -> None:
+    """Two triangles joined by a weak bridge split into two clusters."""
+    E = gb.Matrix(nrows=6, ncols=6, dtype=gb.dtypes.FP64)
+    for i, j in [(0, 1), (0, 2), (1, 2)]:
+        E[i, j] = 10.0
+        E[j, i] = 10.0
+    for i, j in [(3, 4), (3, 5), (4, 5)]:
+        E[i, j] = 10.0
+        E[j, i] = 10.0
+    E[2, 3] = 0.01
+    E[3, 2] = 0.01
+
+    component = np.arange(6, dtype=np.int64)
+    weights = np.ones(6)
+
+    # target_weight=4 → n_clusters = max(2, round(6/4)) = 2
+    result = SpectralClusteringPartitioner._split_component(
+        E, component, weights, target_weight=4.0,
+    )
+
+    assert len(result) == 2
+    comp_sets = [set(c.tolist()) for _, c in result]
+    assert {0, 1, 2} in comp_sets
+    assert {3, 4, 5} in comp_sets
+
+
+def test_split_component_preserves_total_weight() -> None:
+    """All original vertices appear in exactly one output cluster."""
+    E = gb.Matrix(nrows=6, ncols=6, dtype=gb.dtypes.FP64)
+    for i, j in [(0, 1), (0, 2), (1, 2), (3, 4), (3, 5), (4, 5), (2, 3)]:
+        E[i, j] = 1.0
+        E[j, i] = 1.0
+
+    component = np.arange(6, dtype=np.int64)
+    weights = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+
+    result = SpectralClusteringPartitioner._split_component(
+        E, component, weights, target_weight=11.0,
+    )
+
+    all_verts = set()
+    total_weight = 0.0
+    for w, c in result:
+        verts = set(c.tolist())
+        assert not (all_verts & verts), "overlap between clusters"
+        all_verts |= verts
+        assert w == pytest.approx(weights[c].sum())
+        total_weight += w
+
+    assert all_verts == set(range(6))
+    assert total_weight == pytest.approx(21.0)
+
+
+# ------------------------------------------------------------------ #
+# Unit: _combine_components
+# ------------------------------------------------------------------ #
+
+_combine = SpectralClusteringPartitioner._combine_components
+
+
+def test_combine_single_partition() -> None:
+    components = [
+        (3.0, np.array([0, 1, 2])),
+        (2.0, np.array([3, 4])),
+    ]
+    result = _combine(components, 1, 10.0)
+
+    assert len(result) == 1
+    assert set(result[0].tolist()) == {0, 1, 2, 3, 4}
+
+
+def test_combine_balanced_assignment() -> None:
+    """Three components [5, 3, 2] into 2 partitions: expect [5] and [3+2]."""
+    components = [
+        (5.0, np.array([0, 1, 2])),
+        (3.0, np.array([3, 4])),
+        (2.0, np.array([5])),
+    ]
+    result = _combine(components, 2, 10.0)
+
+    assert len(result) == 2
+    weights = sorted(
+        sum(c[0] for c in components if set(c[1].tolist()) <= set(r.tolist()))
+        for r in result
+    )
+    assert weights == pytest.approx([5.0, 5.0])
+
+
+def test_combine_more_partitions_than_components() -> None:
+    """Excess partitions are empty arrays."""
+    components = [(2.0, np.array([0, 1]))]
+    result = _combine(components, 3, 10.0)
+
+    assert len(result) == 3
+    non_empty = [r for r in result if r.size > 0]
+    assert len(non_empty) == 1
+    assert set(non_empty[0].tolist()) == {0, 1}
+
+
+def test_combine_respects_target_weight() -> None:
+    """No partition exceeds target_weight when feasible."""
+    components = [
+        (4.0, np.array([0])),
+        (4.0, np.array([1])),
+        (3.0, np.array([2])),
+        (3.0, np.array([3])),
+    ]
+    result = _combine(components, 2, 8.0)
+
+    for r in result:
+        w = sum(c[0] for c in components if set(c[1].tolist()) <= set(r.tolist()))
+        assert w <= 8.0 + 1e-9
+
+
+def test_combine_all_vertices_present() -> None:
+    """Every component vertex appears in exactly one output partition."""
+    components = [
+        (7.0, np.array([0, 1, 2])),
+        (5.0, np.array([3, 4])),
+        (3.0, np.array([5, 6])),
+        (1.0, np.array([7])),
+    ]
+    result = _combine(components, 3, 20.0)
+
+    all_verts: set[int] = set()
+    for r in result:
+        verts = set(r.tolist())
+        assert not (all_verts & verts), "vertex appears in multiple partitions"
+        all_verts |= verts
+    assert all_verts == set(range(8))
+
+
+def test_combine_swap_does_not_overshoot() -> None:
+    """
+    Pairwise swap must not worsen the spread.
+
+    LPT produces p0=[8,3]=11, p1=[5,4]=9 (spread 2).
+    A swap of 8↔5 would give p0=8, p1=12 (spread 4) — strictly worse.
+    The abs() guard in the swap condition must prevent this.
+
+    Without the fix this test would hang (infinite oscillation).
+    """
+    components = [
+        (8.0, np.array([0])),
+        (5.0, np.array([1])),
+        (4.0, np.array([2])),
+        (3.0, np.array([3])),
+    ]
+    result = _combine(components, 2, 20.0)
+
+    assert len(result) == 2
+    p_weights = sorted(
+        sum(c[0] for c in components if set(c[1].tolist()) <= set(r.tolist()))
+        for r in result
+    )
+    # LPT gives [11, 9]; no valid refinement can improve this.
+    assert p_weights == pytest.approx([9.0, 11.0])

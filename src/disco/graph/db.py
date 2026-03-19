@@ -151,7 +151,7 @@ def _store_labels_for_scenario(session: Session, graph: Graph) -> None:
           * Insert labels based on Graph.label_meta (per label index).
           * Insert vertex_labels based on Graph.label_matrix.to_coo().
     """
-    label_matrix = graph.label_matrix
+    label_matrix = graph.label_matrix_masked
     if label_matrix is None or graph.num_labels == 0:
         # Nothing to store
         return

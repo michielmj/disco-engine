@@ -30,7 +30,7 @@ class SimplePartitioner:
         self._spec = model.spec
 
         # Validate that labels are attached
-        if self._graph.label_matrix is None:
+        if self._graph.label_matrix_masked is None:
             raise ValueError("Graph has no labels attached (graph.label_matrix is None)")
 
         # Validate NODE_TYPE label type

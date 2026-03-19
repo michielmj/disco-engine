@@ -22,6 +22,7 @@ dependencies = [
   "pydantic-settings~=2.12",
   "kazoo~=2.10",
   "python-graphblas~=2025.2",
+  "graphblas-algorithms~=2023.10",
   "SQLAlchemy~=2.0",
   "disco-tools>=0.1.8",
   "disco-data-logger>=0.1.3",

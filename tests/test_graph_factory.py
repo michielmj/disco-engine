@@ -73,6 +73,7 @@ def _make_spec(
         nt: SimpleNamespace(
             node_data_table=info["table"],
             distinct_nodes=info.get("distinct", []),
+            same_node=info.get("same", []),
         )
         for nt, info in node_types.items()
     }
@@ -226,8 +227,8 @@ def test_node_type_labels_assigned() -> None:
     sp_idx = graph.label_value_to_index(NODE_TYPE)["sp"]
     dc_idx = graph.label_value_to_index(NODE_TYPE)["dc"]
 
-    sp_verts = set(graph.get_vertices_for_label(sp_idx).tolist())
-    dc_verts = set(graph.get_vertices_for_label(dc_idx).tolist())
+    sp_verts = set(graph.get_vertices_for_label_masked(sp_idx).tolist())
+    dc_verts = set(graph.get_vertices_for_label_masked(dc_idx).tolist())
 
     # sp has 2 vertices (indices 0,1); dc has 1 (index 2)
     assert sp_verts == {0, 1}
@@ -267,8 +268,8 @@ def test_distinct_node_labels() -> None:
     region_map = graph.label_value_to_index("region")
     assert set(region_map.keys()) == {"N", "S"}
 
-    n_verts = set(graph.get_vertices_for_label(region_map["N"]).tolist())
-    s_verts = set(graph.get_vertices_for_label(region_map["S"]).tolist())
+    n_verts = set(graph.get_vertices_for_label_masked(region_map["N"]).tolist())
+    s_verts = set(graph.get_vertices_for_label_masked(region_map["S"]).tolist())
     assert n_verts == {0, 1}
     assert s_verts == {2}
 
@@ -309,7 +310,7 @@ def test_distinct_labels_union_across_node_types() -> None:
     graph = graph_from_model(db, "s1", model)
 
     region_map = graph.label_value_to_index("region")
-    n_verts = set(graph.get_vertices_for_label(region_map["N"]).tolist())
+    n_verts = set(graph.get_vertices_for_label_masked(region_map["N"]).tolist())
     # sp0 gets index 0, dc0 gets index 1 — both are region "N"
     assert n_verts == {0, 1}
 
@@ -435,7 +436,7 @@ def test_empty_scenario() -> None:
     graph = graph_from_model(db, "empty_scenario", model)
 
     assert graph.num_vertices == 0
-    assert graph.label_matrix is None
+    assert graph.label_matrix_masked is None
 
 
 def test_scenario_isolation() -> None:

@@ -45,7 +45,7 @@ def _iter_node_instances(
     vertex_indices : np.ndarray
         Sorted int64 array of vertex indices belonging to this node instance.
     """
-    if graph.label_matrix is None:
+    if graph.label_matrix_masked is None:
         return
 
     spec = model.spec
@@ -74,11 +74,11 @@ def _iter_node_instances(
 
             # Vertex assignment: vertices that carry ALL labels in this combo.
             cnt = (
-                graph.label_matrix[:, co]
+                graph.label_matrix_masked[:, co]
                 .new(dtype=gb.dtypes.INT64)
                 .reduce_rowwise(gb.monoid.plus)
             )
-            assignment_vector: gb.Vector = (cnt == len(co)).new()
+            assignment_vector: gb.Vector = (cnt == len(co)).select('!=', False).new()
 
             # Vertex indices
             vertex_indices, _ = assignment_vector.to_coo()
