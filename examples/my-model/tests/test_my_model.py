@@ -20,7 +20,7 @@ def test_run(tmp_path):
     model = load_model(plugin="my-model")
     # with smgr.session() as session:
     #     graph = load_graph_for_scenario(session, scenario_id)
-    graph = graph_from_model(smgr, "demo", model)
+    graph = graph_from_model(smgr, scenario_id, model)
     with smgr.session() as session:
         store_graph(session, graph, replace=True)
 
@@ -29,7 +29,7 @@ def test_run(tmp_path):
 
     experiment = Experiment(
         duration=100,
-        scenario_id="demo",
+        scenario_id=scenario_id,
         allowed_partitionings=[partitioning.partitioning_id]
     )
     dlogger = DataLogger(tmp_path / 'dlogger')
