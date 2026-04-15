@@ -1248,8 +1248,8 @@ service DiscoTransport {
   // Events: potentially large and frequent. Use a client-streaming RPC.
   rpc SendEvents(stream EventEnvelopeMsg) returns (TransportAck);
 
-  // Promises: always small. Use a unary RPC for better latency and observability.
-  rpc SendPromise(PromiseEnvelopeMsg) returns (TransportAck);
+  // Promises: small but critical. Use a client-streaming RPC mirroring SendEvents.
+  rpc SendPromise(stream PromiseEnvelopeMsg) returns (TransportAck);
 }
 ```
 
@@ -1335,9 +1335,10 @@ needed).
 
 #### 6.7.4 Promise Sending with Retry
 
-Promises are sent via the unary `SendPromise` RPC. Because promises are small
-and critical for synchronization, `GrpcTransport` implements a retry policy
-based on `GrpcSettings`:
+Promises are sent via the client-streaming `SendPromise` RPC, mirroring the
+`SendEvents` pattern. Each call opens a short-lived stream carrying a single
+message. Because promises are critical for synchronization, `GrpcTransport`
+implements a retry policy based on `GrpcSettings`:
 
 - `promise_retry_delays_s: list[float]` — backoff sequence between retry
   attempts (in seconds).
@@ -1350,7 +1351,8 @@ Algorithm:
 2. Resolve `addr` via `_resolve_address(repid, envelope.target_node)`.
 3. Obtain `_RemoteEndpoint` (channel + stub) for `addr`.
 4. Build `PromiseEnvelopeMsg` with all fields, including `repid`.
-5. Call `stub.SendPromise(msg, timeout=settings.timeout_s)`.
+5. Call `stub.SendPromise(_iter(), timeout=settings.timeout_s)` where `_iter()`
+   is a generator yielding the single message.
 6. If the call succeeds, return immediately.
 7. If the call fails with a retryable error (e.g. `RESOURCE_EXHAUSTED` or
    `UNAVAILABLE`), wait for the next delay in `promise_retry_delays_s`,
@@ -1404,19 +1406,22 @@ class DiscoTransportServicer(transport_pb2_grpc.DiscoTransportServicer):
             count += 1
         return transport_pb2.TransportAck(message=f"Received {count} events")
 
-    def SendPromise(self, request, context):
-        ipc = IPCPromiseMsg(
-            repid=request.repid,
-            sender_node=request.sender_node,
-            sender_simproc=request.sender_simproc,
-            target_node=request.target_node,
-            target_simproc=request.target_simproc,
-            seqnr=request.seqnr,
-            epoch=request.epoch,
-            num_events=request.num_events,
-        )
-        self._promise_queue.put(ipc)
-        return transport_pb2.TransportAck(message="Promise accepted")
+    def SendPromise(self, request_iterator, context):
+        count = 0
+        for request in request_iterator:
+            ipc = IPCPromiseMsg(
+                repid=request.repid,
+                sender_node=request.sender_node,
+                sender_simproc=request.sender_simproc,
+                target_node=request.target_node,
+                target_simproc=request.target_simproc,
+                seqnr=request.seqnr,
+                epoch=request.epoch,
+                num_events=request.num_events,
+            )
+            self._promise_queue.put(ipc)
+            count += 1
+        return transport_pb2.TransportAck(message=f"Received {count} promises")
 ```
 Key points:
 

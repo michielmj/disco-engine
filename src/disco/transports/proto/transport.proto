@@ -32,6 +32,6 @@ service DiscoTransport {
   // Events: potentially large and frequent. Use a client-streaming RPC.
   rpc SendEvents(stream EventEnvelopeMsg) returns (TransportAck);
 
-  // Promises: always small. Use a unary RPC for better latency and observability.
-  rpc SendPromise(PromiseEnvelopeMsg) returns (TransportAck);
+  // Promises: small but critical. Use a client-streaming RPC mirroring SendEvents.
+  rpc SendPromise(stream PromiseEnvelopeMsg) returns (TransportAck);
 }

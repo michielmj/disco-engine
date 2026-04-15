@@ -1,4 +1,6 @@
 import pickle
+from nis import cat
+
 import numpy as np
 from typing import Iterable
 
@@ -34,7 +36,7 @@ class StockingPoint(Node):
         self.ixs = data.index.array
 
         # Stock data
-        self.target_ip = np.asarray(data['ip_target'].fillna(0).array)
+        self.target_ip = data['ip_target'].astype(float).fillna(0).to_numpy()
         self.inv_oh = self.target_ip.copy()
 
         # Demand data

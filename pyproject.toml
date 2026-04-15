@@ -111,6 +111,9 @@ addopts = "-q --import-mode=importlib"
 testpaths = ["tests"]
 timeout = 60
 timeout_method = "thread"
+filterwarnings = [
+    "error::FutureWarning",
+]
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]

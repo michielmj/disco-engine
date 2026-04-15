@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n&disco/transports/proto/transport.proto\x12\x16\x64isco.transports.proto\"\x90\x02\n\x10\x45ventEnvelopeMsg\x12\r\n\x05repid\x18\x01 \x01(\t\x12\x13\n\x0bsender_node\x18\x02 \x01(\t\x12\x16\n\x0esender_simproc\x18\x03 \x01(\t\x12\x13\n\x0btarget_node\x18\x04 \x01(\t\x12\x16\n\x0etarget_simproc\x18\x05 \x01(\t\x12\r\n\x05\x65poch\x18\x06 \x01(\x01\x12\x0c\n\x04\x64\x61ta\x18\x07 \x01(\x0c\x12\x46\n\x07headers\x18\x08 \x03(\x0b\x32\x35.disco.transports.proto.EventEnvelopeMsg.HeadersEntry\x1a.\n\x0cHeadersEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xaf\x01\n\x12PromiseEnvelopeMsg\x12\r\n\x05repid\x18\x01 \x01(\t\x12\x13\n\x0bsender_node\x18\x02 \x01(\t\x12\x16\n\x0esender_simproc\x18\x03 \x01(\t\x12\x13\n\x0btarget_node\x18\x04 \x01(\t\x12\x16\n\x0etarget_simproc\x18\x05 \x01(\t\x12\r\n\x05seqnr\x18\x06 \x01(\x03\x12\r\n\x05\x65poch\x18\x07 \x01(\x01\x12\x12\n\nnum_events\x18\x08 \x01(\x05\"\x1f\n\x0cTransportAck\x12\x0f\n\x07message\x18\x01 \x01(\t2\xd1\x01\n\x0e\x44iscoTransport\x12^\n\nSendEvents\x12(.disco.transports.proto.EventEnvelopeMsg\x1a$.disco.transports.proto.TransportAck(\x01\x12_\n\x0bSendPromise\x12*.disco.transports.proto.PromiseEnvelopeMsg\x1a$.disco.transports.proto.TransportAckb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n&disco/transports/proto/transport.proto\x12\x16\x64isco.transports.proto\"\x90\x02\n\x10\x45ventEnvelopeMsg\x12\r\n\x05repid\x18\x01 \x01(\t\x12\x13\n\x0bsender_node\x18\x02 \x01(\t\x12\x16\n\x0esender_simproc\x18\x03 \x01(\t\x12\x13\n\x0btarget_node\x18\x04 \x01(\t\x12\x16\n\x0etarget_simproc\x18\x05 \x01(\t\x12\r\n\x05\x65poch\x18\x06 \x01(\x01\x12\x0c\n\x04\x64\x61ta\x18\x07 \x01(\x0c\x12\x46\n\x07headers\x18\x08 \x03(\x0b\x32\x35.disco.transports.proto.EventEnvelopeMsg.HeadersEntry\x1a.\n\x0cHeadersEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xaf\x01\n\x12PromiseEnvelopeMsg\x12\r\n\x05repid\x18\x01 \x01(\t\x12\x13\n\x0bsender_node\x18\x02 \x01(\t\x12\x16\n\x0esender_simproc\x18\x03 \x01(\t\x12\x13\n\x0btarget_node\x18\x04 \x01(\t\x12\x16\n\x0etarget_simproc\x18\x05 \x01(\t\x12\r\n\x05seqnr\x18\x06 \x01(\x03\x12\r\n\x05\x65poch\x18\x07 \x01(\x01\x12\x12\n\nnum_events\x18\x08 \x01(\x05\"\x1f\n\x0cTransportAck\x12\x0f\n\x07message\x18\x01 \x01(\t2\xd3\x01\n\x0e\x44iscoTransport\x12^\n\nSendEvents\x12(.disco.transports.proto.EventEnvelopeMsg\x1a$.disco.transports.proto.TransportAck(\x01\x12\x61\n\x0bSendPromise\x12*.disco.transports.proto.PromiseEnvelopeMsg\x1a$.disco.transports.proto.TransportAck(\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -42,5 +42,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TRANSPORTACK']._serialized_start=519
   _globals['_TRANSPORTACK']._serialized_end=550
   _globals['_DISCOTRANSPORT']._serialized_start=553
-  _globals['_DISCOTRANSPORT']._serialized_end=762
+  _globals['_DISCOTRANSPORT']._serialized_end=764
 # @@protoc_insertion_point(module_scope)

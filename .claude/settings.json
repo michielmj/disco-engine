@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(pip install --break-system-packages*)",
+      "Bash(pip install --user*)",
+      "Bash(npm install*)",
+      "Bash(npm update*)",
+      "Bash(npx*)",
+      "Bash(curl * | bash*)",
+      "Bash(curl * | sh*)"
+    ]
+  }
+}

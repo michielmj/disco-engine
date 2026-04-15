@@ -7,7 +7,7 @@ Proto file: src/disco/transports/proto/transport.proto
 
 service DiscoTransport {
   rpc SendEvents(stream EventEnvelopeMsg) returns (TransportAck);
-  rpc SendPromise(PromiseEnvelopeMsg) returns (TransportAck);
+  rpc SendPromise(stream PromiseEnvelopeMsg) returns (TransportAck);
 }
 
 Design (ENGINEERING_SPEC chapter 6):
@@ -18,7 +18,7 @@ Design (ENGINEERING_SPEC chapter 6):
       optimized later into long-lived streams per remote address.
 
 - Promises:
-    - Always small; sent via unary RPC (SendPromise).
+    - Sent via a client-streaming RPC (SendPromise), same pattern as events.
     - Delivery is retried with backoff, using GrpcSettings:
         - promise_retry_delays_s: list[float]
         - promise_retry_max_window_s: float
@@ -175,17 +175,20 @@ class GrpcTransport(Transport):
 
     def send_promise(self, envelope: PromiseEnvelope) -> None:
         """
-        Send a PromiseEnvelope via unary gRPC with retry and backoff.
+        Send a PromiseEnvelope via client-streaming gRPC with retry and backoff.
 
-        If all retries within promise_retry_max_window_s fail, this
-        method logs the failure, marks the sending Worker as BROKEN, and
-        re-raises the final RpcError.
+        Opens a short-lived stream carrying a single message, mirroring the
+        send_event pattern. If all retries within promise_retry_max_window_s
+        fail, this method logs the failure, marks the sending Worker as BROKEN,
+        and re-raises the final RpcError.
         """
         addr = self._resolve_address(envelope.repid, envelope.target_node)
         endpoint = self._get_or_create_endpoint(addr)
 
         msg = transport_pb2.PromiseEnvelopeMsg(
             repid=envelope.repid,
+            sender_node=envelope.sender_node,
+            sender_simproc=envelope.sender_simproc,
             target_node=envelope.target_node,
             target_simproc=envelope.target_simproc,
             seqnr=envelope.seqnr,
@@ -202,6 +205,9 @@ class GrpcTransport(Transport):
             addr,
         )
 
+        def _iter() -> Iterable[transport_pb2.PromiseEnvelopeMsg]:
+            yield msg
+
         start = time.monotonic()
         delays = self._promise_retry_delays_s
         max_window = self._promise_retry_max_window_s
@@ -210,7 +216,7 @@ class GrpcTransport(Transport):
         while True:
             try:
                 # We ignore the TransportAck payload for now.
-                endpoint.stub.SendPromise(msg, timeout=self._settings.timeout_s)
+                endpoint.stub.SendPromise(_iter(), timeout=self._settings.timeout_s)
                 # Successful delivery → return.
                 return
             except grpc.RpcError as exc:

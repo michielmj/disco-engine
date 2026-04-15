@@ -5,7 +5,7 @@ import warnings
 
 from disco.transports.proto import transport_pb2 as disco_dot_transports_dot_proto_dot_transport__pb2
 
-GRPC_GENERATED_VERSION = '1.76.0'
+GRPC_GENERATED_VERSION = '1.78.1'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -39,7 +39,7 @@ class DiscoTransportStub(object):
                 request_serializer=disco_dot_transports_dot_proto_dot_transport__pb2.EventEnvelopeMsg.SerializeToString,
                 response_deserializer=disco_dot_transports_dot_proto_dot_transport__pb2.TransportAck.FromString,
                 _registered_method=True)
-        self.SendPromise = channel.unary_unary(
+        self.SendPromise = channel.stream_unary(
                 '/disco.transports.proto.DiscoTransport/SendPromise',
                 request_serializer=disco_dot_transports_dot_proto_dot_transport__pb2.PromiseEnvelopeMsg.SerializeToString,
                 response_deserializer=disco_dot_transports_dot_proto_dot_transport__pb2.TransportAck.FromString,
@@ -56,8 +56,8 @@ class DiscoTransportServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SendPromise(self, request, context):
-        """Promises: always small. Use a unary RPC for better latency and observability.
+    def SendPromise(self, request_iterator, context):
+        """Promises: small but critical. Use a client-streaming RPC mirroring SendEvents.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -71,7 +71,7 @@ def add_DiscoTransportServicer_to_server(servicer, server):
                     request_deserializer=disco_dot_transports_dot_proto_dot_transport__pb2.EventEnvelopeMsg.FromString,
                     response_serializer=disco_dot_transports_dot_proto_dot_transport__pb2.TransportAck.SerializeToString,
             ),
-            'SendPromise': grpc.unary_unary_rpc_method_handler(
+            'SendPromise': grpc.stream_unary_rpc_method_handler(
                     servicer.SendPromise,
                     request_deserializer=disco_dot_transports_dot_proto_dot_transport__pb2.PromiseEnvelopeMsg.FromString,
                     response_serializer=disco_dot_transports_dot_proto_dot_transport__pb2.TransportAck.SerializeToString,
@@ -115,7 +115,7 @@ class DiscoTransport(object):
             _registered_method=True)
 
     @staticmethod
-    def SendPromise(request,
+    def SendPromise(request_iterator,
             target,
             options=(),
             channel_credentials=None,
@@ -125,8 +125,8 @@ class DiscoTransport(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
+        return grpc.experimental.stream_unary(
+            request_iterator,
             target,
             '/disco.transports.proto.DiscoTransport/SendPromise',
             disco_dot_transports_dot_proto_dot_transport__pb2.PromiseEnvelopeMsg.SerializeToString,
