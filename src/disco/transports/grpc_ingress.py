@@ -135,15 +135,16 @@ class DiscoTransportServicer(transport_pb2_grpc.DiscoTransportServicer):
 
         return transport_pb2.TransportAck(message=f"Received {count} events")
 
-    def SendPromise(self, request, context):
+    def SendPromise(self, request_iterator, context):
         """
-        Unary RPC for promises.
+        Client-streaming RPC for promises.
 
         We:
         - Check that ingress is allowed.
-        - Convert PromiseEnvelopeMsg to IPCPromiseMsg.
-        - Put onto the local promise_queue.
-        - Return a TransportAck on success.
+        - For each PromiseEnvelopeMsg:
+            - Convert to IPCPromiseMsg.
+            - Put onto the local promise_queue.
+        - Return a TransportAck with the count on success.
 
         If enqueueing fails (e.g. queue full), we abort the RPC with
         RESOURCE_EXHAUSTED so that the sender-side GrpcTransport can
@@ -151,31 +152,35 @@ class DiscoTransportServicer(transport_pb2_grpc.DiscoTransportServicer):
         """
         self._check_ingress_allowed(context)
 
-        ipc_msg = IPCPromiseMsg(
-            repid=request.repid,
-            sender_node=request.sender_node,
-            sender_simproc=request.sender_simproc,
-            target_node=request.target_node,
-            target_simproc=request.target_simproc,
-            seqnr=request.seqnr,
-            epoch=request.epoch,
-            num_events=request.num_events,
-        )
-
-        logger.debug(
-            "Ingress gRPC promise: sender_node=%s sender_simproc=%s "
-            "target_node=%s target_simproc=%s seqnr=%s epoch=%s num_events=%s",
-            ipc_msg.sender_node,
-            ipc_msg.sender_simproc,
-            ipc_msg.target_node,
-            ipc_msg.target_simproc,
-            ipc_msg.seqnr,
-            ipc_msg.epoch,
-            ipc_msg.num_events,
-        )
-
+        count = 0
         try:
-            self._promise_queue.put(ipc_msg)
+            for request in request_iterator:
+                ipc_msg = IPCPromiseMsg(
+                    repid=request.repid,
+                    sender_node=request.sender_node,
+                    sender_simproc=request.sender_simproc,
+                    target_node=request.target_node,
+                    target_simproc=request.target_simproc,
+                    seqnr=request.seqnr,
+                    epoch=request.epoch,
+                    num_events=request.num_events,
+                )
+
+                logger.debug(
+                    "Ingress gRPC promise: sender_node=%s sender_simproc=%s "
+                    "target_node=%s target_simproc=%s seqnr=%s epoch=%s num_events=%s",
+                    ipc_msg.sender_node,
+                    ipc_msg.sender_simproc,
+                    ipc_msg.target_node,
+                    ipc_msg.target_simproc,
+                    ipc_msg.seqnr,
+                    ipc_msg.epoch,
+                    ipc_msg.num_events,
+                )
+
+                self._promise_queue.put(ipc_msg)
+                count += 1
+
         except Exception as exc:
             logger.exception("Error while ingesting promise via gRPC: %s", exc)
             context.abort(
@@ -183,7 +188,7 @@ class DiscoTransportServicer(transport_pb2_grpc.DiscoTransportServicer):
                 f"Error ingesting promise: {exc!r}",
             )
 
-        return transport_pb2.TransportAck(message="Promise accepted")
+        return transport_pb2.TransportAck(message=f"Received {count} promises")
 
 
 # ---------------------------------------------------------------------- #

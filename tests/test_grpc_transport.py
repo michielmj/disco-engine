@@ -35,7 +35,7 @@ class RecordedEventCall:
 @dataclass
 class RecordedPromiseCall:
     target: str
-    request: transport_pb2.PromiseEnvelopeMsg
+    messages: list[transport_pb2.PromiseEnvelopeMsg]
 
 
 class FakeRpcError(grpc.RpcError):  # type: ignore[misc]
@@ -96,10 +96,10 @@ class FakeStub:
         )
         return transport_pb2.TransportAck(message=f"received {len(messages)}")
 
-    # Unary RPC: also accept timeout kwarg.
+    # Client-streaming RPC: accept timeout kwarg like real stubs do.
     def SendPromise(
         self,
-        request: transport_pb2.PromiseEnvelopeMsg,
+        request_iterator: Iterable[transport_pb2.PromiseEnvelopeMsg],
         timeout: float | None = None,
         **_kwargs,
     ) -> transport_pb2.TransportAck:  # type: ignore[override]
@@ -107,10 +107,11 @@ class FakeStub:
         if self.send_promise_calls <= self._promise_failures_before_success:
             # Simulate transient failure to trigger retry.
             raise FakeRpcError("transient promise failure")
+        messages = list(request_iterator)
         self._promises_sink.append(
-            RecordedPromiseCall(target=self._target, request=request)
+            RecordedPromiseCall(target=self._target, messages=messages)
         )
-        return transport_pb2.TransportAck(message="ok")
+        return transport_pb2.TransportAck(message=f"received {len(messages)}")
 
 
 # ---------------------------------------------------------------------------
@@ -240,11 +241,12 @@ def test_send_promise_success_without_retry() -> None:
 
     transport.send_promise(envelope)
 
-    # Exactly one successful promise call
+    # Exactly one successful promise call carrying one message
     assert len(recorded_promises) == 1
     call = recorded_promises[0]
     assert call.target == "remote-host:6001"
-    msg = call.request
+    assert len(call.messages) == 1
+    msg = call.messages[0]
     assert msg.target_node == "beta"
     assert msg.target_simproc == "control"
     assert msg.seqnr == 42

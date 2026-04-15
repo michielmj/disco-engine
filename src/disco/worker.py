@@ -194,9 +194,10 @@ class Worker:
         self._router: Router
         self._dlogger: DataLogger | None = None
 
-        # Cached experiment and expid (to avoid reloading between replications of same exp).
+        # Cached experiment and expid + partition (to avoid reloading between replications of same exp).
         self._experiment: Experiment | None = None
         self._experiment_expid: str | None = None
+        self._experiment_partition: int | None = None
 
         # Cached graph and scenario id (graph tied to scenario).
         self._graph: Graph | None = None
@@ -847,9 +848,12 @@ class Worker:
 
         # --- Experiment ---
         try:
-            if self._experiment is None or self._experiment_expid != assignment.expid:
+            if (self._experiment is None
+                    or self._experiment_expid != assignment.expid
+                    or self._experiment_partition != assignment.partition):
                 self._experiment = self._exp_store.load(assignment.expid)
                 self._experiment_expid = assignment.expid
+                self._experiment_partition = assignment.partition
             experiment = self._require_experiment_locked()
         except (KeyError, TypeError, ValueError, DiscoRuntimeError) as exc:
             self._fail_partition_locked(exc, where="load experiment")
@@ -949,34 +953,35 @@ class Worker:
         )
 
         for node_name, spec in node_specs.items():
-            try:
-                node_mask = partitioning.assignment_vector(node_name)
-                graph_view = graph.get_view(mask=node_mask)
+            if spec.partition == self._experiment_partition:
+                try:
+                    node_mask = partitioning.assignment_vector(node_name)
+                    graph_view = graph.get_view(mask=node_mask)
 
-                graph_data = GraphData.for_node(
-                    session_manager=self._session_manager,
-                    graph=graph_view,
-                    model=model,
-                    partitioning=self._partitioning,
-                    node_name=node_name,
-                )
+                    graph_data = GraphData.for_node(
+                        session_manager=self._session_manager,
+                        graph=graph_view,
+                        model=model,
+                        partitioning=self._partitioning,
+                        node_name=node_name,
+                    )
 
-                rt = NodeRuntime(
-                    repid=assignment.repid,
-                    spec=spec,
-                    model=model,
-                    partitioning=partitioning,
-                    router=self._router,
-                    dlogger=dlogger,
-                    seed_sequence=seed_sequence,
-                    data=graph_data,
-                )
-                rt.initialize(**params)
-                self._nodes[node_name] = rt
-            except Exception as exc:
-                # Any failure in init is treated as partition-failure (grey-zone rule).
-                self._fail_partition_locked(exc, where=f"initialize node={node_name}")
-                return False
+                    rt = NodeRuntime(
+                        repid=assignment.repid,
+                        spec=spec,
+                        model=model,
+                        partitioning=partitioning,
+                        router=self._router,
+                        dlogger=dlogger,
+                        seed_sequence=seed_sequence,
+                        data=graph_data,
+                    )
+                    rt.initialize(**params)
+                    self._nodes[node_name] = rt
+                except Exception as exc:
+                    # Any failure in init is treated as partition-failure (grey-zone rule).
+                    self._fail_partition_locked(exc, where=f"initialize node={node_name}")
+                    return False
 
         # Clear runners; created only when transitioning READY -> ACTIVE.
         self._runners = ()
@@ -1134,7 +1139,9 @@ class Worker:
                 partition=a.partition,
                 status=status,
             )
-            self._experiment_expid = a.expid
+            # set_partition_status should not change the experiment loaded
+            # self._experiment_expid = a.expid
+            # self._experiment_partition = a.partition
         except Exception as exc:
             self._transition_to_broken_locked(
                 reason=f"failed to update partition status in metastore: {exc!r}"
@@ -1180,7 +1187,10 @@ class Worker:
                 exc=payload,
                 fail_partition=True,
             )
-            self._experiment_expid = a.expid
+            # self._experiment_expid = a.expid
+            # self._experiment_partition = a.partition
+            self._experiment_expid = None
+            self._experiment_partition = None
         except Exception as meta_exc:
             # If we cannot report the failure, control-plane consistency is lost -> BROKEN.
             self._transition_to_broken_locked(
