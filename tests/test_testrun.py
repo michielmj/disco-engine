@@ -157,8 +157,8 @@ class CapturingNodeRuntime:
         self.runner_calls: List[float] = []
         self._last_duration: float = float("-inf")
 
-    def initialize(self, **params: Any) -> None:
-        self.initialize_calls.append(dict(params))
+    def initialize(self, params: dict[str, Any]) -> None:
+        self.initialize_calls.append(params)
 
     def runner(self, *, duration: float):
         self.runner_calls.append(duration)
@@ -345,7 +345,7 @@ def test_initialize_calls_nodes_in_node_specs_order_and_sets_status_initialized(
     # No initialize yet
     assert exp.status == ExperimentStatus.LOADED
 
-    tr.initialize()
+    tr.initialize({})
 
     assert exp.status == ExperimentStatus.INITIALIZED
 

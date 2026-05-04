@@ -285,8 +285,8 @@ class NodeRuntime(NodeRuntimeLike):
     # ------------------------------------------------------------------ #
     # Initialization / Runner hook
     # ------------------------------------------------------------------ #
-    def initialize(self, *args, **kwargs) -> None:
-        self._node.__init__(*args, **kwargs)  # type: ignore[misc]
+    def initialize(self, params: dict[str, Any]) -> None:
+        self._node.__init__(params)  # type: ignore[misc]
         self._status = NodeStatus.INITIALIZED
         logger.debug("Node[%s] initialized", self._name)
 

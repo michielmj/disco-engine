@@ -79,7 +79,7 @@ class Node(ABC):
 
     __runtime__: NodeRuntimeLike
 
-    def __init__(self, **kwargs):
+    def __init__(self, params: dict[str, Any]):
         pass
 
     @abstractmethod

@@ -976,7 +976,7 @@ class Worker:
                         seed_sequence=seed_sequence,
                         data=graph_data,
                     )
-                    rt.initialize(**params)
+                    rt.initialize(params)
                     self._nodes[node_name] = rt
                 except Exception as exc:
                     # Any failure in init is treated as partition-failure (grey-zone rule).
