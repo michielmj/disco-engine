@@ -5,7 +5,7 @@ import contextlib
 import logging as _logging
 import uuid
 from pathlib import Path
-from typing import Generator, Optional, Tuple
+from typing import Generator, Optional, Tuple, Any
 
 from data_logger import DataLogger
 from numpy.random import SeedSequence
@@ -207,7 +207,7 @@ class TestRun:
     def node_names(self) -> list[str]:
         return [ns.node_name for ns in self._partitioning.node_specs]
 
-    def initialize(self) -> None:
+    def initialize(self, params: dict[str, Any]) -> None:
         """
         Initialize all NodeRuntimes in deterministic order (by partitioning.node_specs).
 
@@ -220,7 +220,7 @@ class TestRun:
 
         params = self._experiment.params or {}
         for ns in self._partitioning.node_specs:
-            self.nodes[ns.node_name].initialize(**params)
+            self.nodes[ns.node_name].initialize(params)
 
         self._experiment.status = ExperimentStatus.INITIALIZED
         self._initialized = True
@@ -238,7 +238,7 @@ class TestRun:
         Exceptions are not caught; any error is raised to aid debugging.
         """
         if not self._initialized:
-            self.initialize()
+            self.initialize({})
 
         self._experiment.status = ExperimentStatus.ACTIVE
         logger.info("TestRun starting run: duration=%s", duration)

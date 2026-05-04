@@ -96,9 +96,9 @@ class DummyModel:
 class RecordingNode(Node):
     """A Node used for integration tests; records handler context and can emit outputs."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-        self.init_kwargs: Dict[str, Any] = dict(kwargs)
+    def __init__(self, params: dict[str, Any]):
+        super().__init__(params)
+        self.init_kwargs: Dict[str, Any] = params
         self.calls: List[Tuple[str, float | None, str | None]] = []
         self.emit_event: Tuple[str, str, float, Any, Dict[str, str] | None] | None = None
         self.set_wakeup: Tuple[float, bool] | None = (1.0, False)  # default: keep simproc alive
@@ -180,7 +180,7 @@ def drain_runner(rt: NodeRuntime, duration: float, max_steps: int = 10_000) -> N
 
 def test_initialize_forwards_to_node_initialize() -> None:
     rt, _router, node = make_runtime(simprocs=["L0"])
-    rt.initialize(foo=1, bar="x")
+    rt.initialize({'foo': 1, 'bar': "x"})
     assert node.init_kwargs == {"foo": 1, "bar": "x"}
     assert rt._status == NodeStatus.INITIALIZED  # private, OK for tests
 
@@ -209,7 +209,7 @@ def test_send_event_requires_active_status() -> None:
 def test_epoch0_invoked_for_all_simprocs_and_context_is_set() -> None:
     # No predecessors; Node schedules a wakeup to avoid "no more events" errors in SimProc.
     rt, _router, node = make_runtime(simprocs=["H", "L"])
-    rt.initialize()
+    rt.initialize({})
 
     # Only run long enough to execute epoch 0 for both simprocs.
     drain_runner(rt, duration=0.5)
@@ -231,7 +231,7 @@ def test_node_outputs_forwarded_to_active_simproc_and_promises_sent_before_event
     # One simproc with a successor so that promises/events are emitted.
     succs = {("node", "L0"): {("succ", "L0")}}
     rt, router, node = make_runtime(simprocs=["L0"], succs=succs)
-    rt.initialize()
+    rt.initialize({})
 
     # Emit an event at epoch 1 during the epoch-0 callback.
     node.emit_event = ("succ", "L0", 1.0, b"payload", None)
