@@ -1635,7 +1635,8 @@ updated_at    TIMESTAMP NOT NULL
 - A *mask* is an arbitrary subset of vertices in a scenario, identified by a
   random `mask_id` (UUID).
 - For each `(scenario_id, mask_id)` there are zero or more `vertex_index` rows.
-- `updated_at` is touched whenever a mask is ensured/persisted.
+- `updated_at` is touched with a timezone-aware UTC timestamp whenever a mask
+  is ensured/persisted.
 
 `GraphMask` is responsible for populating and maintaining this table; it is used
 from `graph.extract` and other higher‑level helpers.
@@ -2017,7 +2018,7 @@ Responsibilities (in order):
    - If a row for `scenario_id` already exists and `replace=False`, raises
      `ValueError`.
    - If it exists and `replace=True`, calls `delete_scenario` first.
-   - Inserts `(scenario_id, created_at=utcnow(), description)`.
+   - Inserts `(scenario_id, created_at=<timezone-aware UTC timestamp>, description)`.
 
 4. **Write vertices** (`_store_vertices_for_scenario`):
 

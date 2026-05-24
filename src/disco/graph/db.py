@@ -1,7 +1,7 @@
 # src/disco/graph/db.py
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
 import numpy as np
@@ -274,7 +274,7 @@ def store_graph(
                 f"Scenario {scenario_id!r} already exists in graph_scenarios"
             )
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     session.execute(
         insert(scenarios).values(
             scenario_id=scenario_id,
