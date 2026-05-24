@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 
 import graphblas as gb
@@ -78,7 +78,7 @@ class GraphMask:
         """
         Remove all masks whose updated_at is older than the configured age.
         """
-        cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
         session.execute(
             delete(vertex_masks).where(vertex_masks.c.updated_at < cutoff)
         )
@@ -95,7 +95,7 @@ class GraphMask:
         - INSERT one row per *True* vertex index.
         """
         indices, values = self.vector.to_coo()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         session.execute(
             delete(vertex_masks).where(
@@ -122,7 +122,7 @@ class GraphMask:
         """
         Bump updated_at for all rows of this mask to mark recent use.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         session.execute(
             update(vertex_masks)
             .where(
