@@ -294,6 +294,13 @@ class Graph:
         self._rebuild_per_type_structures()
 
     @property
+    def label_matrix(self) -> Optional[Matrix]:
+        """
+        Sparse boolean matrix of label assignments (vertices x labels).
+        """
+        return self._label_matrix
+
+    @property
     def label_matrix_masked(self) -> Optional[Matrix]:
         """
         Sparse boolean matrix of label assignments (vertices x labels).
@@ -329,6 +336,28 @@ class Graph:
     def label_indices_by_type(self) -> Mapping[str, np.ndarray]:
         return MappingProxyType(self._label_indices_by_type)
 
+    def labels_for_type(self, label_type: str, keep_label_indices: bool = True) -> Tuple[np.ndarray, Matrix]:
+        """
+        Return (label_indices, submatrix) for a label type.
+
+        - label_indices: np.ndarray[int64] of global label indices
+        - submatrix: Matrix[BOOL] with shape:
+          - (num_vertices, num_labels) if keep_label_indices = True
+          - (num_vertices, len(label_indices)) if keep_label_indices = False
+        """
+        if self._label_matrix is None:
+            raise RuntimeError("Graph has no labels attached (label_matrix is None)")
+
+        try:
+            label_idxs = self._label_indices_by_type[label_type]
+        except KeyError:
+            raise KeyError(f"Unknown label_type {label_type!r}") from None
+
+        if keep_label_indices:
+            return label_idxs, submatrix(self._label_matrix, None, label_idxs)
+        else:
+            return label_idxs, self._label_matrix[:, label_idxs]
+
     def labels_for_type_masked(self, label_type: str, keep_label_indices: bool = True) -> Tuple[np.ndarray, Matrix]:
         """
         Return (label_indices, submatrix) for a label type.
@@ -353,7 +382,7 @@ class Graph:
         if keep_label_indices:
             return label_idxs, submatrix(self._label_matrix, row_idxs, label_idxs)
         else:
-            return label_idxs, submatrix(self._label_matrix[:,label_idxs], row_idxs)
+            return label_idxs, submatrix(self._label_matrix[:, label_idxs], row_idxs)
 
     def label_value_to_index(self, label_type: str) -> Mapping[str, int]:
         """
