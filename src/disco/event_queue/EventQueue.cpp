@@ -1,27 +1,23 @@
 #include "EventQueue.h"
 
+#include <Python.h>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 
-#include <Python.h>
-
 namespace disco {
 
 namespace {
 
-std::string senderKeyToString(const SenderKey& k) {
-    return k.first + "/" + k.second;
-}
+std::string senderKeyToString(const SenderKey& k) { return k.first + "/" + k.second; }
 
-SenderKey makeKey(const std::string& node, const std::string& simproc) {
-    return {node, simproc};
-}
+SenderKey makeKey(const std::string& node, const std::string& simproc) { return {node, simproc}; }
 
 // Safe GIL guard for refcount ops (also works when called from non-Python threads).
 class GilGuard {
-public:
+   public:
     GilGuard() : active_(Py_IsInitialized() != 0), state_() {
         if (active_) {
             state_ = PyGILState_Ensure();
@@ -36,7 +32,7 @@ public:
     GilGuard(const GilGuard&) = delete;
     GilGuard& operator=(const GilGuard&) = delete;
 
-private:
+   private:
     bool active_;
     PyGILState_STATE state_;
 };
@@ -60,12 +56,8 @@ inline void decref(PyObject* obj) {
 
 Event::Event() noexcept : sender_node(), sender_simproc(), epoch(0.0), data(nullptr), headers() {}
 
-Event::Event(std::string sender_node_,
-             std::string sender_simproc_,
-             double epoch_,
-             PyObject* data_,
-             Headers headers_,
-             BorrowedRefTag)
+Event::Event(std::string sender_node_, std::string sender_simproc_, double epoch_, PyObject* data_,
+             Headers headers_, BorrowedRefTag)
     : sender_node(std::move(sender_node_)),
       sender_simproc(std::move(sender_simproc_)),
       epoch(epoch_),
@@ -74,12 +66,8 @@ Event::Event(std::string sender_node_,
     incref(data);
 }
 
-Event::Event(std::string sender_node_,
-             std::string sender_simproc_,
-             double epoch_,
-             PyObject* data_,
-             Headers headers_,
-             OwnedRefTag) noexcept
+Event::Event(std::string sender_node_, std::string sender_simproc_, double epoch_, PyObject* data_,
+             Headers headers_, OwnedRefTag) noexcept
     : sender_node(std::move(sender_node_)),
       sender_simproc(std::move(sender_simproc_)),
       epoch(epoch_),
@@ -141,12 +129,7 @@ PyObject* Event::release_data() noexcept {
 
 // -------------------- EventQueue --------------------
 
-
-EventQueue::EventQueue()
-    : _predecessors(),
-      _epoch(-1.0),
-      _next_epoch(NAN),
-      _waiting_for() {}
+EventQueue::EventQueue() : _predecessors(), _epoch(-1.0), _next_epoch(NAN), _waiting_for() {}
 
 double EventQueue::getEpoch() const {
     std::lock_guard<std::mutex> lock(_mtx);
@@ -168,8 +151,7 @@ bool EventQueue::hasPredecessors() const {
     return !_predecessors.empty();
 }
 
-void EventQueue::registerPredecessor(const std::string& sender_node,
-                                     const std::string& sender_simproc) {
+void EventQueue::registerPredecessor(const std::string& sender_node, const std::string& sender_simproc) {
     std::lock_guard<std::mutex> lock(_mtx);
 
     SenderKey key = makeKey(sender_node, sender_simproc);
@@ -224,15 +206,14 @@ bool EventQueue::tryNextEpochUnlocked() {
     auto snaps = snapshotPredecessorsUnlocked();
 
     // Comparator must live inside EventQueue scope because PredSnapshot is private.
-    std::sort(snaps.begin(), snaps.end(),
-              [](const PredSnapshot& a, const PredSnapshot& b) {
-                  // Same ordering as original:
-                  // - lowest epoch first
-                  // - if equal epoch: non-empty comes first
-                  if (a.epoch < b.epoch) return true;
-                  if (a.epoch > b.epoch) return false;
-                  return (!a.empty && b.empty);
-              });
+    std::sort(snaps.begin(), snaps.end(), [](const PredSnapshot& a, const PredSnapshot& b) {
+        // Same ordering as original:
+        // - lowest epoch first
+        // - if equal epoch: non-empty comes first
+        if (a.epoch < b.epoch) return true;
+        if (a.epoch > b.epoch) return false;
+        return (!a.empty && b.empty);
+    });
 
     auto it = snaps.begin();
 
@@ -284,11 +265,8 @@ bool EventQueue::tryNextEpochUnlocked() {
     return false;
 }
 
-bool EventQueue::push(const std::string& sender_node,
-                      const std::string& sender_simproc,
-                      double epoch,
-                      PyObject* data,
-                      Headers& headers) {
+bool EventQueue::push(const std::string& sender_node, const std::string& sender_simproc, double epoch,
+                      PyObject* data, Headers& headers) {
     std::lock_guard<std::mutex> lock(_mtx);
     SenderKey key = makeKey(sender_node, sender_simproc);
 
@@ -306,11 +284,8 @@ bool EventQueue::push(const std::string& sender_node,
     return false;
 }
 
-bool EventQueue::promise(const std::string& sender_node,
-                        const std::string& sender_simproc,
-                         uint64_t seqnr,
-                         double epoch,
-                         uint64_t num_events) {
+bool EventQueue::promise(const std::string& sender_node, const std::string& sender_simproc, uint64_t seqnr,
+                         double epoch, uint64_t num_events) {
     std::lock_guard<std::mutex> lock(_mtx);
 
     SenderKey key = makeKey(sender_node, sender_simproc);
@@ -335,7 +310,7 @@ std::vector<Event> EventQueue::pop() {
     std::vector<Event> result;
 
     for (auto& kvp : _predecessors) {
-        const auto& key = kvp.first; // SenderKey
+        const auto& key = kvp.first;  // SenderKey
         auto& pred = kvp.second;
 
         if (pred->getEpoch() <= _epoch) {
@@ -344,14 +319,9 @@ std::vector<Event> EventQueue::pop() {
             for (auto& e : events) {
                 // Transfer ownership of the Python ref from PredecessorEvent -> Event.
                 PyObject* data = e.release_data();
-                result.emplace_back(
-                    key.first,          // sender_node
-                    key.second,         // sender_simproc,
-                    e.epoch,
-                    data,
-                    std::move(e.headers),
-                    owned_ref
-                );
+                result.emplace_back(key.first,   // sender_node
+                                    key.second,  // sender_simproc,
+                                    e.epoch, data, std::move(e.headers), owned_ref);
             }
         }
     }

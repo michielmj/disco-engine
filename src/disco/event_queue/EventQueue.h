@@ -1,14 +1,14 @@
 #ifndef DISCO_EVENT_QUEUE_H
 #define DISCO_EVENT_QUEUE_H
 
-#include "PredecessorEventQueue.h"
-
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "PredecessorEventQueue.h"
 
 // Forward declare PyObject to avoid including Python.h in public headers.
 struct _object;
@@ -23,7 +23,6 @@ inline constexpr OwnedRefTag owned_ref{};
 
 using SenderKey = std::pair<std::string, std::string>;  // (node, simproc)
 
-
 struct Event {
     std::string sender_node;
     std::string sender_simproc;
@@ -34,20 +33,12 @@ struct Event {
     Event() noexcept;
 
     // Construct from a BORROWED PyObject* (will INCREF).
-    Event(std::string sender_node_,
-          std::string sender_simproc_,
-          double epoch_,
-          PyObject* data_,
-          Headers headers_,
-          BorrowedRefTag);
+    Event(std::string sender_node_, std::string sender_simproc_, double epoch_, PyObject* data_,
+          Headers headers_, BorrowedRefTag);
 
     // Construct from an OWNED PyObject* (no INCREF).
-    Event(std::string sender_node_,
-          std::string sender_simproc_,
-          double epoch_,
-          PyObject* data_,
-          Headers headers_,
-          OwnedRefTag) noexcept;
+    Event(std::string sender_node_, std::string sender_simproc_, double epoch_, PyObject* data_,
+          Headers headers_, OwnedRefTag) noexcept;
 
     Event(const Event& other);
     Event& operator=(const Event& other);
@@ -62,7 +53,7 @@ struct Event {
 };
 
 class EventQueue {
-public:
+   public:
     EventQueue();
     ~EventQueue() = default;
 
@@ -70,29 +61,22 @@ public:
     double getNextEpoch() const;
     const std::string& getWaitingFor() const;
 
-    bool push(const std::string& sender_node,
-              const std::string& sender_simproc,
-              double epoch,
-              PyObject* data,
+    bool push(const std::string& sender_node, const std::string& sender_simproc, double epoch, PyObject* data,
               Headers& headers);
 
     std::vector<Event> pop();
 
-    bool promise(const std::string& sender_node,
-                 const std::string& sender_simproc,
-                 uint64_t seqnr,
-                 double epoch,
-                 uint64_t num_events);
+    bool promise(const std::string& sender_node, const std::string& sender_simproc, uint64_t seqnr,
+                 double epoch, uint64_t num_events);
 
     bool tryNextEpoch();
 
     bool hasPredecessors() const;
-    void registerPredecessor(const std::string& sender_node,
-                             const std::string& sender_simproc);
+    void registerPredecessor(const std::string& sender_node, const std::string& sender_simproc);
 
     bool empty() const;
 
-private:
+   private:
     struct PredSnapshot {
         SenderKey key;
         double epoch;
@@ -100,10 +84,10 @@ private:
         bool empty;
     };
 
-    bool tryNextEpochUnlocked(); // requires _mtx held
-    std::vector<PredSnapshot> snapshotPredecessorsUnlocked() const; // requires _mtx held
+    bool tryNextEpochUnlocked();                                     // requires _mtx held
+    std::vector<PredSnapshot> snapshotPredecessorsUnlocked() const;  // requires _mtx held
 
-private:
+   private:
     mutable std::mutex _mtx;
 
     std::map<SenderKey, std::unique_ptr<PredecessorEventQueue>> _predecessors;
