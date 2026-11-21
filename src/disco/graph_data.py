@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Generator, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence, Iterable, Tuple, Generator, Self, cast, TypeVar, overload, Union
+from typing import (
+    Any,
+    Self,
+    cast,
+    overload,
+)
 
 import numpy as np
 from graphblas import Matrix, Vector
@@ -11,24 +17,20 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.schema import Table
 
 from disco.database import SessionManager
-from disco.model import Model, OrmBundle
-from disco.partitioning import Partitioning, NodeInstanceSpec
-
 from disco.graph import (
     Graph,
     GraphMask,
-    get_outbound_edge_data,
     get_inbound_edge_data,
-    get_outbound_map,
     get_inbound_map,
-    get_vertex_data
+    get_outbound_edge_data,
+    get_outbound_map,
+    get_vertex_data,
 )
+from disco.model import Model, OrmBundle
+from disco.partitioning import NodeInstanceSpec, Partitioning
 
 
-def _normalize_column_element(
-        column: ColumnElement[Any] | str,
-        orm_table: Table
-) -> ColumnElement:
+def _normalize_column_element(column: ColumnElement[Any] | str, orm_table: Table) -> ColumnElement:
     if isinstance(column, str):
         return orm_table.columns[column]
     else:
@@ -36,8 +38,7 @@ def _normalize_column_element(
 
 
 def _normalize_column_elements(
-        columns: Sequence[ColumnElement[Any]] | Sequence[str],
-        orm_table: Table
+    columns: Sequence[ColumnElement[Any]] | Sequence[str], orm_table: Table
 ) -> Iterable[ColumnElement]:
     for c in columns:
         yield _normalize_column_element(c, orm_table)
@@ -50,13 +51,13 @@ class SimProcGraphData:
     node_table: Table
     edge_table: Table
     layer_idx: int
-    node_mask: Optional[GraphMask]
+    node_mask: GraphMask | None
 
     def outbound_edge_data(
         self,
         columns: Sequence[ColumnElement[Any]] | Sequence[str],
         *,
-        mask: Optional[GraphMask] = None,
+        mask: GraphMask | None = None,
     ) -> DataFrame:
         columns = list(_normalize_column_elements(columns, self.edge_table))
 
@@ -74,7 +75,7 @@ class SimProcGraphData:
         self,
         columns: Sequence[ColumnElement[Any]],
         *,
-        mask: Optional[GraphMask] = None,
+        mask: GraphMask | None = None,
     ) -> DataFrame:
         columns = list(_normalize_column_elements(columns, self.edge_table))
 
@@ -88,7 +89,9 @@ class SimProcGraphData:
                 mask=mask if mask is not None else self.node_mask,
             )
 
-    def outbound_map(self, *, mask: Optional[GraphMask] = None, values: Optional[ColumnElement | str] = None) -> Matrix:
+    def outbound_map(
+        self, *, mask: GraphMask | None = None, values: ColumnElement | str | None = None
+    ) -> Matrix:
         if values is not None:
             values = _normalize_column_element(values, self.edge_table)
 
@@ -98,10 +101,12 @@ class SimProcGraphData:
                 session=session,
                 layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
-                values=values
+                values=values,
             )
 
-    def inbound_map(self, *, mask: Optional[GraphMask] = None, values: Optional[ColumnElement | str] = None) -> Matrix:
+    def inbound_map(
+        self, *, mask: GraphMask | None = None, values: ColumnElement | str | None = None
+    ) -> Matrix:
         if values is not None:
             values = _normalize_column_element(values, self.edge_table)
 
@@ -111,7 +116,7 @@ class SimProcGraphData:
                 session=session,
                 layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
-                values=values
+                values=values,
             )
 
 
@@ -127,6 +132,7 @@ class GraphData:
       - simproc_name -> layer_idx mapping (from Model.spec.simprocs)
       - node assignment mask (from partitioning.incidence)
     """
+
     session_manager: SessionManager
     graph: Graph
     partitioning: Partitioning
@@ -138,7 +144,7 @@ class GraphData:
     node_table: Table
 
     layer_id_by_simproc: Mapping[str, int]
-    node_mask: Optional[GraphMask]
+    node_mask: GraphMask | None
 
     @classmethod
     def for_node(
@@ -150,18 +156,20 @@ class GraphData:
         partitioning: Partitioning,
         node_name: str,
     ) -> Self:
-        
+
         try:
-            node_index = partitioning.node_indices[node_name]    
+            node_index = partitioning.node_indices[node_name]
         except KeyError as exc:
             raise KeyError(f"Partitioning.node_indices has no entry for node_name={node_name!r}") from exc
         spec = partitioning.node_specs[node_index]
-        
-        if graph.scenario_id == '':
-            raise ValueError(f"Graph.scenario_id must be defined.")
-        
-        node_mask = GraphMask(vector=partitioning.incidence[node_index, :].new(), scenario_id=graph.scenario_id)
-        
+
+        if graph.scenario_id == "":
+            raise ValueError("Graph.scenario_id must be defined.")
+
+        node_mask = GraphMask(
+            vector=partitioning.incidence[node_index, :].new(), scenario_id=graph.scenario_id
+        )
+
         try:
             node_table = model.orm.node_tables[spec.node_type]
         except KeyError as exc:
@@ -187,7 +195,7 @@ class GraphData:
         self,
         columns: Sequence[ColumnElement[Any]] | Sequence[str],
         *,
-        mask: Optional[Vector] = None,
+        mask: Vector | None = None,
     ) -> DataFrame:
         columns = list(_normalize_column_elements(columns, self.node_table))
 
@@ -205,7 +213,7 @@ class GraphData:
         return self.partitioning.incidence
 
     @property
-    def node_specs(self) -> Tuple[NodeInstanceSpec, ...]:
+    def node_specs(self) -> tuple[NodeInstanceSpec, ...]:
         return self.partitioning.node_specs
 
     @property
@@ -219,9 +227,7 @@ class GraphData:
             return t
         if self.orm.default_edge_table is not None:
             return self.orm.default_edge_table
-        raise KeyError(
-            f"No edge table for simproc {simproc_name!r} and OrmBundle.default_edge_table is None"
-        )
+        raise KeyError(f"No edge table for simproc {simproc_name!r} and OrmBundle.default_edge_table is None")
 
     def simproc(self, simproc_name: str) -> SimProcGraphData:
         try:
@@ -239,18 +245,18 @@ class GraphData:
         )
 
     @overload
-    def by_node(self, idxs: int) -> Generator[Tuple[str, int], None, None]: ...
+    def by_node(self, idxs: int) -> Generator[tuple[str, int]]: ...
     @overload
-    def by_node(self, idxs: list) -> Generator[Tuple[str, list], None, None]: ...
+    def by_node(self, idxs: list) -> Generator[tuple[str, list]]: ...
     @overload
-    def by_node(self, idxs: np.ndarray) -> Generator[Tuple[str, np.ndarray], None, None]: ...
+    def by_node(self, idxs: np.ndarray) -> Generator[tuple[str, np.ndarray]]: ...
     @overload
-    def by_node(self, idxs: Vector) -> Generator[Tuple[str, Vector], None, None]: ...
+    def by_node(self, idxs: Vector) -> Generator[tuple[str, Vector]]: ...
 
     def by_node(
-            self,
-            idxs: Union[Vector, np.ndarray, list, int],
-    ) -> Generator[Tuple[str, Union[Vector, np.ndarray, list, int]], None, None]:
+        self,
+        idxs: Vector | np.ndarray | list | int,
+    ) -> Generator[tuple[str, Vector | np.ndarray | list | int]]:
         if isinstance(idxs, (Vector, VectorExpression)):
             yield from self._by_node_vector(idxs)
         elif isinstance(idxs, (np.ndarray, list)):
@@ -272,18 +278,14 @@ class GraphData:
 
     def _by_node_vector(self, vector: Vector):
         if vector.size != self.incidence_matrix.ncols:
-            raise ValueError('vector.size must equal incidence_matrix.ncols')
+            raise ValueError("vector.size must equal incidence_matrix.ncols")
 
-        A = (self.incidence_matrix * vector).select('!=', 0).new()
+        A = (self.incidence_matrix * vector).select("!=", 0).new()
         indptr, col_indices, values = A.to_csr()
 
         nonempty_rows = np.flatnonzero(np.diff(indptr))
 
         for i in nonempty_rows:
             start, end = indptr[i], indptr[i + 1]
-            row_vec = Vector.from_coo(
-                col_indices[start:end],
-                values[start:end],
-                size=A.ncols
-            )
+            row_vec = Vector.from_coo(col_indices[start:end], values[start:end], size=A.ncols)
             yield self.node_specs[i].node_name, row_vec

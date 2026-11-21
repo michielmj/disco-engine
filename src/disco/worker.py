@@ -2,36 +2,36 @@
 from __future__ import annotations
 
 import traceback
+from collections.abc import Generator, Mapping
 from dataclasses import dataclass
 from multiprocessing.queues import Queue
 from pathlib import Path
 from queue import Empty
-from threading import RLock, Event
+from threading import Event, RLock
 from time import monotonic
-from typing import Dict, Generator, Mapping, Optional, cast, Any
+from typing import Any, cast
 
-from sqlalchemy.exc import OperationalError, DBAPIError
-from tools.mp_logging import getLogger
 from data_logger import DataLogger
+from sqlalchemy.exc import DBAPIError, OperationalError
+from tools.mp_logging import getLogger
 
-from .database import SessionManager
-from .exceptions import DiscoError, DiscoRuntimeError
-from .cluster import Cluster, WorkerState, DesiredWorkerState
+from .cluster import Cluster, DesiredWorkerState, WorkerState
 from .config import AppSettings
+from .database import SessionManager
 from .envelopes import EventEnvelope, PromiseEnvelope
-from .partitioning import Partitioning, NodeInstanceSpec, PartitioningNotFoundError, PartitioningCorruptError
+from .exceptions import DiscoError, DiscoRuntimeError
+from .experiments import Experiment, ExperimentStatus, ExperimentStore
+from .graph import Graph, load_graph_for_scenario
+from .graph_data import GraphData
+from .model import Model, load_model
+from .partitioning import NodeInstanceSpec, Partitioning, PartitioningCorruptError, PartitioningNotFoundError
+from .router import Router
+from .runtime import NodeRuntime
 from .transports.grpc_ingress import start_grpc_server
 from .transports.grpc_transport import GrpcTransport
 from .transports.inprocess import InProcessTransport
 from .transports.ipc_egress import IPCTransport
 from .transports.ipc_messages import IPCEventMsg, IPCPromiseMsg
-
-from .experiments import Experiment, ExperimentStore, ExperimentStatus
-from .model import Model, load_model
-from .graph import Graph, load_graph_for_scenario
-from .graph_data import GraphData
-from .runtime import NodeRuntime
-from .router import Router
 
 logger = getLogger(__name__)
 
@@ -47,6 +47,7 @@ class WorkerError(DiscoError):
       (via ExperimentStore.set_partition_exc), not turned into BROKEN unless they prevent
       *any* experiment from being started.
     """
+
     pass
 
 
@@ -63,6 +64,7 @@ class Assignment:
         * reporting partition status/exceptions via ExperimentStore
         * reporting WorkerInfo to Cluster
     """
+
     expid: str
     repid: str
     partition: int
@@ -143,13 +145,13 @@ class Worker:
     """
 
     def __init__(
-            self,
-            address: str,
-            cluster: Cluster,
-            event_queues: Mapping[str, Queue[IPCEventMsg]],
-            promise_queues: Mapping[str, Queue[IPCPromiseMsg]],
-            settings: AppSettings,
-            name: Optional[str] = None,
+        self,
+        address: str,
+        cluster: Cluster,
+        event_queues: Mapping[str, Queue[IPCEventMsg]],
+        promise_queues: Mapping[str, Queue[IPCPromiseMsg]],
+        settings: AppSettings,
+        name: str | None = None,
     ) -> None:
         # Identity
         self.address = address
@@ -188,7 +190,7 @@ class Worker:
 
         # NodeRuntime registry used by InProcessTransport (holds reference to dict).
         # Keep dict identity stable; mutate contents only.
-        self._nodes: Dict[str, NodeRuntime] = {}
+        self._nodes: dict[str, NodeRuntime] = {}
 
         # Router and data logger (exist for worker lifetime, but dlogger is per-run).
         self._router: Router
@@ -203,9 +205,10 @@ class Worker:
         self._graph: Graph | None = None
         self._graph_scenario_id: str | None = None
 
-        # Cached partitioning and selection (partitioning tied to graph + selected_partitioning + partition index).
+        # Cached partitioning and selection (partitioning tied to the graph, the selected partitioning and
+        # the partition index).
         self._partitioning: Partitioning | None = None
-        self._node_specs: Dict[str, NodeInstanceSpec] | None = None
+        self._node_specs: dict[str, NodeInstanceSpec] | None = None
         self._partitioning_id: str | None = None
 
         # Cached model (fixed plugin/package; loaded once per worker).
@@ -215,7 +218,7 @@ class Worker:
         # - self._runners is immutable during ACTIVE (tuple of generator objects).
         # - self._active_runners is a list of indices into self._runners for runners not finished yet.
         #   This avoids dict lookups and avoids rebuilding tuples during the hot path.
-        self._runners: tuple[Generator[object, None, None], ...] = ()
+        self._runners: tuple[Generator[object], ...] = ()
         self._active_runners: list[int] = []
 
         # Desired-state handoff from callback thread -> runner thread.
@@ -569,7 +572,9 @@ class Worker:
         node = self._nodes.get(msg.target_node)
         if node is None:
             with self._lock:
-                self._transition_to_broken_locked(reason=f"Received event for unknown node {msg.target_node!r}")
+                self._transition_to_broken_locked(
+                    reason=f"Received event for unknown node {msg.target_node!r}"
+                )
             return
 
         if msg.shm_name is not None:
@@ -581,7 +586,9 @@ class Worker:
 
         if msg.data is None:
             with self._lock:
-                self._transition_to_broken_locked(reason=f"IPCEventMsg missing payload for node {msg.target_node!r}")
+                self._transition_to_broken_locked(
+                    reason=f"IPCEventMsg missing payload for node {msg.target_node!r}"
+                )
             return
 
         envelope = EventEnvelope(
@@ -612,7 +619,9 @@ class Worker:
         node = self._nodes.get(msg.target_node)
         if node is None:
             with self._lock:
-                self._transition_to_broken_locked(reason=f"Received promise for unknown node {msg.target_node!r}")
+                self._transition_to_broken_locked(
+                    reason=f"Received promise for unknown node {msg.target_node!r}"
+                )
                 return
 
         envelope = PromiseEnvelope(
@@ -684,7 +693,9 @@ class Worker:
                 desired.request_id,
                 exc,
             )
-            self._transition_to_broken_locked(reason=f"failed to apply desired-state {desired.request_id}: {exc!r}")
+            self._transition_to_broken_locked(
+                reason=f"failed to apply desired-state {desired.request_id}: {exc!r}"
+            )
 
     def _apply_desired_locked(self, desired: DesiredWorkerState) -> None:
         """
@@ -704,8 +715,10 @@ class Worker:
         - ACTIVE hot path does not call control-plane helpers.
         """
         if not desired.validate_assignment():
-            raise ValueError(f"Invalid or incomplete assignment expid={desired.expid} repid={desired.repid} "
-                             f"partition={desired.partition}.")
+            raise ValueError(
+                f"Invalid or incomplete assignment expid={desired.expid} repid={desired.repid} "
+                f"partition={desired.partition}."
+            )
         if not desired.validate_state():
             raise ValueError(f"Invalid desired state {desired.state.name}")
 
@@ -799,8 +812,12 @@ class Worker:
 
         # TERMINATED: cancel and teardown the current run (if any), return to AVAILABLE.
         if target == WorkerState.TERMINATED:
-            if self._state not in (WorkerState.ACTIVE, WorkerState.PAUSED, WorkerState.READY,
-                                   WorkerState.RESERVED):
+            if self._state not in (
+                WorkerState.ACTIVE,
+                WorkerState.PAUSED,
+                WorkerState.READY,
+                WorkerState.RESERVED,
+            ):
                 raise WorkerError(f"Cannot terminate from {self._state.name}")
 
             # Only set CANCELED if we were past RESERVED (i.e. the run was actually started).
@@ -848,9 +865,11 @@ class Worker:
 
         # --- Experiment ---
         try:
-            if (self._experiment is None
-                    or self._experiment_expid != assignment.expid
-                    or self._experiment_partition != assignment.partition):
+            if (
+                self._experiment is None
+                or self._experiment_expid != assignment.expid
+                or self._experiment_partition != assignment.partition
+            ):
                 self._experiment = self._exp_store.load(assignment.expid)
                 self._experiment_expid = assignment.expid
                 self._experiment_partition = assignment.partition
@@ -869,7 +888,7 @@ class Worker:
                 # graph change invalidates partitioning cache
                 self._partitioning = None
                 self._partitioning_id = None
-            except (OperationalError, DBAPIError):
+            except OperationalError, DBAPIError:
                 # DB connectivity/auth is considered worker-fatal: cannot start experiments reliably.
                 raise
             except (KeyError, TypeError, ValueError, DiscoRuntimeError) as exc:
@@ -888,10 +907,7 @@ class Worker:
             return False
 
         try:
-            if (
-                    self._partitioning is None
-                    or self._partitioning_id != experiment.selected_partitioning
-            ):
+            if self._partitioning is None or self._partitioning_id != experiment.selected_partitioning:
                 self._partitioning = Partitioning.load(
                     metastore=self._cluster.meta,
                     partitioning_id=experiment.selected_partitioning,
@@ -900,13 +916,18 @@ class Worker:
                 self._node_specs = {ns.node_name: ns for ns in self._partitioning.node_specs}
                 self._partitioning_id = experiment.selected_partitioning
         except (
-                PartitioningNotFoundError, PartitioningCorruptError, KeyError, TypeError, ValueError,
-                DiscoRuntimeError) as exc:
+            PartitioningNotFoundError,
+            PartitioningCorruptError,
+            KeyError,
+            TypeError,
+            ValueError,
+            DiscoRuntimeError,
+        ) as exc:
             self._fail_partition_locked(exc, where="load partitioning")
             return False
 
         partitioning = self._partitioning
-        node_specs = cast(Dict[str, NodeInstanceSpec], self._node_specs)
+        node_specs = cast(dict[str, NodeInstanceSpec], self._node_specs)
 
         # --- Model (load once per worker) ---
         # If model cannot load, that is typically worker-fatal because model is a fixed package.
@@ -918,7 +939,7 @@ class Worker:
                 path=ms.path,
                 db=self._session_manager,
                 dev_import_root=ms.dev_import_root,
-                model_yml=ms.model_yml
+                model_yml=ms.model_yml,
             )
         model = self._model
 
@@ -926,7 +947,8 @@ class Worker:
         self._set_partition_status_locked(ExperimentStatus.LOADED)
 
         # --- Data logger ---
-        # Failure here is treated as worker-fatal (no catch) because it undermines observability and persistence.
+        # Failure here is treated as worker-fatal (no catch) because it undermines observability
+        # and persistence.
         dl = self._settings.data_logger
         dl_path = Path(dl.path) / str(assignment.expid) / str(assignment.repid) / str(assignment.partition)
         dlogger = DataLogger(
@@ -942,7 +964,8 @@ class Worker:
         params = experiment.params or {}
 
         logger.info(
-            "Worker %s setting up run for expid=%s repid=%s partition=%s nodes=%s scenario=%s partitioning_id=%s",
+            "Worker %s setting up run for expid=%s repid=%s partition=%s nodes=%s scenario=%s "
+            "partitioning_id=%s",
             self._name,
             assignment.expid,
             assignment.repid,
@@ -1121,7 +1144,9 @@ class Worker:
         try:
             self._cluster.set_worker_state(self.address, new_state)
         except Exception as exc:
-            logger.exception("Worker %s failed to publish state %s to Cluster: %r", self._name, new_state.name, exc)
+            logger.exception(
+                "Worker %s failed to publish state %s to Cluster: %r", self._name, new_state.name, exc
+            )
             self._state = WorkerState.BROKEN
 
     def _set_partition_status_locked(self, status: ExperimentStatus) -> None:

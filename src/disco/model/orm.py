@@ -1,7 +1,3 @@
-# src/disco/model/orm.py
-
-from __future__ import annotations
-
 """
 SQLAlchemy ORM integration for Model loading.
 
@@ -40,9 +36,14 @@ Edges:
   - target_key  (str-like, NOT NULL)
 """
 
+# src/disco/model/orm.py
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import import_module
-from typing import Iterable, Mapping, Optional, Sequence, Set, cast
+from typing import cast
 
 import sqlalchemy as sa
 from sqlalchemy import MetaData, Table
@@ -53,7 +54,6 @@ from sqlalchemy.sql.sqltypes import String, Text, Unicode
 from disco.database import DbHandle, normalize_db_handle
 
 from .spec import ModelSpec
-
 
 # -----------------------------
 # Errors
@@ -95,15 +95,15 @@ class OrmBundle:
     metadata: MetaData
 
     # Usable Table objects (resolved from metadata)
-    node_tables: Mapping[str, Table]                 # node_type -> Table
-    default_edge_table: Optional[Table]              # default edge table, if configured
-    edge_tables_by_simproc: Mapping[str, Table]      # simproc -> Table
+    node_tables: Mapping[str, Table]  # node_type -> Table
+    default_edge_table: Table | None  # default edge table, if configured
+    edge_tables_by_simproc: Mapping[str, Table]  # simproc -> Table
 
     # Name mapping used by db_validate/db_install
-    node_table_names: Mapping[str, str]              # node_type -> table name
-    default_edge_table_name: Optional[str]           # table name
-    edge_table_names_by_simproc: Mapping[str, str]   # simproc -> table name
-    required_table_names: Set[str]                   # all required table names (no schema prefix)
+    node_table_names: Mapping[str, str]  # node_type -> table name
+    default_edge_table_name: str | None  # table name
+    edge_table_names_by_simproc: Mapping[str, str]  # simproc -> table name
+    required_table_names: set[str]  # all required table names (no schema prefix)
 
     ddl_available: bool
 
@@ -153,14 +153,16 @@ def _parse_python_ref(ref: str) -> tuple[str, str]:
     else:
         if "." not in r:
             raise ModelOrmLoadError(
-                f"Invalid ORM provider reference '{ref}'. Expected 'pkg.module:callable' or 'pkg.module.callable'."
+                f"Invalid ORM provider reference '{ref}'. "
+                "Expected 'pkg.module:callable' or 'pkg.module.callable'."
             )
         mod, attr = r.rsplit(".", 1)
         mod, attr = mod.strip(), attr.strip()
 
     if not mod or not attr:
         raise ModelOrmLoadError(
-            f"Invalid ORM provider reference '{ref}'. Expected 'pkg.module:callable' or 'pkg.module.callable'."
+            f"Invalid ORM provider reference '{ref}'. "
+            "Expected 'pkg.module:callable' or 'pkg.module.callable'."
         )
     return mod, attr
 
@@ -213,7 +215,7 @@ def _inspector(conn_or_engine: Engine | Connection) -> Inspector:
     return sa.inspect(conn_or_engine)
 
 
-def _table_exists(conn_or_engine: Engine | Connection, table_name: str, schema: Optional[str]) -> bool:
+def _table_exists(conn_or_engine: Engine | Connection, table_name: str, schema: str | None) -> bool:
     insp = _inspector(conn_or_engine)
     return bool(insp.has_table(table_name, schema=schema))
 
@@ -222,7 +224,7 @@ def reflect_tables(
     conn_or_engine: Engine | Connection,
     table_names: Iterable[str],
     *,
-    schema: Optional[str] = None,
+    schema: str | None = None,
 ) -> MetaData:
     """
     Reflect a set of tables into a new MetaData.
@@ -250,11 +252,11 @@ def reflect_tables(
 # -----------------------------
 
 
-def _metadata_table_key(table_name: str, schema: Optional[str]) -> str:
+def _metadata_table_key(table_name: str, schema: str | None) -> str:
     return f"{schema}.{table_name}" if schema else table_name
 
 
-def get_table_from_metadata(md: MetaData, table_name: str, *, schema: Optional[str] = None) -> Table:
+def get_table_from_metadata(md: MetaData, table_name: str, *, schema: str | None = None) -> Table:
     """
     Resolve a table from MetaData by name (+ optional schema).
     """
@@ -288,8 +290,7 @@ def _is_str_type(col: Column) -> bool:
 def _require_col(table: Table, name: str) -> Column:
     if name not in table.c:
         raise ModelOrmValidationError(
-            f"Table '{table.fullname}' is missing required column '{name}'. "
-            f"Columns: {list(table.c.keys())}"
+            f"Table '{table.fullname}' is missing required column '{name}'. Columns: {list(table.c.keys())}"
         )
     return table.c[name]
 
@@ -329,9 +330,8 @@ def _has_unique_on(table: Table, col_names: Sequence[str]) -> bool:
         return True
 
     for c in table.constraints:
-        if isinstance(c, sa.UniqueConstraint):
-            if _colset_equals(list(c.columns), col_names):
-                return True
+        if isinstance(c, sa.UniqueConstraint) and _colset_equals(list(c.columns), col_names):
+            return True
 
     for idx in table.indexes:
         try:
@@ -378,13 +378,13 @@ def validate_edge_table(table: Table) -> None:
 # -----------------------------
 
 
-def required_table_names_from_spec(spec: ModelSpec) -> Set[str]:
+def required_table_names_from_spec(spec: ModelSpec) -> set[str]:
     """
     Compute the set of tables referenced by model.yml.
 
     `spec` is expected to be disco.model.spec.ModelSpec, but kept structurally typed.
     """
-    names: Set[str] = set()
+    names: set[str] = set()
 
     for nts in spec.node_types.values():
         names.add(nts.node_data_table)
@@ -407,8 +407,8 @@ def required_table_names_from_spec(spec: ModelSpec) -> Set[str]:
 def build_orm_bundle(
     *,
     spec: ModelSpec,
-    db: Optional[DbHandle],
-    schema: Optional[str] = None,
+    db: DbHandle | None,
+    schema: str | None = None,
 ) -> OrmBundle:
     """
     Build the ORM bundle for a Model.
@@ -435,7 +435,9 @@ def build_orm_bundle(
 
     else:
         if db is None:
-            raise ModelOrmLoadError("Reflection mode requires a db handle (Engine|Connection|SessionManager).")
+            raise ModelOrmLoadError(
+                "Reflection mode requires a db handle (Engine|Connection|SessionManager)."
+            )
 
         conn_or_engine = normalize_db_handle(db)
         md = reflect_tables(conn_or_engine, required_names, schema=schema)
@@ -449,8 +451,8 @@ def build_orm_bundle(
         node_table_names[node_type_name] = nts.node_data_table
         node_tables[node_type_name] = get_table_from_metadata(md, nts.node_data_table, schema=schema)
 
-    default_edge_table: Optional[Table] = None
-    default_edge_table_name: Optional[str] = spec.default_edge_data_table
+    default_edge_table: Table | None = None
+    default_edge_table_name: str | None = spec.default_edge_data_table
     if default_edge_table_name:
         default_edge_table = get_table_from_metadata(md, default_edge_table_name, schema=schema)
 
@@ -482,7 +484,7 @@ def build_orm_bundle(
 # -----------------------------
 
 
-def db_validate(bundle: OrmBundle, db: DbHandle, *, schema: Optional[str] = None) -> None:
+def db_validate(bundle: OrmBundle, db: DbHandle, *, schema: str | None = None) -> None:
     """
     Validate the actual database schema for this bundle.
 
@@ -510,7 +512,7 @@ def db_validate(bundle: OrmBundle, db: DbHandle, *, schema: Optional[str] = None
         validate_edge_table(tbl)
 
 
-def db_install(bundle: OrmBundle, db: DbHandle, *, schema: Optional[str] = None) -> None:
+def db_install(bundle: OrmBundle, db: DbHandle, *, schema: str | None = None) -> None:
     """
     Create missing tables according to bundle.metadata (checkfirst=True), then validate.
 

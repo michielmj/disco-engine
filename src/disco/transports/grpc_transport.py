@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 gRPC transport for delivering envelopes to remote workers.
 
@@ -10,7 +8,7 @@ service DiscoTransport {
   rpc SendPromise(stream PromiseEnvelopeMsg) returns (TransportAck);
 }
 
-Design (ENGINEERING_SPEC chapter 6):
+Design (ENGINEERING.md chapter 6):
 
 - Events:
     - Sent via a client-streaming RPC (SendEvents).
@@ -29,20 +27,21 @@ The transport is purely outbound. The corresponding gRPC server
 NodeController queues on the receiving Worker.
 """
 
-from dataclasses import dataclass
+from __future__ import annotations
+
 import time
-from typing import Any, Callable, Dict, Iterable, Optional
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from typing import Any
 
 import grpc
+from tools.mp_logging import getLogger
 
 from ..cluster import Cluster, WorkerState
 from ..config import GrpcSettings
 from ..envelopes import EventEnvelope, PromiseEnvelope
 from .base import Transport
-
 from .proto import transport_pb2, transport_pb2_grpc  # generated from transport.proto
-
-from tools.mp_logging import getLogger
 
 logger = getLogger(__name__)
 
@@ -52,6 +51,7 @@ class _RemoteEndpoint:
     """
     Holds channel and stubs for a single remote worker address.
     """
+
     address: str
     channel: grpc.Channel
     stub: transport_pb2_grpc.DiscoTransportStub
@@ -61,7 +61,7 @@ class GrpcTransport(Transport):
     """
     Transport that delivers envelopes to remote Workers via gRPC.
 
-    Responsibilities (ENGINEERING_SPEC §6.7):
+    Responsibilities (ENGINEERING.md §6.7):
 
     - Decide whether it handles a node based on Cluster.address_book.
       Any node with an address in the address_book is considered
@@ -81,10 +81,8 @@ class GrpcTransport(Transport):
         *,
         serializer: Callable[[Any], tuple[bytes, str]] | None = None,  # data -> packed_data, protocol
         # Optional injection points to ease testing or customization:
-        channel_factory: Optional[Callable[[str, GrpcSettings], grpc.Channel]] = None,
-        stub_factory: Optional[
-            Callable[[grpc.Channel], transport_pb2_grpc.DiscoTransportStub]
-        ] = None,
+        channel_factory: Callable[[str, GrpcSettings], grpc.Channel] | None = None,
+        stub_factory: Callable[[grpc.Channel], transport_pb2_grpc.DiscoTransportStub] | None = None,
     ) -> None:
         self._cluster = cluster
         self._settings = settings
@@ -93,7 +91,7 @@ class GrpcTransport(Transport):
         self._stub_factory = stub_factory or _default_stub_factory
 
         # address -> _RemoteEndpoint
-        self._endpoints: Dict[str, _RemoteEndpoint] = {}
+        self._endpoints: dict[str, _RemoteEndpoint] = {}
 
         # Cache retry configuration locally for speed
         delays = list(settings.promise_retry_delays_s)
@@ -132,7 +130,7 @@ class GrpcTransport(Transport):
             data = envelope.data
         else:
             data, serialization_protocol = self._serializer(envelope.data)
-            headers = headers | {'serialization_protocol': serialization_protocol}
+            headers = headers | {"serialization_protocol": serialization_protocol}
 
         msg = transport_pb2.EventEnvelopeMsg(
             repid=envelope.repid,
@@ -255,10 +253,10 @@ class GrpcTransport(Transport):
         """
         try:
             addr = self._cluster.address_book[(repid, node)]
-        except KeyError:
+        except KeyError as exc:
             msg = f"No address for (repid={repid!r}, node={node!r}) in Cluster.address_book"
             logger.error(msg)
-            raise KeyError(msg)
+            raise KeyError(msg) from exc
         return addr
 
     def _get_or_create_endpoint(self, addr: str) -> _RemoteEndpoint:
@@ -310,6 +308,7 @@ class GrpcTransport(Transport):
 # Default factories
 # ---------------------------------------------------------------------- #
 
+
 def _default_channel_factory(address: str, settings: GrpcSettings) -> grpc.Channel:
     """
     Create a gRPC channel with basic options derived from GrpcSettings.
@@ -341,4 +340,4 @@ def _default_serializer(value: Any) -> tuple[bytes, str]:
     """
     import pickle
 
-    return pickle.dumps(value), f'PICKLE{pickle.DEFAULT_PROTOCOL}'
+    return pickle.dumps(value), f"PICKLE{pickle.DEFAULT_PROTOCOL}"

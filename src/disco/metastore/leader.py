@@ -1,15 +1,16 @@
 # src/disco/metastore/leader.py
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from threading import Event
 from time import sleep
-from typing import Any, Callable, Mapping, Optional
+from typing import Any
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import KazooException, NodeExistsError, NoNodeError
 from kazoo.recipe.election import Election
-
 from tools.mp_logging import getLogger
 
 logger = getLogger(__name__)
@@ -62,10 +63,8 @@ class LeaderElection:
 
     def cancel(self) -> None:
         self._cancelled.set()
-        try:
+        with contextlib.suppress(Exception):
             self._election.cancel()
-        except Exception:
-            pass
 
         # Best-effort cleanup of leader key (ephemeral will disappear on session loss anyway).
         try:
@@ -75,7 +74,7 @@ class LeaderElection:
         except Exception:
             pass
 
-    def run(self, on_lead: Callable[[], None], abort: Optional[Any] = None) -> None:
+    def run(self, on_lead: Callable[[], None], abort: Any | None = None) -> None:
         """
         Block until cancelled or abort is set; campaign for leadership.
         When leading, publish leader record and run on_lead().
@@ -105,7 +104,8 @@ class LeaderElection:
         try:
             self._client.create(self._leader_path, data, ephemeral=True, makepath=True)
         except NodeExistsError:
-            # Should not happen under correct election semantics, but handle stale persistent nodes gracefully.
+            # Should not happen under correct election semantics, but handle stale
+            # persistent nodes gracefully.
             try:
                 stat = self._client.exists(self._leader_path)
                 if stat is not None and getattr(stat, "ephemeralOwner", 0) == 0:

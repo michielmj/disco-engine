@@ -1,4 +1,4 @@
-from sqlalchemy import MetaData, Table, Column, String, Integer, Float, JSON
+from sqlalchemy import JSON, Column, Float, Integer, MetaData, String, Table
 
 metadata = MetaData()
 

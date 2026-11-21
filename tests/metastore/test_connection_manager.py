@@ -1,11 +1,12 @@
 import uuid
-from typing import Any, Callable, List, Tuple
+from collections.abc import Callable
+from typing import Any
 
 import pytest
+from kazoo.client import KazooState
 
 # Adjust these imports to match your project structure
 from disco.metastore import ZkConnectionManager
-from kazoo.client import KazooState
 
 
 class FakeKazooClient:
@@ -39,6 +40,7 @@ class FakeKazooClient:
 
 class DummySettings:
     """Simple stand-in for ZookeeperSettings."""
+
     def __init__(self, chroot: str = "/") -> None:
         self.chroot = chroot
 
@@ -60,8 +62,8 @@ def fake_kazoo(monkeypatch):
         _fake_create_zk_client,
     )
 
-    data_registrations: List[Tuple[FakeKazooClient, str, Callable]] = []
-    children_registrations: List[Tuple[FakeKazooClient, str, Callable]] = []
+    data_registrations: list[tuple[FakeKazooClient, str, Callable]] = []
+    children_registrations: list[tuple[FakeKazooClient, str, Callable]] = []
 
     def _fake_data_watch(client, path, func):
         data_registrations.append((client, path, func))
@@ -96,7 +98,7 @@ def test_start_and_stop_lifecycle(fake_kazoo):
 
 # noinspection PyTypeChecker,PyUnresolvedReferences,PyArgumentList
 def test_watch_data_registers_and_reinstalls_on_session_loss(fake_kazoo):
-    fake_client, registrations, children_regs = fake_kazoo
+    fake_client, registrations, _children_regs = fake_kazoo
 
     mgr = ZkConnectionManager(DummySettings())
     mgr.start()
@@ -144,7 +146,7 @@ def test_watch_data_registers_and_reinstalls_on_session_loss(fake_kazoo):
 
 # noinspection PyTypeChecker,PyUnresolvedReferences,PyArgumentList
 def test_watch_children_registers_and_reinstalls_on_session_loss(fake_kazoo):
-    fake_client, data_regs, children_regs = fake_kazoo
+    fake_client, _data_regs, children_regs = fake_kazoo
 
     mgr = ZkConnectionManager(DummySettings())
     mgr.start()

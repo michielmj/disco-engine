@@ -1,16 +1,16 @@
 # tests/metastore/test_leader.py
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from threading import Event
-from typing import Any, Callable, Mapping, Optional
+from typing import Any
 
 import pytest
 from kazoo.exceptions import NodeExistsError, NoNodeError
 
-from disco.metastore.store import Metastore
 from disco.metastore.leader import LeaderElection, LeaderRecord
-
+from disco.metastore.store import Metastore
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -54,7 +54,7 @@ class FakeKazooClient:
 
         # Behavior knobs
         self._create_raises_node_exists: bool = False
-        self._exists_stat: Optional[_FakeStat] = None
+        self._exists_stat: _FakeStat | None = None
         self._nodes: set[str] = set()
 
     def ensure_path(self, path: str) -> None:
@@ -65,9 +65,7 @@ class FakeKazooClient:
         if self._create_raises_node_exists:
             raise NodeExistsError()
 
-        self.create_calls.append(
-            {"path": path, "value": value, "ephemeral": ephemeral, "makepath": makepath}
-        )
+        self.create_calls.append({"path": path, "value": value, "ephemeral": ephemeral, "makepath": makepath})
         self._nodes.add(path)
 
     def set(self, path: str, value: bytes) -> None:
@@ -80,7 +78,7 @@ class FakeKazooClient:
             raise NoNodeError()
         self._nodes.remove(path)
 
-    def exists(self, path: str) -> Optional[_FakeStat]:
+    def exists(self, path: str) -> _FakeStat | None:
         self.exists_calls.append(path)
         return self._exists_stat
 
@@ -205,7 +203,9 @@ def test_publish_replaces_persistent_leader_node(monkeypatch: pytest.MonkeyPatch
     # Allow the second create to succeed after we "replace" the node.
     original_create = client.create
 
-    def create_side_effect(path: str, value: bytes, *, ephemeral: bool = False, makepath: bool = False) -> None:
+    def create_side_effect(
+        path: str, value: bytes, *, ephemeral: bool = False, makepath: bool = False
+    ) -> None:
         if client._create_raises_node_exists:
             client._create_raises_node_exists = False
             raise NodeExistsError()

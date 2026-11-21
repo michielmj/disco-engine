@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from collections.abc import Mapping
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -18,12 +19,12 @@ class SimProcSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
-    edge_data_table: Optional[str] = Field(default=None, alias="edge-data-table", min_length=1)
+    edge_data_table: str | None = Field(default=None, alias="edge-data-table", min_length=1)
 
     # noinspection PyNestedDecorators
     @field_validator("edge_data_table")
     @classmethod
-    def _validate_edge_data_table(cls, v: Optional[str]) -> Optional[str]:
+    def _validate_edge_data_table(cls, v: str | None) -> str | None:
         if v is None:
             return None
         s = v.strip()
@@ -56,9 +57,9 @@ class NodeTypeSpec(BaseModel):
 
     python_class: str = Field(..., alias="class", min_length=1)
     node_data_table: str = Field(..., alias="node-data-table", min_length=1)
-    distinct_nodes: List[str] = Field(default_factory=list, alias="distinct-nodes")
-    same_node: List[str] = Field(default_factory=list, alias="same-node")
-    self_relations: List[Tuple[str, str]] = Field(default_factory=list, alias="self-relations")
+    distinct_nodes: list[str] = Field(default_factory=list, alias="distinct-nodes")
+    same_node: list[str] = Field(default_factory=list, alias="same-node")
+    self_relations: list[tuple[str, str]] = Field(default_factory=list, alias="self-relations")
 
     # noinspection PyNestedDecorators
     @field_validator("python_class")
@@ -68,7 +69,9 @@ class NodeTypeSpec(BaseModel):
         if not s:
             raise ValueError("node type class may not be empty/whitespace")
         if ":" not in s and "." not in s:
-            raise ValueError("node type class must look like 'pkg.module:ClassName' or 'pkg.module.ClassName'")
+            raise ValueError(
+                "node type class must look like 'pkg.module:ClassName' or 'pkg.module.ClassName'"
+            )
         return s
 
     # noinspection PyNestedDecorators
@@ -87,8 +90,8 @@ class NodeTypeSpec(BaseModel):
     # noinspection PyNestedDecorators
     @field_validator("distinct_nodes")
     @classmethod
-    def _validate_distinct_nodes(cls, v: List[str]) -> List[str]:
-        cleaned: List[str] = []
+    def _validate_distinct_nodes(cls, v: list[str]) -> list[str]:
+        cleaned: list[str] = []
         seen: set[str] = set()
         for item in v:
             s = (item or "").strip()
@@ -103,7 +106,7 @@ class NodeTypeSpec(BaseModel):
     # noinspection PyNestedDecorators
     @field_validator("same_node", mode="before")
     @classmethod
-    def _validate_same_node(cls, v: object) -> List[str]:
+    def _validate_same_node(cls, v: object) -> list[str]:
         if not isinstance(v, list):
             raise ValueError("same-node must be a list")
         cleaned = [str(s).strip() for s in v]
@@ -116,8 +119,8 @@ class NodeTypeSpec(BaseModel):
     # noinspection PyNestedDecorators
     @field_validator("self_relations")
     @classmethod
-    def _validate_self_relations_shape(cls, v: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
-        cleaned: List[Tuple[str, str]] = []
+    def _validate_self_relations_shape(cls, v: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        cleaned: list[tuple[str, str]] = []
         seen: set[tuple[str, str]] = set()
         for higher, lower in v:
             hgr = (higher or "").strip()
@@ -159,32 +162,35 @@ class ModelSpec(BaseModel):
 
     Internally, this spec is normalized to:
       - simprocs: List[str] (ordered simproc names)
-      - simproc_edge_data_tables: Dict[str, str] (simproc name -> edge data table) for those simprocs that define one
+      - simproc_edge_data_tables: Dict[str, str] (simproc name -> edge data table), for those simprocs
+        that define one
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
-    name: Optional[str] = Field(default=None)
-    version: Optional[str] = Field(default=None)
+    name: str | None = Field(default=None)
+    version: str | None = Field(default=None)
 
     # Normalized ordered simproc names
-    simprocs: List[str]
+    simprocs: list[str]
 
     # Internal normalized mapping: simproc_name -> edge-data-table (only those explicitly configured)
-    simproc_edge_data_tables: Dict[str, str] = Field(default_factory=dict)
+    simproc_edge_data_tables: dict[str, str] = Field(default_factory=dict)
 
-    node_types: Dict[str, NodeTypeSpec] = Field(..., alias="node-types")
+    node_types: dict[str, NodeTypeSpec] = Field(..., alias="node-types")
 
-    orm: Optional[str] = Field(
+    orm: str | None = Field(
         default=None,
         alias="orm",
         description="ORM provider reference. If none is given, ORM will be obtained via database reflection.",
     )
 
-    default_edge_data_table: Optional[str] = Field(
+    default_edge_data_table: str | None = Field(
         default=None,
         alias="default-edge-data-table",
-        description="Scenario table for default edge data (used when no simproc-specific edge table applies).",
+        description=(
+            "Scenario table for default edge data (used when no simproc-specific edge table applies)."
+        ),
     )
 
     # -----------------------------
@@ -201,8 +207,8 @@ class ModelSpec(BaseModel):
         if raw_simprocs is None:
             raise ValueError("simprocs is required")
 
-        simproc_list: List[str] = []
-        simproc_tables: Dict[str, str] = {}
+        simproc_list: list[str] = []
+        simproc_tables: dict[str, str] = {}
 
         # Simple form: list[str]
         if isinstance(raw_simprocs, list):
@@ -264,7 +270,7 @@ class ModelSpec(BaseModel):
     # noinspection PyNestedDecorators
     @field_validator("default_edge_data_table")
     @classmethod
-    def _validate_default_edge_data_table(cls, v: Optional[str]) -> Optional[str]:
+    def _validate_default_edge_data_table(cls, v: str | None) -> str | None:
         if v is None:
             return None
         s = v.strip()
@@ -272,14 +278,15 @@ class ModelSpec(BaseModel):
             raise ValueError("default-edge-data-table may not be empty/whitespace")
         if s.lower().startswith("graph_"):
             raise ValueError(
-                "default-edge-data-table may not start with 'graph_' (reserved for graph infrastructure tables)"
+                "default-edge-data-table may not start with 'graph_' "
+                "(reserved for graph infrastructure tables)"
             )
         return s
 
     # noinspection PyNestedDecorators
     @field_validator("orm")
     @classmethod
-    def _validate_orm_ref(cls, v: Optional[str]) -> Optional[str]:
+    def _validate_orm_ref(cls, v: str | None) -> str | None:
         if v is None:
             return None
         s = v.strip()
@@ -295,11 +302,11 @@ class ModelSpec(BaseModel):
     # -----------------------------
 
     @model_validator(mode="after")
-    def _validate_cross_refs(self) -> "ModelSpec":
+    def _validate_cross_refs(self) -> ModelSpec:
         order_by_name = {name: i for i, name in enumerate(self.simprocs)}
 
         # node-types keys must be non-empty/trimmed
-        for k in self.node_types.keys():
+        for k in self.node_types:
             if not (k or "").strip():
                 raise ValueError("node-types keys may not be empty/whitespace")
 
@@ -331,7 +338,7 @@ class ModelSpec(BaseModel):
         # optionally: ensure no duplicate table names across simproc_edge_data_tables
         # (helps avoid confusion)
         seen_tables: set[str] = set()
-        for sp_name, table_name in self.simproc_edge_data_tables.items():
+        for _sp_name, table_name in self.simproc_edge_data_tables.items():
             if table_name in seen_tables:
                 raise ValueError(f"duplicate edge-data-table '{table_name}' used for multiple simprocs")
             seen_tables.add(table_name)

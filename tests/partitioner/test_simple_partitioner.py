@@ -2,28 +2,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 
 import graphblas as gb
 import pytest
 
 from disco.graph import Graph
-from disco.partitioner import SimplePartitioner, NODE_TYPE
+from disco.partitioner import NODE_TYPE, SimplePartitioner
 
 
 @dataclass(frozen=True, slots=True)
 class NodeTypeSpecStub:
     # Distinct label types (strings) that must be constant within a node instance.
-    distinct_nodes: List[str]
+    distinct_nodes: list[str]
     # Intra-node edges between simprocs (not used in these tests; keep empty).
-    self_relations: List[Tuple[str, str]]
+    self_relations: list[tuple[str, str]]
 
 
 @dataclass(frozen=True, slots=True)
 class ModelSpecStub:
     # IMPORTANT: already ordered by layer (Partitioning expects this contract).
-    simprocs: List[str]
-    node_types: Dict[str, NodeTypeSpecStub]
+    simprocs: list[str]
+    node_types: dict[str, NodeTypeSpecStub]
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +48,7 @@ def _make_graph_two_node_types_same_region() -> Graph:
     #   0: (node-type, A)
     #   1: (node-type, B)
     #   2: (region, north)
-    label_meta: Dict[int, Tuple[str, str]] = {
+    label_meta: dict[int, tuple[str, str]] = {
         0: (NODE_TYPE, "A"),
         1: (NODE_TYPE, "B"),
         2: ("region", "north"),
@@ -57,23 +56,23 @@ def _make_graph_two_node_types_same_region() -> Graph:
 
     # label_matrix is (num_vertices x num_labels)
     # rows=vertices, cols=label ids
-    I: List[int] = []
-    J: List[int] = []
-    X: List[bool] = []
+    II: list[int] = []
+    J: list[int] = []
+    X: list[bool] = []
 
     # v0,v1 are A + north
     for v in (0, 1):
-        I.extend([v, v])
+        II.extend([v, v])
         J.extend([0, 2])
         X.extend([True, True])
 
     # v2,v3 are B + north
     for v in (2, 3):
-        I.extend([v, v])
+        II.extend([v, v])
         J.extend([1, 2])
         X.extend([True, True])
 
-    label_matrix = gb.Matrix.from_coo(I, J, X, nrows=num_vertices, ncols=3, dtype=bool)
+    label_matrix = gb.Matrix.from_coo(II, J, X, nrows=num_vertices, ncols=3, dtype=bool)
     g.set_labels(label_matrix=label_matrix, label_meta=label_meta)
     return g
 
@@ -96,7 +95,7 @@ def _make_model_distinct_region_for_a_and_b() -> ModelStub:
 
 
 def _coo_indices(v: gb.Vector) -> set[int]:
-    idx, vals = v.select("==", True).to_coo()
+    idx, _vals = v.select("==", True).to_coo()
     return set(idx.tolist())
 
 

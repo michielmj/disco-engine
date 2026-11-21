@@ -1,15 +1,16 @@
 # src/disco/client.py
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Iterator, Optional, Mapping
+from typing import Any
 
 from tools.mp_logging import getLogger
 
-from disco.cluster import Cluster, WorkerState, WorkerInfo
+from disco.cluster import Cluster, WorkerInfo, WorkerState
 from disco.config import AppSettings, get_settings
-from disco.experiments import Experiment, ExperimentStore, ExperimentStatus
+from disco.experiments import Experiment, ExperimentStatus, ExperimentStore
 
 logger = getLogger(__name__)
 
@@ -24,6 +25,7 @@ class WorkerSnapshot:
         - `info` is loaded from Metastore via Cluster.get_worker_info() and may raise
           if the worker disappears between reads.
     """
+
     address: str
     state: WorkerState
     info: WorkerInfo | None
@@ -87,7 +89,7 @@ class Client:
     # Submissions
     # ------------------------------------------------------------------ #
 
-    def submit(self, exp: str | Experiment, repid: Optional[str] = None) -> list[tuple[str, str]]:
+    def submit(self, exp: str | Experiment, repid: str | None = None) -> list[tuple[str, str]]:
         """
         Submit replications for scheduling by the orchestrator.
 
@@ -124,7 +126,7 @@ class Client:
 
         submitted: list[tuple[str, str]] = []
         # Submit all replications.
-        for r in e.replications.keys():
+        for r in e.replications:
             self.store.submit(expid, r)
             submitted.append((expid, r))
 

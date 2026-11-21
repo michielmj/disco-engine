@@ -1,3 +1,12 @@
+---
+paths:
+  - "src/disco/router.py"
+  - "src/disco/envelopes.py"
+  - "src/disco/transports/**"
+  - "tests/test_routing.py"
+  - "tests/test_*transport*.py"
+---
+
 # Routing and Transport layer (Chapter 6)
 
 ## Architecture overview

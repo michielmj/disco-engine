@@ -1,14 +1,56 @@
 {
+  "outputStyle": "Architect",
+  "env": {
+    "CLAUDE_CODE_USE_POWERSHELL_TOOL": "1",
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "6"
+  },
   "permissions": {
     "deny": [
-      "Bash(sudo:*)",
-      "Bash(pip install --break-system-packages*)",
-      "Bash(pip install --user*)",
-      "Bash(npm install*)",
-      "Bash(npm update*)",
-      "Bash(npx*)",
-      "Bash(curl * | bash*)",
-      "Bash(curl * | sh*)"
+      "Bash(env)",
+      "Bash(printenv *)",
+      "Bash(export)",
+      "Bash(export -p *)",
+      "Bash(set)",
+      "Bash(git add -A *)",
+      "Bash(git add --all *)",
+      "Bash(git add . *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git commit --amend *)",
+      "Bash(git rebase *)",
+      "Bash(npx *)",
+      "Bash(sudo *)",
+      "Bash(pip install --break-system-packages *)",
+      "Bash(pip install --user *)",
+      "Bash(npm install *)",
+      "Bash(npm update *)",
+      "Bash(curl * | bash *)",
+      "Bash(curl * | sh *)",
+      "PowerShell(Get-ChildItem env:*)",
+      "PowerShell(git add -A *)",
+      "PowerShell(git add --all *)",
+      "PowerShell(git add . *)",
+      "PowerShell(git push --force *)",
+      "PowerShell(git push -f *)",
+      "PowerShell(git commit --amend *)",
+      "PowerShell(git rebase *)",
+      "PowerShell(npx *)",
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run -q --no-project python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard_shell.py\"",
+            "onFailure": "block"
+          }
+        ]
+      }
     ]
   }
 }

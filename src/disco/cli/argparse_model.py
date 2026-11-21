@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any, Iterable, Optional, Sequence, Tuple, Type, Union, cast, get_args, get_origin
+import types
+from typing import Any, Union, cast, get_args, get_origin
 
 from pydantic import BaseModel
 
 
 def _is_optional(tp: Any) -> tuple[bool, Any]:
     origin = get_origin(tp)
-    if origin is Union:
+    # `X | None` (types.UnionType) is the same optional as Optional[X]; the safe UP007/UP045
+    # fixes rewrote the models' annotations to that form.
+    if origin is Union or origin is types.UnionType:
         args = tuple(a for a in get_args(tp))
         if len(args) == 2 and type(None) in args:
             other = args[0] if args[1] is type(None) else args[1]
@@ -16,16 +19,7 @@ def _is_optional(tp: Any) -> tuple[bool, Any]:
     return False, tp
 
 
-def _is_list(tp: Any) -> tuple[bool, Any]:
-    origin = get_origin(tp)
-    if origin in (list, List):  # type: ignore[name-defined]
-        args = get_args(tp)
-        inner = args[0] if args else Any
-        return True, inner
-    return False, tp
-
-
-def _is_literal(tp: Any) -> tuple[bool, Tuple[Any, ...]]:
+def _is_literal(tp: Any) -> tuple[bool, tuple[Any, ...]]:
     origin = get_origin(tp)
     if origin is not None and str(origin).endswith("Literal"):
         return True, get_args(tp)
@@ -42,7 +36,7 @@ def _python_type_for_argparse(tp: Any) -> type:
     return str
 
 
-def add_model_to_parser(parser: argparse.ArgumentParser, model: Type[BaseModel]) -> None:
+def add_model_to_parser(parser: argparse.ArgumentParser, model: type[BaseModel]) -> None:
     """
     Add arguments for all fields of a Pydantic v2 model to an argparse parser.
     Parsed values are intended to be passed to model.model_validate(vars(args)).

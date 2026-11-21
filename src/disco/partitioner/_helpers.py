@@ -2,12 +2,13 @@
 """
 Shared helpers for all Partitioner implementations.
 """
+
 from __future__ import annotations
 
-from typing import Iterator, List, Tuple
+from collections.abc import Iterator
 
-import numpy as np
 import graphblas as gb
+import numpy as np
 
 from disco.graph import Graph
 from disco.model import Model
@@ -18,7 +19,7 @@ from ._protocol import NODE_TYPE
 def _iter_node_instances(
     graph: Graph,
     model: Model,
-) -> Iterator[Tuple[str, List[str], gb.Vector, np.ndarray]]:
+) -> Iterator[tuple[str, list[str], gb.Vector, np.ndarray]]:
     """
     Yield ``(node_type, label_values, assignment_vector, vertex_indices)``
     for each distinct node instance found in the graph.
@@ -50,9 +51,9 @@ def _iter_node_instances(
 
     spec = model.spec
     for node_type, nts in spec.node_types.items():
-        distinct = [NODE_TYPE] + list(nts.distinct_nodes)
+        distinct = [NODE_TYPE, *list(nts.distinct_nodes)]
 
-        combos: List[np.ndarray] = graph.by_distinct_labels(distinct=distinct)
+        combos: list[np.ndarray] = graph.by_distinct_labels(distinct=distinct)
 
         for co in combos:
             if len(co) == 0:
@@ -73,22 +74,16 @@ def _iter_node_instances(
                 continue
 
             # Vertex assignment: vertices that carry ALL labels in this combo.
-            cnt = (
-                graph.label_matrix_masked[:, co]
-                .new(dtype=gb.dtypes.INT64)
-                .reduce_rowwise(gb.monoid.plus)
-            )
-            assignment_vector: gb.Vector = (cnt == len(co)).select('!=', False).new()
+            cnt = graph.label_matrix_masked[:, co].new(dtype=gb.dtypes.INT64).reduce_rowwise(gb.monoid.plus)
+            assignment_vector: gb.Vector = (cnt == len(co)).select("!=", False).new()
 
             # Vertex indices
             vertex_indices, _ = assignment_vector.to_coo()
 
             # Decode distinct label values (skip co[0] which is NODE_TYPE)
-            label_values: List[str] = []
+            label_values: list[str] = []
             for entry in co[1:]:
                 _, lvk = graph.label_meta[int(entry)]
                 label_values.append(str(lvk))
 
-            yield node_type, label_values, assignment_vector, vertex_indices.astype(
-                np.int64
-            )
+            yield node_type, label_values, assignment_vector, vertex_indices.astype(np.int64)

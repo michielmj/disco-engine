@@ -2,20 +2,20 @@ import os
 
 from data_logger import DataLogger
 
-from disco.graph import store_graph
-from disco.model import load_model
 from disco.config import get_settings
-from disco.partitioner import SimplePartitioner
 from disco.database import SessionManager
 from disco.experiments import Experiment
-from disco.testrun import TestRun
+from disco.graph import store_graph
 from disco.graph_factory import graph_from_model
+from disco.model import load_model
+from disco.partitioner import SimplePartitioner
+from disco.testrun import TestRun
 
 
 def test_run(tmp_path):
     print(os.curdir)
     settings = get_settings()
-    scenario_id = 'demo'
+    scenario_id = "demo"
     smgr = SessionManager.from_settings(settings.database)
     model = load_model(plugin="my-model")
     # with smgr.session() as session:
@@ -28,11 +28,9 @@ def test_run(tmp_path):
     partitioning = partitioner.partition(1)
 
     experiment = Experiment(
-        duration=100,
-        scenario_id=scenario_id,
-        allowed_partitionings=[partitioning.partitioning_id]
+        duration=100, scenario_id=scenario_id, allowed_partitionings=[partitioning.partitioning_id]
     )
-    dlogger = DataLogger(tmp_path / 'dlogger')
+    dlogger = DataLogger(tmp_path / "dlogger")
 
     testrun = TestRun(
         experiment=experiment,
@@ -40,11 +38,8 @@ def test_run(tmp_path):
         settings=settings,
         model=model,
         dlogger=dlogger,
-        partitioning=partitioning
+        partitioning=partitioning,
     )
-    testrun.initialize()
+    testrun.initialize({})
 
     testrun.run(100)
-
-
-

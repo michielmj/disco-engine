@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
 
 import pytest
 
@@ -19,7 +18,7 @@ class _FakeReplication:
 @dataclass
 class _FakeExperiment:
     status: ExperimentStatus
-    replications: Dict[str, _FakeReplication]
+    replications: dict[str, _FakeReplication]
 
 
 class _FakeStore:

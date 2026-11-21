@@ -15,6 +15,7 @@ Public API
 - ``SimplePartitioner``             : always produces a single partition.
 - ``SpectralClusteringPartitioner`` : spectral-clustering-based multi-partition splitter.
 """
+
 from __future__ import annotations
 
 from ._protocol import NODE_TYPE, Partitioner

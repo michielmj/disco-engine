@@ -1,9 +1,10 @@
 # src/disco/partitioning.py
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Mapping, Set, Tuple, Self
+from datetime import UTC, datetime
+from typing import Any, Self
 from uuid import uuid4
 
 import graphblas as gb
@@ -22,7 +23,7 @@ class NodeInstanceSpec:
     node_name: str
     node_type: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "partition": self.partition,
             "node_name": self.node_name,
@@ -41,21 +42,17 @@ class NodeInstanceSpec:
 class NodeTopology:
     node: str
     node_type: str
-    self_relations: List[Tuple[str, str]]
-    predecessors: Dict[str, Set[Tuple[str, str]]]
-    successors: Dict[str, Set[Tuple[str, str]]]
+    self_relations: list[tuple[str, str]]
+    predecessors: dict[str, set[tuple[str, str]]]
+    successors: dict[str, set[tuple[str, str]]]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "node": self.node,
             "node_type": self.node_type,
             "self_relations": [(a, b) for (a, b) in self.self_relations],
-            "predecessors": {
-                str(k): [(n, s) for (n, s) in sorted(v)] for k, v in self.predecessors.items()
-            },
-            "successors": {
-                str(k): [(n, s) for (n, s) in sorted(v)] for k, v in self.successors.items()
-            },
+            "predecessors": {str(k): [(n, s) for (n, s) in sorted(v)] for k, v in self.predecessors.items()},
+            "successors": {str(k): [(n, s) for (n, s) in sorted(v)] for k, v in self.successors.items()},
         }
 
     @staticmethod
@@ -66,18 +63,18 @@ class NodeTopology:
         raw_self = d.get("self_relations", []) or []
         if not isinstance(raw_self, list):
             raise TypeError("self_relations must be a list")
-        self_relations: List[Tuple[str, str]] = []
+        self_relations: list[tuple[str, str]] = []
         for pair in raw_self:
             if not (isinstance(pair, (list, tuple)) and len(pair) == 2):
                 raise TypeError("self_relations entries must be 2-tuples")
             self_relations.append((str(pair[0]), str(pair[1])))
 
-        def _load_adj(raw: Any, field_name: str) -> Dict[str, Set[Tuple[str, str]]]:
+        def _load_adj(raw: Any, field_name: str) -> dict[str, set[tuple[str, str]]]:
             if raw is None:
                 return {}
             if not isinstance(raw, Mapping):
                 raise TypeError(f"{field_name} must be a mapping")
-            out: Dict[str, Set[Tuple[str, str]]] = {}
+            out: dict[str, set[tuple[str, str]]] = {}
             for simproc_name, neighbors in raw.items():
                 sp = str(simproc_name)
                 if neighbors is None:
@@ -85,7 +82,7 @@ class NodeTopology:
                     continue
                 if not isinstance(neighbors, list):
                     raise TypeError(f"{field_name}[{sp}] must be a list of 2-tuples")
-                s: Set[Tuple[str, str]] = set()
+                s: set[tuple[str, str]] = set()
                 for item in neighbors:
                     if not (isinstance(item, (list, tuple)) and len(item) == 2):
                         raise TypeError(f"{field_name}[{sp}] entries must be 2-tuples")
@@ -115,7 +112,6 @@ class PartitioningCorruptError(DiscoRuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class Partitioning:
-
     partitioning_id: str
     scenario_id: str
     num_partitions: int
@@ -123,14 +119,14 @@ class Partitioning:
     affinity_by_partition: Mapping[int, str] = field(default_factory=dict)
 
     # Row order defines incidence row order.
-    node_specs: Tuple[NodeInstanceSpec, ...] = field(default_factory=tuple)
+    node_specs: tuple[NodeInstanceSpec, ...] = field(default_factory=tuple)
 
     # (n_nodes x n_vertices) BOOL
     incidence: gb.Matrix = field(default_factory=lambda: gb.Matrix(bool))
 
     topology_by_node: Mapping[str, NodeTopology] = field(default_factory=dict)
 
-    node_indices: Dict[str, int] = field(default_factory=dict, repr=False)
+    node_indices: dict[str, int] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         if not self.partitioning_id or not self.partitioning_id.strip():
@@ -160,10 +156,11 @@ class Partitioning:
                 raise ValueError(f"node_indices inconsistent for '{name}'")
 
         # Validate nodes + topology consistency
-        for i, ns in enumerate(self.node_specs):
+        for _i, ns in enumerate(self.node_specs):
             if ns.partition < 0 or ns.partition >= self.num_partitions:
                 raise ValueError(
-                    f"node '{ns.node_name}' has partition {ns.partition}, outside [0,{self.num_partitions - 1}]"
+                    f"node '{ns.node_name}' has partition {ns.partition}, "
+                    f"outside [0,{self.num_partitions - 1}]"
                 )
             if ns.node_name not in self.topology_by_node:
                 raise ValueError(f"missing topology for node '{ns.node_name}' in Partitioning object")
@@ -175,7 +172,7 @@ class Partitioning:
                     f"topology.node_type '{topo.node_type}' does not match node_type '{ns.node_type}'"
                 )
 
-        for p in self.affinity_by_partition.keys():
+        for p in self.affinity_by_partition:
             if p < 0 or p >= self.num_partitions:
                 raise ValueError(f"affinity_by_partition has invalid partition key: {p}")
 
@@ -185,11 +182,11 @@ class Partitioning:
 
     @classmethod
     def from_node_instance_spec(
-            cls,
-            node_specs: List[NodeInstanceSpec] | Tuple[NodeInstanceSpec, ...],
-            incidence: gb.Matrix,
-            graph: Graph,
-            model: Model,
+        cls,
+        node_specs: list[NodeInstanceSpec] | tuple[NodeInstanceSpec, ...],
+        incidence: gb.Matrix,
+        graph: Graph,
+        model: Model,
     ) -> Self:
         node_specs = tuple(node_specs)
         if not node_specs:
@@ -204,13 +201,13 @@ class Partitioning:
             raise ValueError("node.partition must be >= 0")
         num_partitions = max_partition + 1
 
-        node_indices: Dict[str, int] = {}
+        node_indices: dict[str, int] = {}
         for idx, ns in enumerate(node_specs):
             if ns.node_name in node_indices:
                 raise ValueError(f"duplicate node_name in node_specs: {ns.node_name}")
             node_indices[ns.node_name] = idx
 
-        for i, ns in enumerate(node_specs):
+        for _i, ns in enumerate(node_specs):
             if not ns.node_name or not ns.node_name.strip():
                 raise ValueError("node_name must be non-empty")
             if not ns.node_type or not ns.node_type.strip():
@@ -224,11 +221,15 @@ class Partitioning:
 
         n_nodes = len(node_specs)
         if int(incidence.nrows) != n_nodes:
-            raise ValueError(f"incidence.nrows ({int(incidence.nrows)}) must equal number of nodes ({n_nodes})")
+            raise ValueError(
+                f"incidence.nrows ({int(incidence.nrows)}) must equal number of nodes ({n_nodes})"
+            )
         if incidence.dtype != gb.dtypes.BOOL:
             raise TypeError("incidence matrix must have BOOL dtype")
 
-        topo = cls.compute_topology_from_graph(node_specs=node_specs, incidence=incidence, graph=graph, model=model)
+        topo = cls.compute_topology_from_graph(
+            node_specs=node_specs, incidence=incidence, graph=graph, model=model
+        )
 
         return cls(
             partitioning_id=pid,
@@ -262,11 +263,11 @@ class Partitioning:
         i = self.node_index(node_name)
         return self.incidence[i, :].new()
 
-    def predecessors(self, *, node_name: str, simproc_name: str) -> Set[Tuple[str, str]]:
+    def predecessors(self, *, node_name: str, simproc_name: str) -> set[tuple[str, str]]:
         topo = self.topology_by_node[node_name]
         return set(topo.predecessors.get(simproc_name, set()))
 
-    def successors(self, *, node_name: str, simproc_name: str) -> Set[Tuple[str, str]]:
+    def successors(self, *, node_name: str, simproc_name: str) -> set[tuple[str, str]]:
         topo = self.topology_by_node[node_name]
         return set(topo.successors.get(simproc_name, set()))
 
@@ -298,17 +299,17 @@ class Partitioning:
     # Store / Load
     # -------------------------
 
-    def metadata_dict(self) -> Dict[str, Any]:
+    def metadata_dict(self) -> dict[str, Any]:
         return {
             "format_version": 1,
             "partitioning_id": self.partitioning_id,
             "scenario_id": self.scenario_id,
             "num_partitions": self.num_partitions,
             "affinity_by_partition": {int(k): str(v) for k, v in self.affinity_by_partition.items()},
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
 
-    def manifest_list(self) -> List[Dict[str, Any]]:
+    def manifest_list(self) -> list[dict[str, Any]]:
         return [n.to_dict() for n in self.node_specs]
 
     def store(self, metastore: Metastore) -> None:
@@ -351,11 +352,11 @@ class Partitioning:
             raise PartitioningCorruptError(
                 f"partitioning '{partitioning_id}': affinity_by_partition is not a mapping"
             )
-        affinity_by_partition: Dict[int, str] = {int(k): str(v) for k, v in raw_aff.items()}
+        affinity_by_partition: dict[int, str] = {int(k): str(v) for k, v in raw_aff.items()}
 
-        node_specs: Tuple[NodeInstanceSpec, ...] = tuple(NodeInstanceSpec.from_dict(x) for x in manifest)
+        node_specs: tuple[NodeInstanceSpec, ...] = tuple(NodeInstanceSpec.from_dict(x) for x in manifest)
 
-        node_indices: Dict[str, int] = {}
+        node_indices: dict[str, int] = {}
         for idx, ns in enumerate(node_specs):
             if ns.node_name in node_indices:
                 raise ValueError(f"duplicate node_name in manifest: {ns.node_name}")
@@ -364,8 +365,8 @@ class Partitioning:
         n_nodes = len(node_specs)
         n_vertices = int(graph.num_vertices)
 
-        rows: List[int] = []
-        cols: List[int] = []
+        rows: list[int] = []
+        cols: list[int] = []
 
         for i, ns in enumerate(node_specs):
             v = metastore.get_key(cls._node_assignments_path(partitioning_id, ns.partition, ns.node_name))
@@ -375,7 +376,8 @@ class Partitioning:
                 )
             if not isinstance(v, gb.Vector):
                 raise PartitioningCorruptError(
-                    f"partitioning '{partitioning_id}': assignments for node '{ns.node_name}' is not a graphblas.Vector"
+                    f"partitioning '{partitioning_id}': assignments for node '{ns.node_name}' "
+                    "is not a graphblas.Vector"
                 )
             idx, vals = v.to_coo()
             true_idx = idx[vals != 0]
@@ -392,7 +394,7 @@ class Partitioning:
             dtype=bool,
         )
 
-        topology_by_node: Dict[str, NodeTopology] = {}
+        topology_by_node: dict[str, NodeTopology] = {}
         for ns in node_specs:
             t = metastore.get_key(cls._node_topology_path(partitioning_id, ns.partition, ns.node_name))
             if t is None:
@@ -413,7 +415,7 @@ class Partitioning:
             node_specs=node_specs,
             incidence=incidence,
             topology_by_node=topology_by_node,
-            node_indices=node_indices
+            node_indices=node_indices,
         )
 
     @classmethod
@@ -431,24 +433,23 @@ class Partitioning:
     @classmethod
     def compute_topology_from_graph(
         cls,
-        node_specs: List[NodeInstanceSpec] | Tuple[NodeInstanceSpec, ...],
+        node_specs: list[NodeInstanceSpec] | tuple[NodeInstanceSpec, ...],
         incidence: gb.Matrix,
         graph: Graph,
         model: Model,
-    ) -> Dict[str, NodeTopology]:
+    ) -> dict[str, NodeTopology]:
 
         simproc_names_by_order = model.spec.simprocs
         node_names = [ns.node_name for ns in node_specs]
 
-        predecessors: Dict[str, Dict[str, Set[Tuple[str, str]]]] = {name: {} for name in node_names}
-        successors: Dict[str, Dict[str, Set[Tuple[str, str]]]] = {name: {} for name in node_names}
+        predecessors: dict[str, dict[str, set[tuple[str, str]]]] = {name: {} for name in node_names}
+        successors: dict[str, dict[str, set[tuple[str, str]]]] = {name: {} for name in node_names}
 
         n_simprocs = len(simproc_names_by_order)
         if len(graph.layers) != n_simprocs:
-            raise ValueError(f"Number of graph layers does not match number of simprocs.")
+            raise ValueError("Number of graph layers does not match number of simprocs.")
 
         for layer_idx in range(len(graph.layers)):
-
             simproc_name = simproc_names_by_order[layer_idx]
             M = graph.get_matrix(layer_idx)
 
@@ -456,7 +457,7 @@ class Partitioning:
             R = gb.op.plus_times(Q @ incidence.T).select("!=", 0)
 
             r_rows, r_cols, _ = R.to_coo()
-            for rr, cc in zip(r_rows.tolist(), r_cols.tolist()):
+            for rr, cc in zip(r_rows.tolist(), r_cols.tolist(), strict=False):
                 src = node_names[rr]
                 dst = node_names[cc]
                 successors[src].setdefault(simproc_name, set()).add((dst, simproc_name))
@@ -468,7 +469,7 @@ class Partitioning:
                 successors[ns.node_name].setdefault(from_sp, set()).add((ns.node_name, to_sp))
                 predecessors[ns.node_name].setdefault(to_sp, set()).add((ns.node_name, from_sp))
 
-        out: Dict[str, NodeTopology] = {}
+        out: dict[str, NodeTopology] = {}
         for ns in node_specs:
             out[ns.node_name] = NodeTopology(
                 node=ns.node_name,

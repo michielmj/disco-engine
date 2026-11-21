@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 gRPC ingress service for receiving envelopes from remote workers.
 
@@ -15,12 +13,13 @@ The Worker is responsible for:
 - Prioritising promise delivery over events in the runner loop.
 """
 
+from __future__ import annotations
+
 from concurrent import futures
 from multiprocessing import Queue
 from typing import TYPE_CHECKING
 
 import grpc
-
 from tools.mp_logging import getLogger
 
 from ..cluster import WorkerState
@@ -194,6 +193,7 @@ class DiscoTransportServicer(transport_pb2_grpc.DiscoTransportServicer):
 # ---------------------------------------------------------------------- #
 # Server bootstrap helper
 # ---------------------------------------------------------------------- #
+
 
 def start_grpc_server(
     worker: Worker,

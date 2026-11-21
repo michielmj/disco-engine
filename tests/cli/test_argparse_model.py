@@ -14,10 +14,10 @@ class DemoModel(BaseModel):
     group: str = Field(description="Group name.")
 
     # optionals
-    workers: Optional[int] = Field(None, description="Worker count.")
-    ports: Optional[list[int]] = Field(None, description="Port list.")
+    workers: int | None = Field(None, description="Worker count.")
+    ports: list[int] | None = Field(None, description="Port list.")
     orchestrator: bool = Field(True, description="Enable orchestrator.")
-    loglevel: Optional[Literal["INFO", "DEBUG"]] = Field(None, description="Log level.")
+    loglevel: Literal["INFO", "DEBUG"] | None = Field(None, description="Log level.")
 
 
 def test_add_model_to_parser_required_field_enforced() -> None:
@@ -33,7 +33,9 @@ def test_add_model_to_parser_parses_scalars_and_lists_and_choices() -> None:
     parser = argparse.ArgumentParser(prog="x")
     add_model_to_parser(parser, DemoModel)
 
-    ns = parser.parse_args(["--group", "g1", "--workers", "3", "--ports", "5001", "5002", "--loglevel", "DEBUG"])
+    ns = parser.parse_args(
+        ["--group", "g1", "--workers", "3", "--ports", "5001", "5002", "--loglevel", "DEBUG"]
+    )
     assert ns.group == "g1"
     assert ns.workers == 3
     assert ns.ports == [5001, 5002]
@@ -60,3 +62,18 @@ def test_add_model_to_parser_literal_choices_rejected() -> None:
 
     with pytest.raises(SystemExit):
         _ = parser.parse_args(["--group", "g1", "--loglevel", "WARN"])
+
+
+class OptionalSpellingModel(BaseModel):
+    # The test needs the old spelling: Optional[X] is typing.Union[X, None], a different origin
+    # from X | None (types.UnionType), and the parser must handle both.
+    ports: Optional[list[int]] = Field(None, description="Port list.")  # noqa: UP045
+
+
+def test_add_model_to_parser_handles_typing_optional_lists() -> None:
+    parser = argparse.ArgumentParser(prog="x")
+    add_model_to_parser(parser, OptionalSpellingModel)
+
+    ns = parser.parse_args(["--ports", "5001", "5002"])
+
+    assert ns.ports == [5001, 5002]

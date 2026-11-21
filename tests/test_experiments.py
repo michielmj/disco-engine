@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Tuple
 
 import pytest
-from kazoo.exceptions import BadVersionError, NoNodeError, NodeExistsError
+from kazoo.exceptions import BadVersionError, NodeExistsError, NoNodeError
 
-from disco.experiments import Experiment, ExperimentStatus, ExperimentStore, Replication
+from disco.experiments import Experiment, ExperimentStatus, ExperimentStore
 from disco.metastore.store import Metastore
-
 
 # ---------------------------------------------------------------------------
 # Minimal fakes for Metastore (Kazoo) used by ExperimentStore tests
 # ---------------------------------------------------------------------------
+
 
 @dataclass(slots=True)
 class FakeStat:
@@ -23,10 +23,11 @@ class FakeKazooClient:
     """
     Minimal in-memory KazooClient fake supporting the subset needed for Metastore CAS updates.
     """
+
     def __init__(self) -> None:
-        self.data: Dict[str, bytes] = {}
-        self.versions: Dict[str, int] = {}
-        self.ensure_calls: List[str] = []
+        self.data: dict[str, bytes] = {}
+        self.versions: dict[str, int] = {}
+        self.ensure_calls: list[str] = []
 
     def ensure_path(self, path: str) -> None:
         self.ensure_calls.append(path)
@@ -40,11 +41,11 @@ class FakeKazooClient:
         if not prefix:
             prefix = "/"
         child_prefix = prefix + "/"
-        if any(p.startswith(child_prefix) for p in self.data.keys()):
+        if any(p.startswith(child_prefix) for p in self.data):
             return FakeStat(self.versions.get(prefix, 0))
         return None
 
-    def get(self, path: str) -> Tuple[bytes, FakeStat]:
+    def get(self, path: str) -> tuple[bytes, FakeStat]:
         if path not in self.data:
             raise NoNodeError()
         return self.data[path], FakeStat(self.versions.get(path, 0))
@@ -83,7 +84,7 @@ class FakeKazooClient:
             prefix = "/"
         p_len = len(prefix)
         children = set()
-        for p in self.data.keys():
+        for p in self.data:
             if not p.startswith(prefix) or p == prefix:
                 continue
             sub = p[p_len:]
@@ -132,6 +133,7 @@ def store(metastore: Metastore) -> ExperimentStore:
 # Model tests (dataclasses + normalize)
 # ---------------------------------------------------------------------------
 
+
 def test_experiment_allows_empty_partitionings_and_requires_none_selection() -> None:
     e = Experiment(duration=1.0, scenario_id="s1", allowed_partitionings=[])
     e.select_partitioning(None)  # implicit single-partition mode is OK
@@ -179,6 +181,7 @@ def test_status_and_exception_propagation_via_normalize() -> None:
 # Store tests (Metastore atomic updates + normalize on commit)
 # ---------------------------------------------------------------------------
 
+
 def test_store_roundtrip_and_atomic_update_normalizes(store: ExperimentStore) -> None:
     e = Experiment(duration=1.0, scenario_id="s1", allowed_partitionings=[])
     e.generate_replications(1)
@@ -217,11 +220,7 @@ def test_store_convenience_methods_are_atomic(store: ExperimentStore) -> None:
     assert e4.status == ExperimentStatus.ACTIVE
 
     e5 = store.set_partition_exc(
-        expid = e.expid,
-        repid = repid,
-        partition=0,
-        exc={"description": "traceback..."},
-        fail_partition=True
+        expid=e.expid, repid=repid, partition=0, exc={"description": "traceback..."}, fail_partition=True
     )
     assert e5.replications[repid].status == ExperimentStatus.FAILED
     assert e5.status == ExperimentStatus.FAILED

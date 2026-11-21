@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, IPvAnyAddress
 
@@ -9,27 +9,19 @@ from disco.cli.argparse_model import add_model_to_parser
 
 
 class ServerCommand(BaseModel):
-    group: Optional[str] = Field(None, description="The group for the Server to run in.")
-    workers: Optional[int] = Field(None, description="Number of workers to start.")
-    ports: Optional[list[int]] = Field(None, description="Ports to run servers on.")
-    bind_host: Optional[IPvAnyAddress] = Field(None, description="Bind host.")
-    grace_s: Optional[int] = Field(None, description="Grace duration for shutdown.")
+    group: str | None = Field(None, description="The group for the Server to run in.")
+    workers: int | None = Field(None, description="Number of workers to start.")
+    ports: list[int] | None = Field(None, description="Ports to run servers on.")
+    bind_host: IPvAnyAddress | None = Field(None, description="Bind host.")
+    grace_s: int | None = Field(None, description="Grace duration for shutdown.")
     orchestrator: bool = Field(True, description="Disable orchestrator if false.")
-    config_file: Optional[str] = Field(None, description="Optional Disco config file (toml/yaml).")
-    loglevel: Optional[
+    config_file: str | None = Field(None, description="Optional Disco config file (toml/yaml).")
+    loglevel: (
         Literal[
-            "CRITICAL",
-            "ERROR",
-            "WARNING",
-            "INFO",
-            "DEBUG",
-            "critical",
-            "error",
-            "warning",
-            "info",
-            "debug",
+            "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "critical", "error", "warning", "info", "debug"
         ]
-    ] = Field(None, description="Logging level override.")
+        | None
+    ) = Field(None, description="Logging level override.")
 
 
 def handle_server(command: ServerCommand) -> None:

@@ -1,9 +1,8 @@
-from __future__ import annotations
-
 """IPC message containers for queue-based transports."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 
 @dataclass(slots=True)
@@ -14,9 +13,9 @@ class IPCEventMsg:
     target_node: str
     target_simproc: str
     epoch: float
-    headers: Dict[str, str]
-    data: Optional[bytes]
-    shm_name: Optional[str]
+    headers: dict[str, str]
+    data: bytes | None
+    shm_name: str | None
     size: int
 
 

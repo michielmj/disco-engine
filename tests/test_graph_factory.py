@@ -8,6 +8,7 @@ Strategy:
   - Model is built from SimpleNamespace stubs to avoid heavyweight loading.
   - db_validate is exercised for real: tables must satisfy the ORM contracts.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -18,10 +19,9 @@ from sqlalchemy import Column, MetaData, String, Table, UniqueConstraint, insert
 from sqlalchemy.engine import Engine
 
 from disco.database import SessionManager
-from disco.model.orm import build_orm_bundle
 from disco.graph_factory import graph_from_model
+from disco.model.orm import build_orm_bundle
 from disco.partitioner import NODE_TYPE
-
 
 # ---------------------------------------------------------------------------
 # Table helpers
@@ -190,7 +190,7 @@ def test_node_type_labels_assigned() -> None:
     md = MetaData()
     sp_nodes = _create_node_table(md, "sp_nodes")
     dc_nodes = _create_node_table(md, "dc_nodes")
-    edges = _create_edge_table(md, "edges")
+    _create_edge_table(md, "edges")
     md.create_all(engine)
 
     with engine.begin() as conn:
@@ -242,7 +242,7 @@ def test_distinct_node_labels() -> None:
     engine = sa.create_engine("sqlite+pysqlite:///:memory:")
     md = MetaData()
     nodes = _create_node_table(md, "sp_nodes", extra_cols=[Column("region", String)])
-    edges = _create_edge_table(md, "sp_edges")
+    _create_edge_table(md, "sp_edges")
     md.create_all(engine)
 
     with engine.begin() as conn:
@@ -283,7 +283,7 @@ def test_distinct_labels_union_across_node_types() -> None:
     md = MetaData()
     sp_nodes = _create_node_table(md, "sp_nodes", extra_cols=[Column("region", String)])
     dc_nodes = _create_node_table(md, "dc_nodes", extra_cols=[Column("region", String)])
-    edges = _create_edge_table(md, "edges")
+    _create_edge_table(md, "edges")
     md.create_all(engine)
 
     with engine.begin() as conn:
@@ -337,12 +337,18 @@ def test_per_simproc_edge_table() -> None:
             ],
         )
         # demand: v0->v1; supply: v1->v2
-        conn.execute(insert(demand_edges), [
-            {"scenario_id": "s1", "source_key": "v0", "target_key": "v1"},
-        ])
-        conn.execute(insert(supply_edges), [
-            {"scenario_id": "s1", "source_key": "v1", "target_key": "v2"},
-        ])
+        conn.execute(
+            insert(demand_edges),
+            [
+                {"scenario_id": "s1", "source_key": "v0", "target_key": "v1"},
+            ],
+        )
+        conn.execute(
+            insert(supply_edges),
+            [
+                {"scenario_id": "s1", "source_key": "v1", "target_key": "v2"},
+            ],
+        )
 
     spec = _make_spec(
         node_types={"sp": {"table": "sp_nodes"}},

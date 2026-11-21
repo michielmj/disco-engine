@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List, Optional
-
 import pytest
 
 from disco.envelopes import EventEnvelope, PromiseEnvelope
@@ -20,7 +18,7 @@ class RecordingTransport:
     def __init__(
         self,
         *,
-        name: Optional[str] = None,
+        name: str | None = None,
         handles: bool = False,
         raises_in_handles: bool = False,
     ) -> None:
@@ -29,9 +27,9 @@ class RecordingTransport:
         self._handles = handles
         self._raises = raises_in_handles
 
-        self.handles_calls: List[tuple[str, str]] = []
-        self.sent_events: List[EventEnvelope] = []
-        self.sent_promises: List[PromiseEnvelope] = []
+        self.handles_calls: list[tuple[str, str]] = []
+        self.sent_events: list[EventEnvelope] = []
+        self.sent_promises: list[PromiseEnvelope] = []
 
     def handles_node(self, repid: str, node: str) -> bool:
         self.handles_calls.append((repid, node))
@@ -162,6 +160,7 @@ def test_router_transports_returns_transport_objects_in_order() -> None:
 # ---------------------------------------------------------------------------
 # InProcessTransport tests
 # ---------------------------------------------------------------------------
+
 
 class FakeInProcessNodeRuntime:
     """Minimal stand-in for a NodeRuntime registered with InProcessTransport."""

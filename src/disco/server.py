@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-from disco.orchestrator import Orchestrator
-
 """Kubernetes-friendly Disco server supervisor.
 
 Spawns multiple Worker processes (optionally an orchestrator placeholder) and
@@ -14,21 +10,27 @@ Design goals:
 - Workers are identified by their Cluster address string "host:port".
 """
 
+from __future__ import annotations
+
+import contextlib
+import logging
 import os
 import signal
 import socket
 import threading
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from multiprocessing import cpu_count
 from multiprocessing.process import BaseProcess
 from multiprocessing.queues import Queue as MPQueue
-from typing import Dict, List, Mapping, Optional, Sequence, Any, cast
-import logging
+from typing import Any, cast
+
 from tools import mp_logging
 
 from disco.cluster import Cluster
 from disco.config import AppSettings, ConfigError
+from disco.orchestrator import Orchestrator
 from disco.worker import Worker
 
 logger = logging.getLogger(__name__)  # optional, but handy
@@ -39,8 +41,8 @@ _SERVER_RUNNING = False
 
 
 def _get_logging_scope(
-        settings: AppSettings,
-        loglevel: mp_logging.LevelConfig = None,
+    settings: AppSettings,
+    loglevel: mp_logging.LevelConfig = None,
 ) -> mp_logging.LevelConfig:
     logscope = {"": logging.INFO}
 
@@ -70,8 +72,10 @@ def _parse_log_level(loglevel: str | int) -> int:
     lvl = mapping.get(loglevel.upper())
     if isinstance(lvl, int):
         return lvl
-    raise ConfigError(f"Invalid logging.level={loglevel!r}. Expected one of: "
-                      f"{sorted({k for k,v in mapping.items() if isinstance(v,int) and isinstance(k,str)})}")
+    raise ConfigError(
+        f"Invalid logging.level={loglevel!r}. Expected one of: "
+        f"{sorted({k for k, v in mapping.items() if isinstance(v, int) and isinstance(k, str)})}"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,12 +90,10 @@ def _is_loopback_host(host: str) -> bool:
         return True
     if h.startswith("127."):
         return True
-    if h == "::1":
-        return True
-    return False
+    return h == "::1"
 
 
-def _infer_non_loopback_ipv4() -> Optional[str]:
+def _infer_non_loopback_ipv4() -> str | None:
     """Infer a non-loopback IPv4 address without relying on env.
 
     Uses a UDP "connect" trick to let the OS select an outbound interface.
@@ -120,7 +122,7 @@ def _infer_non_loopback_ipv4() -> Optional[str]:
     return None
 
 
-def _resolve_bind_host(settings: AppSettings, explicit: Optional[str]) -> str:
+def _resolve_bind_host(settings: AppSettings, explicit: str | None) -> str:
     """Resolve a bind/advertise host suitable for worker addresses.
 
     Rules:
@@ -152,10 +154,10 @@ def _resolve_bind_host(settings: AppSettings, explicit: Optional[str]) -> str:
     return inferred
 
 
-def _pick_free_ports(bind_host: str, n: int) -> List[int]:
+def _pick_free_ports(bind_host: str, n: int) -> list[int]:
     """Ask the OS for `n` currently-free TCP ports on bind_host."""
-    sockets: List[socket.socket] = []
-    ports: List[int] = []
+    sockets: list[socket.socket] = []
+    ports: list[int] = []
     try:
         for _ in range(n):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -166,30 +168,25 @@ def _pick_free_ports(bind_host: str, n: int) -> List[int]:
             ports.append(int(s.getsockname()[1]))
     finally:
         for s in sockets:
-            try:
+            with contextlib.suppress(OSError):
                 s.close()
-            except OSError:
-                pass
     return ports
 
 
 def _determine_worker_ports(
     *,
     bind_host: str,
-    workers: Optional[int],
-    ports: Optional[Sequence[int]],
-) -> List[int]:
+    workers: int | None,
+    ports: Sequence[int] | None,
+) -> list[int]:
     if ports is not None:
         return [int(p) for p in ports]
-    if workers is not None:
-        count = int(workers)
-    else:
-        count = max(1, int(cpu_count()) - 1)
+    count = int(workers) if workers is not None else max(1, int(cpu_count()) - 1)
     return _pick_free_ports(bind_host, count)
 
 
-def _build_worker_specs(bind_host: str, ports: Sequence[int]) -> List[WorkerSpec]:
-    specs: List[WorkerSpec] = []
+def _build_worker_specs(bind_host: str, ports: Sequence[int]) -> list[WorkerSpec]:
+    specs: list[WorkerSpec] = []
     for idx, port in enumerate(ports):
         addr = f"{bind_host}:{int(port)}"
         specs.append(WorkerSpec(address=addr, name=f"worker-{idx}"))
@@ -201,8 +198,8 @@ def _worker_main(
     event_queues: Mapping[str, MPQueue],
     promise_queues: Mapping[str, MPQueue],
     settings: AppSettings,
-    group: Optional[str],
-    name: Optional[str],
+    group: str | None,
+    name: str | None,
     log_queue: Any,
     stop_event: Any,
     loglevel: mp_logging.LevelConfig,
@@ -229,12 +226,12 @@ def _worker_main(
 
 
 def _orchestrator_process_entry(
-        address: str,
-        settings: AppSettings,
-        group: Optional[str],
-        stop_event: Any,
-        log_queue: Any,
-        loglevel: mp_logging.LevelConfig,
+    address: str,
+    settings: AppSettings,
+    group: str | None,
+    stop_event: Any,
+    log_queue: Any,
+    loglevel: mp_logging.LevelConfig,
 ) -> None:
     """Placeholder orchestrator: start, wait for stop_event, exit cleanly."""
     mp_logging.configure_worker(log_queue, level=loglevel)
@@ -267,10 +264,8 @@ def _force_kill(proc: BaseProcess) -> None:
     pid = proc.pid
     if pid is None:
         return
-    try:
+    with contextlib.suppress(Exception):
         os.kill(pid, signal.SIGKILL)
-    except Exception:
-        pass
 
 
 class Server:
@@ -278,13 +273,13 @@ class Server:
         self,
         settings: AppSettings,
         *,
-        workers: Optional[int] = None,
-        ports: Optional[List[int]] = None,
-        bind_host: Optional[str] = None,
-        group: Optional[str] = None,
-        grace_s: Optional[int] = None,
+        workers: int | None = None,
+        ports: list[int] | None = None,
+        bind_host: str | None = None,
+        group: str | None = None,
+        grace_s: int | None = None,
         orchestrator: bool = True,
-        loglevel: Optional[str] = None,
+        loglevel: str | None = None,
     ) -> None:
         self._settings = settings
         self._workers_arg = workers
@@ -297,12 +292,12 @@ class Server:
         self._logscope = _get_logging_scope(settings, loglevel)
 
         self._shutdown_requested = threading.Event()
-        self._cluster: Optional[Cluster] = None
+        self._cluster: Cluster | None = None
 
-        self._worker_specs: List[WorkerSpec] = []
-        self._worker_procs: Dict[str, BaseProcess] = {}
-        self._orchestrator_proc: Optional[BaseProcess] = None
-        self._stop: Optional[Any] = None
+        self._worker_specs: list[WorkerSpec] = []
+        self._worker_procs: dict[str, BaseProcess] = {}
+        self._orchestrator_proc: BaseProcess | None = None
+        self._stop: Any | None = None
 
     def start(self) -> None:
         self._acquire_singleton_guard()
@@ -326,6 +321,7 @@ class Server:
     def _mp_context(self) -> Any:
         # Local spawn context: do not rely on global start method; avoids forking KazooClient.
         import multiprocessing as mp
+
         return mp.get_context("spawn")
 
     def _run(self) -> None:
@@ -341,18 +337,22 @@ class Server:
         ctx = self._mp_context()
 
         # Shared IPC queues: address -> Queue
-        event_queues: Dict[str, MPQueue] = {}
-        promise_queues: Dict[str, MPQueue] = {}
+        event_queues: dict[str, MPQueue] = {}
+        promise_queues: dict[str, MPQueue] = {}
         for spec in self._worker_specs:
             event_queues[spec.address] = ctx.Queue()
             promise_queues[spec.address] = ctx.Queue()
 
         with mp_logging.setup_logging(level=self._logscope) as log_cfg:
-            # mp_logging.configure_worker(log_cfg.queue, level=[("disco", self._loglevel), ("", logging.INFO)])
+            # mp_logging.configure_worker(
+            #     log_cfg.queue, level=[("disco", self._loglevel), ("", logging.INFO)]
+            # )
             mp_logging.configure_worker(log_cfg.queue, level=self._logscope)
             logger.info("Server starting with %d workers (group=%s)", len(self._worker_specs), self._group)
 
-            with Cluster.make_cluster(zookeeper_settings=self._settings.zookeeper, group=self._group) as cluster:
+            with Cluster.make_cluster(
+                zookeeper_settings=self._settings.zookeeper, group=self._group
+            ) as cluster:
                 self._cluster = cluster
                 self._install_signal_handlers()
 
@@ -364,7 +364,14 @@ class Server:
                     self._orchestrator_proc = ctx.Process(
                         name="orchestrator",
                         target=_orchestrator_process_entry,
-                        args=(address, self._settings, self._group, stop_event, log_cfg.queue, self._logscope),
+                        args=(
+                            address,
+                            self._settings,
+                            self._group,
+                            stop_event,
+                            log_cfg.queue,
+                            self._logscope,
+                        ),
                         daemon=False,
                     )
                     self._orchestrator_proc.start()
@@ -382,7 +389,7 @@ class Server:
                             spec.name,
                             log_cfg.queue,
                             stop_event,
-                            self._logscope
+                            self._logscope,
                         ),
                         daemon=False,
                     )
@@ -441,10 +448,8 @@ class Server:
         # Escalation: terminate then kill
         for proc in self._worker_procs.values():
             if proc.is_alive():
-                try:
+                with contextlib.suppress(Exception):
                     proc.terminate()
-                except Exception:
-                    pass
 
         kill_deadline = time.monotonic() + 2.0
         while time.monotonic() < kill_deadline:
@@ -457,7 +462,5 @@ class Server:
                 _force_kill(proc)
 
         for proc in self._worker_procs.values():
-            try:
+            with contextlib.suppress(Exception):
                 proc.join(timeout=1.0)
-            except Exception:
-                pass

@@ -2,21 +2,20 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, Optional, Tuple
 
-import numpy as np
 import graphblas as gb
-from sqlalchemy import select, insert, delete, func, literal
+import numpy as np
+from sqlalchemy import delete, insert, literal, select
 from sqlalchemy.orm import Session
 
 from .core import Graph
 from .schema import (
-    scenarios,
-    vertices,
     edges,
     labels,
+    scenarios,
     vertex_labels,
     vertex_masks,
+    vertices,
 )
 
 
@@ -41,26 +40,14 @@ def delete_scenario(session: Session, scenario_id: str) -> None:
     sid = str(scenario_id)
 
     # Children that depend on vertices / labels / scenarios
-    session.execute(
-        delete(vertex_masks).where(vertex_masks.c.scenario_id == sid)
-    )
-    session.execute(
-        delete(vertex_labels).where(vertex_labels.c.scenario_id == sid)
-    )
-    session.execute(
-        delete(edges).where(edges.c.scenario_id == sid)
-    )
-    session.execute(
-        delete(labels).where(labels.c.scenario_id == sid)
-    )
-    session.execute(
-        delete(vertices).where(vertices.c.scenario_id == sid)
-    )
+    session.execute(delete(vertex_masks).where(vertex_masks.c.scenario_id == sid))
+    session.execute(delete(vertex_labels).where(vertex_labels.c.scenario_id == sid))
+    session.execute(delete(edges).where(edges.c.scenario_id == sid))
+    session.execute(delete(labels).where(labels.c.scenario_id == sid))
+    session.execute(delete(vertices).where(vertices.c.scenario_id == sid))
 
     # Finally remove the scenario itself
-    session.execute(
-        delete(scenarios).where(scenarios.c.scenario_id == sid)
-    )
+    session.execute(delete(scenarios).where(scenarios.c.scenario_id == sid))
 
 
 # ---------------------------------------------------------------------------
@@ -69,12 +56,12 @@ def delete_scenario(session: Session, scenario_id: str) -> None:
 
 
 def _store_vertices_for_scenario(
-        session: Session,
-        scenario_id: str,
-        vertex_keys: np.ndarray,
-        vertex_weight: np.ndarray,
-        *,
-        chunk_size: int = 10_000,
+    session: Session,
+    scenario_id: str,
+    vertex_keys: np.ndarray,
+    vertex_weight: np.ndarray,
+    *,
+    chunk_size: int = 10_000,
 ) -> None:
     """
     Insert vertex rows for a scenario into graph_vertices.
@@ -117,9 +104,7 @@ def _store_edges_for_scenario(session: Session, graph: Graph) -> None:
     scenario_id = graph.scenario_id
 
     # Remove previous edges for this scenario
-    session.execute(
-        delete(edges).where(edges.c.scenario_id == literal(scenario_id))
-    )
+    session.execute(delete(edges).where(edges.c.scenario_id == literal(scenario_id)))
 
     # Insert new edges per layer
     for layer_idx, mat in enumerate(graph.layers):
@@ -135,7 +120,7 @@ def _store_edges_for_scenario(session: Session, graph: Graph) -> None:
                 "target_idx": int(c),
                 "weight": float(v),
             }
-            for r, c, v in zip(rows, cols, vals)
+            for r, c, v in zip(rows, cols, vals, strict=False)
         ]
         session.execute(insert(edges), rows_to_insert)
 
@@ -159,22 +144,16 @@ def _store_labels_for_scenario(session: Session, graph: Graph) -> None:
     scenario_id = graph.scenario_id
 
     # Clear existing labels and assignments for this scenario
-    session.execute(
-        delete(vertex_labels).where(vertex_labels.c.scenario_id == literal(scenario_id))
-    )
-    session.execute(
-        delete(labels).where(labels.c.scenario_id == literal(scenario_id))
-    )
+    session.execute(delete(vertex_labels).where(vertex_labels.c.scenario_id == literal(scenario_id)))
+    session.execute(delete(labels).where(labels.c.scenario_id == literal(scenario_id)))
 
     # Insert labels from Graph.label_meta; ensure we have metadata for each index
     label_meta = graph.label_meta  # mapping index -> (type, value)
-    label_index_to_db_id: Dict[int, int] = {}
+    label_index_to_db_id: dict[int, int] = {}
 
     for lbl_idx in range(graph.num_labels):
         if lbl_idx not in label_meta:
-            raise ValueError(
-                f"Graph.label_meta missing entry for label index {lbl_idx}"
-            )
+            raise ValueError(f"Graph.label_meta missing entry for label index {lbl_idx}")
         label_type, label_value = label_meta[lbl_idx]
         result = session.execute(
             insert(labels)
@@ -193,7 +172,7 @@ def _store_labels_for_scenario(session: Session, graph: Graph) -> None:
         return
 
     assignments = []
-    for v_idx, lbl_idx, val in zip(rows, cols, vals):
+    for v_idx, lbl_idx, val in zip(rows, cols, vals, strict=False):
         if not bool(val):
             continue
         db_label_id = label_index_to_db_id[int(lbl_idx)]
@@ -210,12 +189,12 @@ def _store_labels_for_scenario(session: Session, graph: Graph) -> None:
 
 
 def store_graph(
-        session: Session,
-        graph: Graph,
-        *,
-        description: Optional[str] = None,
-        replace: bool = False,
-        chunk_size: int = 10_000,
+    session: Session,
+    graph: Graph,
+    *,
+    description: str | None = None,
+    replace: bool = False,
+    chunk_size: int = 10_000,
 ) -> None:
     """
     Validate and persist the Graph to the database.
@@ -261,18 +240,14 @@ def store_graph(
 
     # Step 2: create or replace scenario row
     existing = session.execute(
-        select(scenarios.c.scenario_id).where(
-            scenarios.c.scenario_id == scenario_id
-        )
+        select(scenarios.c.scenario_id).where(scenarios.c.scenario_id == scenario_id)
     ).scalar_one_or_none()
 
     if existing is not None:
         if replace:
             delete_scenario(session, scenario_id)
         else:
-            raise ValueError(
-                f"Scenario {scenario_id!r} already exists in graph_scenarios"
-            )
+            raise ValueError(f"Scenario {scenario_id!r} already exists in graph_scenarios")
 
     now = datetime.utcnow()
     session.execute(
@@ -300,9 +275,7 @@ def store_graph(
 # ---------------------------------------------------------------------------
 
 
-def _load_vertices(
-    session: Session, scenario_id: str
-) -> Tuple[np.ndarray, np.ndarray]:
+def _load_vertices(session: Session, scenario_id: str) -> tuple[np.ndarray, np.ndarray]:
     """
     Load vertex keys and weights for a scenario from graph_vertices, ordered by index.
 
@@ -320,17 +293,15 @@ def _load_vertices(
         return np.empty(0, dtype=object), np.empty(0, dtype=np.float64)
 
     keys = np.array([key for _, key, _ in rows], dtype=object)
-    weights = np.array(
-        [1.0 if w is None else float(w) for _, _, w in rows], dtype=np.float64
-    )
+    weights = np.array([1.0 if w is None else float(w) for _, _, w in rows], dtype=np.float64)
     return keys, weights
 
 
 def _load_edge_layers(
-        session: Session,
-        scenario_id: str,
-        num_vertices: int,
-) -> Tuple[gb.Matrix, ...]:
+    session: Session,
+    scenario_id: str,
+    num_vertices: int,
+) -> tuple[gb.Matrix, ...]:
     """
     Load edges from graph_edges for a scenario and build one GraphBLAS Matrix per layer.
 
@@ -347,9 +318,9 @@ def _load_edge_layers(
         ).where(edges.c.scenario_id == literal(scenario_id))
     )
 
-    layer_sources: Dict[int, list[int]] = {}
-    layer_targets: Dict[int, list[int]] = {}
-    layer_weights: Dict[int, list[float]] = {}
+    layer_sources: dict[int, list[int]] = {}
+    layer_targets: dict[int, list[int]] = {}
+    layer_weights: dict[int, list[float]] = {}
 
     for layer_idx, src, tgt, w in result:
         lid = int(layer_idx)
@@ -357,7 +328,7 @@ def _load_edge_layers(
         layer_targets.setdefault(lid, []).append(int(tgt))
         layer_weights.setdefault(lid, []).append(float(w))
 
-    edge_layers: Dict[int, gb.Matrix] = {}
+    edge_layers: dict[int, gb.Matrix] = {}
     for layer_idx, src_list in layer_sources.items():
         tgt_list = layer_targets[layer_idx]
         w_list = layer_weights[layer_idx]
@@ -390,10 +361,10 @@ def _load_edge_layers(
 
 
 def _load_labels_for_scenario(
-        session: Session,
-        scenario_id: str,
-        num_vertices: int,
-) -> tuple[Optional[gb.Matrix], Dict[int, tuple[str, str]]]:
+    session: Session,
+    scenario_id: str,
+    num_vertices: int,
+) -> tuple[gb.Matrix | None, dict[int, tuple[str, str]]]:
     """
     Load labels and vertex_labels for a scenario and build:
 
@@ -405,9 +376,7 @@ def _load_labels_for_scenario(
     """
     # Fetch all labels for this scenario
     label_rows = session.execute(
-        select(labels.c.id, labels.c.type, labels.c.value).where(
-            labels.c.scenario_id == literal(scenario_id)
-        )
+        select(labels.c.id, labels.c.type, labels.c.value).where(labels.c.scenario_id == literal(scenario_id))
     ).all()
 
     if not label_rows:
@@ -417,8 +386,8 @@ def _load_labels_for_scenario(
     # Sort by DB id to get a deterministic label index order
     label_rows_sorted = sorted(label_rows, key=lambda r: int(r[0]))
 
-    label_id_to_index: Dict[int, int] = {}
-    label_meta: Dict[int, tuple[str, str]] = {}
+    label_id_to_index: dict[int, int] = {}
+    label_meta: dict[int, tuple[str, str]] = {}
 
     for idx, (db_id, ltype, lvalue) in enumerate(label_rows_sorted):
         db_id_int = int(db_id)
@@ -493,8 +462,8 @@ def _load_labels_for_scenario(
 
 
 def load_graph_for_scenario(
-        session: Session,
-        scenario_id: str,
+    session: Session,
+    scenario_id: str,
 ) -> Graph:
     """
     Load the full Graph (vertices + edges + labels) for a scenario.
@@ -507,9 +476,7 @@ def load_graph_for_scenario(
     vertex_keys, vertex_weight = _load_vertices(session, scenario_id)
     num_vertices = len(vertex_keys)
     edge_layers = _load_edge_layers(session, scenario_id, num_vertices)
-    label_matrix, label_meta = _load_labels_for_scenario(
-        session, scenario_id, num_vertices
-    )
+    label_matrix, label_meta = _load_labels_for_scenario(session, scenario_id, num_vertices)
 
     return Graph(
         layers=edge_layers,

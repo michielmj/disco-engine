@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 """In-process transport that routes to local NodeRuntimes."""
 
+from __future__ import annotations
+
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 from tools.mp_logging import getLogger
 
@@ -21,9 +21,7 @@ class InProcessTransport(Transport):
     nodes: Mapping[str, NodeRuntime]
 
     def handles_node(self, repid: str, node: str) -> bool:
-        if node not in self.nodes:
-            return False
-        return True
+        return node in self.nodes
 
     def send_event(self, envelope: EventEnvelope) -> None:
         try:

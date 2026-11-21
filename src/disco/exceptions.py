@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 
 class DiscoError(Exception):
@@ -30,9 +31,9 @@ class ExcDict:
 
     description_key: str = "description"
 
-    def merge_many(self, excs: Iterable[Dict[str, Any] | None]) -> Optional[Dict[str, Any]]:
-        merged: Dict[str, Any] = {}
-        desc_lines: List[str] = []
+    def merge_many(self, excs: Iterable[dict[str, Any] | None]) -> dict[str, Any] | None:
+        merged: dict[str, Any] = {}
+        desc_lines: list[str] = []
 
         for exc in excs:
             if not exc:
@@ -62,7 +63,7 @@ class ExcDict:
         return merged or None
 
     @staticmethod
-    def _extend_description(desc_lines: List[str], value: Any) -> None:
+    def _extend_description(desc_lines: list[str], value: Any) -> None:
         if isinstance(value, (list, tuple)):
             for x in value:
                 if x is None:
@@ -76,13 +77,13 @@ class ExcDict:
                 desc_lines.append(s)
 
 
-def _is_empty_exc(exc: Dict[str, Any] | None) -> bool:
+def _is_empty_exc(exc: dict[str, Any] | None) -> bool:
     """
     Treat None, {}, {"description": ""}, {"description": None}, {"k": []} as empty.
     """
     if not exc:
         return True
-    for k, v in exc.items():
+    for _k, v in exc.items():
         if v is None:
             continue
         if isinstance(v, str) and v.strip() == "":
@@ -122,7 +123,7 @@ def _canon_value(v: Any) -> Any:
     return v
 
 
-def exc_equals(exc1: Dict[str, Any] | None, exc2: Dict[str, Any] | None) -> bool:
+def exc_equals(exc1: dict[str, Any] | None, exc2: dict[str, Any] | None) -> bool:
     """
     Equality helper for aggregated exception dictionaries.
 

@@ -30,9 +30,7 @@ struct PredecessorEvent {
     PredecessorEvent() noexcept;
 
     // Construct from BORROWED PyObject* (will INCREF).
-    PredecessorEvent(double epoch_,
-                     PyObject* data_,
-                     Headers headers_);
+    PredecessorEvent(double epoch_, PyObject* data_, Headers headers_);
 
     PredecessorEvent(const PredecessorEvent& other);
     PredecessorEvent& operator=(const PredecessorEvent& other);
@@ -52,7 +50,7 @@ struct PredecessorEvent {
 };
 
 class PredecessorEventQueue {
-public:
+   public:
     PredecessorEventQueue();
 
     bool push(double epoch, PyObject* data, Headers& headers);
@@ -77,14 +75,14 @@ public:
 
     std::string dump() const;
 
-private:
-    bool _tryNextEpoch();          // requires _mtx held
-    bool _increment(double epoch); // requires _mtx held
+   private:
+    bool _tryNextEpoch();           // requires _mtx held
+    bool _increment(double epoch);  // requires _mtx held
 
     double epochAfter(uint64_t seqnr);   // requires _mtx held
     double epochBefore(uint64_t seqnr);  // requires _mtx held
 
-private:
+   private:
     mutable std::mutex _mtx;
 
     std::map<double, uint64_t> _event_count;
