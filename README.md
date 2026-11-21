@@ -45,6 +45,25 @@ run **without** threading, metastore/cluster coordination, or external transport
 pip install disco-engine
 ```
 
+Disco requires **Python 3.14 or later** (tested on 3.14 and 3.15). Its `disco-data-logger` dependency declares
+`<3.16`, so in practice Disco runs on 3.14 and 3.15 until that package supports a newer Python.
+
+### For model authors: pandas 3
+
+Disco uses **pandas 3** (`pandas~=3.1`). The data frames that `disco.graph` and `GraphData` return follow pandas 3
+semantics, which can change your own model code:
+
+- **Copy-on-write.** Assigning through a chained expression, such as `df[mask]["x"] = 1`, no longer changes `df`
+  (pandas warns with `ChainedAssignmentWarning`). Use `df.loc[mask, "x"] = 1`. A slice or a column you take from a data
+  frame is never a view of it, so changing one does not change the other.
+- **String dtype.** Text columns have the `str` dtype by default, not `object`. Code that tests
+  `df[c].dtype == object` is now false for text columns: use `pd.api.types.is_string_dtype`, or
+  `select_dtypes("str")`. Missing text values are `NaN`, as before.
+- **Missing values.** `df.where(cond, None)` keeps `NaN` in float and `str` columns; it no longer turns them into
+  `None`. Disco's `df_to_table` handles this for the rows it stores.
+
+The pandas 3 release notes list the other changes.
+
 ### Development
 
 Development uses [uv](https://docs.astral.sh/uv/). `uv sync` installs the
