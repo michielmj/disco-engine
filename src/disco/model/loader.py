@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib import import_module
@@ -7,13 +8,14 @@ from importlib import import_module
 # noinspection PyProtectedMember
 from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional
+from typing import Any
 
 import yaml
 
 from disco.database import DbHandle
 from disco.exceptions import DiscoRuntimeError
 from disco.node import Node, NodeRuntimeLike
+
 from .orm import ModelOrmError, OrmBundle, build_orm_bundle
 from .spec import ModelSpec
 
@@ -32,7 +34,7 @@ class Model:
     """
 
     spec: ModelSpec
-    node_classes: Dict[str, type[Node]]
+    node_classes: dict[str, type[Node]]
     orm: OrmBundle
 
     def node_class(self, node_type: str) -> type[Node]:
@@ -154,8 +156,8 @@ def _validate_node_subclass(node_cls: type) -> type[Node]:
     return node_cls
 
 
-def _build_node_registry(spec: ModelSpec) -> Dict[str, type[Node]]:
-    out: Dict[str, type[Node]] = {}
+def _build_node_registry(spec: ModelSpec) -> dict[str, type[Node]]:
+    out: dict[str, type[Node]] = {}
     for node_type_name, nts in spec.node_types.items():
         node_cls = _import_node_class(nts.python_class)
         out[node_type_name] = _validate_node_subclass(node_cls)
@@ -165,8 +167,8 @@ def _build_node_registry(spec: ModelSpec) -> Dict[str, type[Node]]:
 def _attach_orm(
     *,
     spec: ModelSpec,
-    db: Optional[DbHandle],
-    schema: Optional[str],
+    db: DbHandle | None,
+    schema: str | None,
 ) -> OrmBundle:
     """
     Attach ORM bundle (tables resolved from provider metadata or reflected from DB).
@@ -191,8 +193,8 @@ def _attach_orm(
 def load_model_from_package(
     package: str,
     *,
-    db: Optional[DbHandle] = None,
-    schema: Optional[str] = None,
+    db: DbHandle | None = None,
+    schema: str | None = None,
     model_yml: str = "model.yml",
 ) -> Model:
     """
@@ -232,10 +234,10 @@ def load_model_from_package(
 def load_model_from_path(
     path: str | Path,
     *,
-    db: Optional[DbHandle] = None,
-    schema: Optional[str] = None,
+    db: DbHandle | None = None,
+    schema: str | None = None,
     model_yml: str = "model.yml",
-    import_root: Optional[str | Path] = None,
+    import_root: str | Path | None = None,
 ) -> Model:
     """
     Load a model from a folder on disk (dev fallback) and attach ORM bundle.
@@ -265,7 +267,7 @@ def load_model_from_path(
 # -----------------------------
 
 
-def discover_model_entrypoints(group: str = "disco.models") -> Dict[str, EntryPoint]:
+def discover_model_entrypoints(group: str = "disco.models") -> dict[str, EntryPoint]:
     eps = entry_points(group=group)
     return {ep.name: ep for ep in eps}
 
@@ -273,8 +275,8 @@ def discover_model_entrypoints(group: str = "disco.models") -> Dict[str, EntryPo
 def load_model_from_entrypoint(
     name: str,
     *,
-    db: Optional[DbHandle] = None,
-    schema: Optional[str] = None,
+    db: DbHandle | None = None,
+    schema: str | None = None,
     group: str = "disco.models",
     model_yml: str = "model.yml",
 ) -> Model:
@@ -328,13 +330,13 @@ def load_model_from_entrypoint(
 
 def load_model(
     *,
-    plugin: Optional[str] = None,
-    package: Optional[str] = None,
-    path: Optional[str | Path] = None,
-    db: Optional[DbHandle] = None,
-    schema: Optional[str] = None,
+    plugin: str | None = None,
+    package: str | None = None,
+    path: str | Path | None = None,
+    db: DbHandle | None = None,
+    schema: str | None = None,
     model_yml: str = "model.yml",
-    dev_import_root: Optional[str | Path] = None,
+    dev_import_root: str | Path | None = None,
 ) -> Model:
     """
     Unified entry for loading a model and attaching ORM bundle.

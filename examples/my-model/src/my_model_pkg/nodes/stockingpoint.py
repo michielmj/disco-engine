@@ -1,13 +1,10 @@
 import pickle
-from nis import cat
+from collections.abc import Iterable
 
-import numpy as np
-from typing import Iterable
-
-from tools.mp_logging import getLogger
-from tools.errsnap import capture
-from toolbox.orderbook import Orderbook
 import graphblas as gb
+from toolbox.orderbook import Orderbook
+from tools.errsnap import capture
+from tools.mp_logging import getLogger
 
 from disco.node import Event, Node
 from my_model_pkg.sampling import get_dists, sample_dists

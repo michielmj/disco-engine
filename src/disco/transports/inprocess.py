@@ -2,8 +2,8 @@ from __future__ import annotations
 
 """In-process transport that routes to local NodeRuntimes."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 from tools.mp_logging import getLogger
 

@@ -2,14 +2,14 @@ import os
 
 from data_logger import DataLogger
 
-from disco.graph import store_graph
-from disco.model import load_model
 from disco.config import get_settings
-from disco.partitioner import SimplePartitioner
 from disco.database import SessionManager
 from disco.experiments import Experiment
-from disco.testrun import TestRun
+from disco.graph import store_graph
 from disco.graph_factory import graph_from_model
+from disco.model import load_model
+from disco.partitioner import SimplePartitioner
+from disco.testrun import TestRun
 
 
 def test_run(tmp_path):

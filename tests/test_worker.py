@@ -3,16 +3,16 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from multiprocessing import Queue
-from typing import Any, Callable, Optional
+from typing import Any
 
 import pytest
 
 import disco.worker as worker_mod
 from disco.cluster import WorkerState
 from disco.experiments import ExperimentStatus
-
 
 # -----------------------------
 # Fakes / test helpers
@@ -25,8 +25,8 @@ class FakeCluster:
         self.register_calls: list[tuple[str, WorkerState]] = []
         self.unregister_calls: list[str] = []
         self.worker_state_calls: list[tuple[str, WorkerState]] = []
-        self.worker_info_calls: list[tuple[str, Optional[int], Optional[str], Optional[str]]] = []
-        self._desired_cb: dict[str, Callable[[Any], Optional[str]]] = {}
+        self.worker_info_calls: list[tuple[str, int | None, str | None, str | None]] = []
+        self._desired_cb: dict[str, Callable[[Any], str | None]] = {}
 
     def register_worker(self, worker: str, state: WorkerState) -> None:
         self.register_calls.append((worker, state))
@@ -41,17 +41,17 @@ class FakeCluster:
         self,
         *,
         worker: str,
-        partition: Optional[int],
-        expid: Optional[str],
-        repid: Optional[str],
+        partition: int | None,
+        expid: str | None,
+        repid: str | None,
     ) -> None:
         self.worker_info_calls.append((worker, partition, expid, repid))
 
-    def on_desired_state_change(self, worker: str, cb: Callable[[Any], Optional[str]]) -> None:
+    def on_desired_state_change(self, worker: str, cb: Callable[[Any], str | None]) -> None:
         self._desired_cb[worker] = cb
 
     # helper for tests
-    def push_desired(self, worker: str, desired: Any) -> Optional[str]:
+    def push_desired(self, worker: str, desired: Any) -> str | None:
         return self._desired_cb[worker](desired)
 
 
@@ -102,9 +102,9 @@ class FakeExperimentStore:
 class FakeDesired:
     request_id: str
     state: WorkerState
-    expid: Optional[str] = None
-    repid: Optional[str] = None
-    partition: Optional[int] = None
+    expid: str | None = None
+    repid: str | None = None
+    partition: int | None = None
 
     def validate_assignment(self) -> bool:
         # Assignment is required on RESERVED (where it is bound).
@@ -186,7 +186,7 @@ def worker_env(monkeypatch: pytest.MonkeyPatch):
     # Patch SessionManager.from_settings (not used in these tests because we patch _setup_run_locked).
     class DummySessionManager:
         @classmethod
-        def from_settings(cls, settings: Any) -> "DummySessionManager":
+        def from_settings(cls, settings: Any) -> DummySessionManager:
             return cls()
 
     monkeypatch.setattr(worker_mod, "SessionManager", DummySessionManager)

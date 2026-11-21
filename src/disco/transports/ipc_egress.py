@@ -3,9 +3,10 @@ from __future__ import annotations
 """IPC transport for sending envelopes to peer processes."""
 
 import sys
+from collections.abc import Callable, Mapping
 from multiprocessing import Queue
 from multiprocessing.shared_memory import SharedMemory
-from typing import Any, Mapping, Callable
+from typing import Any
 
 from tools.mp_logging import getLogger
 

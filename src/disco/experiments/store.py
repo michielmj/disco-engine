@@ -1,12 +1,14 @@
 # src/disco/experiments/store.py
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, cast, Literal
+from typing import Any, Literal, cast
 
 from kazoo.exceptions import NoNodeError
 
 from disco.metastore import Metastore, QueueEntity
+
 from .experiment import (
     Experiment,
     ExperimentStatus,
@@ -91,7 +93,7 @@ class ExperimentStore:
 
     def dequeue(
         self,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         *,
         force_mode: Literal["raise", "release", "consume"] = "raise",
     ) -> Submission:
@@ -131,14 +133,14 @@ class ExperimentStore:
     # -----------------------------
 
     def generate_replications(
-        self, expid: str, n_replications: int, *, seeds: Optional[list[int]] = None
+        self, expid: str, n_replications: int, *, seeds: list[int] | None = None
     ) -> Experiment:
         def mut(e: Experiment) -> None:
             e.generate_replications(n_replications)
 
         return self.atomic_update(expid, mut)
 
-    def select_partitioning(self, expid: str, partitioning: Optional[str]) -> Experiment:
+    def select_partitioning(self, expid: str, partitioning: str | None) -> Experiment:
         def mut(e: Experiment) -> None:
             e.select_partitioning(partitioning)
 

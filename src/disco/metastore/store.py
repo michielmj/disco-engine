@@ -3,18 +3,19 @@ from __future__ import annotations
 
 import pickle
 import uuid
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from random import random
 from time import sleep
-from typing import Any, Callable, Optional, cast, Mapping, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 from kazoo.client import KazooClient
-from kazoo.exceptions import NoNodeError, BadVersionError, NodeExistsError
+from kazoo.exceptions import BadVersionError, NodeExistsError, NoNodeError
 from kazoo.recipe.queue import LockingQueue
-
 from tools.mp_logging import getLogger
 
 from disco.exceptions import DiscoError
+
 from .helpers import ZkConnectionManager
 from .leader import LeaderElection
 
@@ -92,10 +93,10 @@ class Metastore:
     def __init__(
         self,
         connection: ZkConnectionManager,
-        group: Optional[str] = None,
+        group: str | None = None,
         packb: Callable[[Any], bytes] = pickle.dumps,
         unpackb: Callable[[bytes], Any] = pickle.loads,
-        base_structure: Optional[list[str]] = None,
+        base_structure: list[str] | None = None,
         *,
         queue_factory: Callable[[KazooClient, str], _LockingQueueProto] | None = None,
     ) -> None:
@@ -114,7 +115,7 @@ class Metastore:
         self.ensure_structure(base_structure or [])
 
     @property
-    def group(self) -> Optional[str]:
+    def group(self) -> str | None:
         return self._group
 
     # ----------------------------------------------------------------------
@@ -192,7 +193,7 @@ class Metastore:
         # ensure the path exists
         self.client.ensure_path(full_path)
 
-        def _wrapped(raw: Optional[bytes], p: str) -> bool:
+        def _wrapped(raw: bytes | None, p: str) -> bool:
             if raw is None:
                 # Node deleted → stop watching.
                 return False
@@ -217,7 +218,7 @@ class Metastore:
         self._ensure_running()
         full_path = self._full_path(path)
 
-        def _wrapped(children: Optional[list[str]], p: str) -> bool:
+        def _wrapped(children: list[str] | None, p: str) -> bool:
             if children is None:
                 # Node deleted or no further interest → stop watching by default.
                 return False
@@ -229,7 +230,7 @@ class Metastore:
     # Key-value operations
     # ----------------------------------------------------------------------
 
-    def get_key_with_version(self, path: str) -> tuple[Any, Optional[VersionToken]]:
+    def get_key_with_version(self, path: str) -> tuple[Any, VersionToken | None]:
         """
         Read a key and return (value, version-token). If the node does not exist,
         returns (None, None).
@@ -260,7 +261,7 @@ class Metastore:
         value: Any,
         ephemeral: bool = False,
         *,
-        expected: Optional[VersionToken] = None,
+        expected: VersionToken | None = None,
     ) -> None:
         """
         Write a key. If expected is provided, perform a CAS write (set with version).
@@ -485,7 +486,7 @@ class Metastore:
     def dequeue(
         self,
         path: str,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         *,
         force_mode: Literal["raise", "release", "consume"] = "raise",
     ) -> QueueEntity | None:

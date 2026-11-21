@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator, Union, Self, Optional
+from typing import Self, Union
 
 import pandas as pd
-from sqlalchemy import create_engine, Connection, insert, delete, literal
+from sqlalchemy import Connection, create_engine, delete, insert, literal
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -58,7 +59,7 @@ def df_to_table(
     df: pd.DataFrame,
     *,
     clear_all: bool = False,
-    clear_scenario: Optional[str] = None,
+    clear_scenario: str | None = None,
     chunk_size: int = 10_000,
 ):
     if clear_all:

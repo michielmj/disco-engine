@@ -2,15 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 
 import graphblas as gb
 import numpy as np
 import pytest
 
 from disco.graph import Graph
-from disco.partitioner import SpectralClusteringPartitioner, NODE_TYPE
-
+from disco.partitioner import NODE_TYPE, SpectralClusteringPartitioner
 
 # ------------------------------------------------------------------ #
 # Stubs
@@ -19,15 +17,15 @@ from disco.partitioner import SpectralClusteringPartitioner, NODE_TYPE
 
 @dataclass(frozen=True, slots=True)
 class NodeTypeSpecStub:
-    distinct_nodes: List[str]
-    same_node: List[str]
-    self_relations: List[Tuple[str, str]]
+    distinct_nodes: list[str]
+    same_node: list[str]
+    self_relations: list[tuple[str, str]]
 
 
 @dataclass(frozen=True, slots=True)
 class ModelSpecStub:
-    simprocs: List[str]
-    node_types: Dict[str, NodeTypeSpecStub]
+    simprocs: list[str]
+    node_types: dict[str, NodeTypeSpecStub]
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +39,7 @@ class ModelStub:
 
 
 def _make_model(
-    node_types: Dict[str, NodeTypeSpecStub] | None = None, simprocs: List[str] | None = None
+    node_types: dict[str, NodeTypeSpecStub] | None = None, simprocs: list[str] | None = None
 ) -> ModelStub:
     """Single node-type 'A' with region as distinct label, no same_node."""
     if node_types is None:
@@ -62,9 +60,9 @@ def _coo_indices(v: gb.Vector) -> set[int]:
     return set(idx.tolist())
 
 
-def _partition_vertex_sets(part) -> Dict[int, set[int]]:
+def _partition_vertex_sets(part) -> dict[int, set[int]]:
     """Group assigned vertex indices by partition number."""
-    result: Dict[int, set[int]] = {}
+    result: dict[int, set[int]] = {}
     for ns in part.node_specs:
         verts = _coo_indices(part.assignment_vector(ns.node_name))
         result.setdefault(ns.partition, set()).update(verts)
@@ -130,8 +128,8 @@ def _make_four_pair_graph() -> Graph:
         3: ("region", "r2"),
         4: ("region", "r3"),
     }
-    rows: List[int] = []
-    cols: List[int] = []
+    rows: list[int] = []
+    cols: list[int] = []
     for v in range(nv):
         rows.append(v)
         cols.append(0)
@@ -174,8 +172,8 @@ def _make_barbell_graph() -> Graph:
         1: ("region", "north"),
         2: ("region", "south"),
     }
-    rows: List[int] = []
-    cols: List[int] = []
+    rows: list[int] = []
+    cols: list[int] = []
     for v in range(nv):
         rows.append(v)
         cols.append(0)

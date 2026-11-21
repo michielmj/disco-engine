@@ -2,9 +2,9 @@ import gc
 import sys
 
 import pytest
+from tools.ctypes import MAX_UINT64
 
 from disco.event_queue import EventQueue
-from tools.ctypes import MAX_UINT64
 
 
 def drain(queue: EventQueue) -> list:

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
-import secrets
 
 from numpy.random import SeedSequence
 
@@ -33,9 +33,9 @@ class Assignment:
     partition: int
     worker: str
     status: ExperimentStatus = ExperimentStatus.CREATED
-    exc: Optional[dict] = None
+    exc: dict | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "partition": self.partition,
             "worker": self.worker,
@@ -44,7 +44,7 @@ class Assignment:
         }
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "Assignment":
+    def from_dict(d: dict[str, Any]) -> Assignment:
         return Assignment(
             partition=int(d["partition"]),
             worker=str(d["worker"]),
@@ -59,8 +59,8 @@ class Replication:
     seed_sequence: SeedSequence
     repid: str = field(default_factory=lambda: str(uuid4()))
     status: ExperimentStatus = ExperimentStatus.CREATED
-    assignments: Dict[int, Assignment] = field(default_factory=dict)  # partition -> Assignment
-    exc: Optional[dict] = None
+    assignments: dict[int, Assignment] = field(default_factory=dict)  # partition -> Assignment
+    exc: dict | None = None
     _ss: list[SeedSequence] = field(init=False, repr=False)
 
     def __post_init__(self):
@@ -147,7 +147,7 @@ class Replication:
     # (De)serialization
     # -----------------------------
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "repno": self.repno,
             "repid": self.repid,
@@ -158,7 +158,7 @@ class Replication:
         }
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "Replication":
+    def from_dict(d: dict[str, Any]) -> Replication:
         r = Replication(
             repno=int(d["repno"]),
             repid=str(d["repid"]),
@@ -176,14 +176,14 @@ class Replication:
 class Experiment:
     duration: float
     scenario_id: str
-    allowed_partitionings: List[str] = field(default_factory=list)
-    master_seed: Optional[int] = None
+    allowed_partitionings: list[str] = field(default_factory=list)
+    master_seed: int | None = None
     expid: str = field(default_factory=lambda: str(uuid4()))
-    selected_partitioning: Optional[str] = None  # None => implicit single-partition mode
-    replications: Dict[str, Replication] = field(default_factory=dict)  # repid -> Replication
-    params: Optional[Dict[str, Any]] = None
+    selected_partitioning: str | None = None  # None => implicit single-partition mode
+    replications: dict[str, Replication] = field(default_factory=dict)  # repid -> Replication
+    params: dict[str, Any] | None = None
     status: ExperimentStatus = ExperimentStatus.CREATED
-    exc: Optional[dict] = None
+    exc: dict | None = None
 
     def __post_init__(self) -> None:
         if self.duration <= 0:
@@ -203,7 +203,7 @@ class Experiment:
         # If allowed_partitionings is empty, treat as a single partition.
         return not self.allowed_partitionings
 
-    def select_partitioning(self, partitioning: Optional[str]) -> None:
+    def select_partitioning(self, partitioning: str | None) -> None:
         """
         If allowed_partitionings is empty, partitioning must be None (implicit 1 partition).
         Otherwise it must be one of allowed_partitionings.
@@ -319,7 +319,7 @@ class Experiment:
     # (De)serialization
     # -----------------------------
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": 1,
             "expid": self.expid,
@@ -335,7 +335,7 @@ class Experiment:
         }
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "Experiment":
+    def from_dict(d: dict[str, Any]) -> Experiment:
         e = Experiment(
             expid=str(d["expid"]),
             duration=float(d["duration"]),

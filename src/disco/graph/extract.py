@@ -2,21 +2,34 @@
 
 from __future__ import annotations
 
-from typing import Sequence, Mapping, Any, Optional, Literal, cast
+from collections.abc import Mapping, Sequence
+from typing import Any, Literal, cast
 
+import graphblas as gb
 import numpy as np
 import pandas as pd
-import graphblas as gb
-from sqlalchemy import select, and_, literal
-from sqlalchemy.orm import Session
-from sqlalchemy import BigInteger, Boolean, Double, Float, Integer, Numeric, SmallInteger
-from sqlalchemy.sql.schema import Table
-from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Double,
+    Float,
+    Integer,
+    Numeric,
+    SmallInteger,
+    and_,
+    literal,
+    select,
+)
 from sqlalchemy.engine import RowMapping
+from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.schema import Table
 
 from .core import Graph
 from .graph_mask import GraphMask
-from .schema import vertex_masks, edges as edges_table, vertices as vertices_table
+from .schema import edges as edges_table
+from .schema import vertex_masks
+from .schema import vertices as vertices_table
 
 Backend = Literal["pandas"]  # reserved for future extension
 IndexBy = Literal["index", "key"]
@@ -46,7 +59,7 @@ def get_vertex_data(
     vertex_table: Table,
     columns: Sequence[ColumnElement[Any]],
     *,
-    mask: Optional[GraphMask] = None,
+    mask: GraphMask | None = None,
     index_by: IndexBy = "index",
     default_fill: Any | None = None,
 ) -> pd.DataFrame:
@@ -79,7 +92,7 @@ def get_vertex_data(
         )
 
     vmap = vertices_table
-    eff_mask: Optional[GraphMask] = mask if mask is not None else graph.graph_mask
+    eff_mask: GraphMask | None = mask if mask is not None else graph.graph_mask
 
     all_columns = (
         vmap.c.index.label("index"),
@@ -143,7 +156,7 @@ def get_vertex_numeric_vector(
     vertex_table: Table,
     value_column: ColumnElement[NumericType],
     *,
-    mask: Optional[GraphMask] = None,
+    mask: GraphMask | None = None,
     default_value: float = 0.0,
 ) -> gb.Vector:
     """
@@ -161,7 +174,7 @@ def get_vertex_numeric_vector(
         raise ValueError("vertex_table must have 'scenario_id' and 'key' columns.")
 
     vmap = vertices_table
-    eff_mask: Optional[GraphMask] = mask if mask is not None else graph.graph_mask
+    eff_mask: GraphMask | None = mask if mask is not None else graph.graph_mask
 
     base = (
         select(
@@ -252,7 +265,7 @@ def get_outbound_edge_data(
     columns: Sequence[ColumnElement[Any]],
     *,
     layer_idx: int,
-    mask: Optional[GraphMask] = None,
+    mask: GraphMask | None = None,
     index_by: EdgeIndexBy = "indices",
     default_fill: Any | None = None,
 ) -> pd.DataFrame:
@@ -278,7 +291,7 @@ def get_outbound_edge_data(
     Missing model edge rows produce NaN/null in the DataFrame, unless default_fill is set.
     """
     _validate_edge_table(edge_table)
-    eff_mask: Optional[GraphMask] = mask if mask is not None else graph.graph_mask
+    eff_mask: GraphMask | None = mask if mask is not None else graph.graph_mask
 
     e = edges_table
     v_src = vertices_table.alias("v_src")
@@ -365,7 +378,7 @@ def get_inbound_edge_data(
     columns: Sequence[ColumnElement[Any]],
     *,
     layer_idx: int,
-    mask: Optional[GraphMask] = None,
+    mask: GraphMask | None = None,
     index_by: EdgeIndexBy = "indices",
     default_fill: Any | None = None,
 ) -> pd.DataFrame:
@@ -391,7 +404,7 @@ def get_inbound_edge_data(
     Missing model edge rows produce NaN/null in the DataFrame, unless default_fill is set.
     """
     _validate_edge_table(edge_table)
-    eff_mask: Optional[GraphMask] = mask if mask is not None else graph.graph_mask
+    eff_mask: GraphMask | None = mask if mask is not None else graph.graph_mask
 
     e = edges_table
     v_src = vertices_table.alias("v_src")
@@ -482,8 +495,8 @@ def get_outbound_map(
     graph: Graph,
     *,
     layer_idx: int,
-    mask: Optional[GraphMask] = None,
-    values: Optional[ColumnElement[NumericType]] = None,
+    mask: GraphMask | None = None,
+    values: ColumnElement[NumericType] | None = None,
 ) -> gb.Matrix:
     """
     Return a GraphBLAS Matrix for outbound edges in a given layer,
@@ -497,7 +510,7 @@ def get_outbound_map(
     - Only edges whose *source* vertex is in the mask are included.
     """
 
-    eff_mask: Optional[GraphMask] = mask if mask is not None else graph.graph_mask
+    eff_mask: GraphMask | None = mask if mask is not None else graph.graph_mask
 
     e = edges_table
     if values is None:
@@ -553,8 +566,8 @@ def get_inbound_map(
     graph: Graph,
     *,
     layer_idx: int,
-    mask: Optional[GraphMask] = None,
-    values: Optional[ColumnElement[NumericType]] = None,
+    mask: GraphMask | None = None,
+    values: ColumnElement[NumericType] | None = None,
 ) -> gb.Matrix:
     """
     Return a GraphBLAS Matrix for inbound edges in a given layer,
@@ -567,7 +580,7 @@ def get_inbound_map(
     Mask semantics:
     - Only edges whose *target* vertex is in the mask are included.
     """
-    eff_mask: Optional[GraphMask] = mask if mask is not None else graph.graph_mask
+    eff_mask: GraphMask | None = mask if mask is not None else graph.graph_mask
 
     e = edges_table
     if values is None:

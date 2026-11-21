@@ -1,15 +1,15 @@
 # src/disco/metastore/leader.py
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from threading import Event
 from time import sleep
-from typing import Any, Callable, Mapping, Optional
+from typing import Any
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import KazooException, NodeExistsError, NoNodeError
 from kazoo.recipe.election import Election
-
 from tools.mp_logging import getLogger
 
 logger = getLogger(__name__)
@@ -75,7 +75,7 @@ class LeaderElection:
         except Exception:
             pass
 
-    def run(self, on_lead: Callable[[], None], abort: Optional[Any] = None) -> None:
+    def run(self, on_lead: Callable[[], None], abort: Any | None = None) -> None:
         """
         Block until cancelled or abort is set; campaign for leadership.
         When leading, publish leader record and run on_lead().

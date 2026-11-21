@@ -1,16 +1,16 @@
 # tests/test_orchestrator.py
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from threading import Event
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 
 import disco.orchestrator as orchestrator_mod
 from disco.cluster import WorkerState
-
 
 # ---------------------------------------------------------------------------
 # Small fakes

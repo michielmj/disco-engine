@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any, Iterable, Optional, Sequence, Tuple, Type, Union, cast, get_args, get_origin
+from typing import Any, Union, cast, get_args, get_origin
 
 from pydantic import BaseModel
 
@@ -25,7 +25,7 @@ def _is_list(tp: Any) -> tuple[bool, Any]:
     return False, tp
 
 
-def _is_literal(tp: Any) -> tuple[bool, Tuple[Any, ...]]:
+def _is_literal(tp: Any) -> tuple[bool, tuple[Any, ...]]:
     origin = get_origin(tp)
     if origin is not None and str(origin).endswith("Literal"):
         return True, get_args(tp)
@@ -42,7 +42,7 @@ def _python_type_for_argparse(tp: Any) -> type:
     return str
 
 
-def add_model_to_parser(parser: argparse.ArgumentParser, model: Type[BaseModel]) -> None:
+def add_model_to_parser(parser: argparse.ArgumentParser, model: type[BaseModel]) -> None:
     """
     Add arguments for all fields of a Pydantic v2 model to an argparse parser.
     Parsed values are intended to be passed to model.model_validate(vars(args)).

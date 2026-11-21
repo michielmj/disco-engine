@@ -1,17 +1,15 @@
 # src/disco/partitioner/_simple.py
 from __future__ import annotations
 
-from typing import List
-
 import graphblas as gb
 
-from disco.helpers import vstack_rows_from_coo
 from disco.graph import Graph
+from disco.helpers import vstack_rows_from_coo
 from disco.model import Model
 from disco.partitioning import NodeInstanceSpec, Partitioning
 
-from ._protocol import NODE_TYPE
 from ._helpers import _iter_node_instances
+from ._protocol import NODE_TYPE
 
 
 class SimplePartitioner:
@@ -50,8 +48,8 @@ class SimplePartitioner:
         if target_partition_count < 1:
             raise ValueError("target_partition_count must be >= 1")
 
-        node_specs: List[NodeInstanceSpec] = []
-        row_vectors: List[gb.Vector] = []
+        node_specs: list[NodeInstanceSpec] = []
+        row_vectors: list[gb.Vector] = []
 
         for node_type, label_values, assignment_vector, _ in _iter_node_instances(self._graph, self._model):
             node_name = "-".join(["p0", node_type] + label_values)

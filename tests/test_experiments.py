@@ -1,14 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Tuple
 
 import pytest
-from kazoo.exceptions import BadVersionError, NoNodeError, NodeExistsError
+from kazoo.exceptions import BadVersionError, NodeExistsError, NoNodeError
 
-from disco.experiments import Experiment, ExperimentStatus, ExperimentStore, Replication
+from disco.experiments import Experiment, ExperimentStatus, ExperimentStore
 from disco.metastore.store import Metastore
-
 
 # ---------------------------------------------------------------------------
 # Minimal fakes for Metastore (Kazoo) used by ExperimentStore tests
@@ -26,9 +25,9 @@ class FakeKazooClient:
     """
 
     def __init__(self) -> None:
-        self.data: Dict[str, bytes] = {}
-        self.versions: Dict[str, int] = {}
-        self.ensure_calls: List[str] = []
+        self.data: dict[str, bytes] = {}
+        self.versions: dict[str, int] = {}
+        self.ensure_calls: list[str] = []
 
     def ensure_path(self, path: str) -> None:
         self.ensure_calls.append(path)
@@ -46,7 +45,7 @@ class FakeKazooClient:
             return FakeStat(self.versions.get(prefix, 0))
         return None
 
-    def get(self, path: str) -> Tuple[bytes, FakeStat]:
+    def get(self, path: str) -> tuple[bytes, FakeStat]:
         if path not in self.data:
             raise NoNodeError()
         return self.data[path], FakeStat(self.versions.get(path, 0))

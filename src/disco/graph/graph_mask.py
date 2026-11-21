@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional, List
 
 import graphblas as gb
 from graphblas import Vector
-from sqlalchemy import insert, delete, update, select
+from sqlalchemy import delete, insert, select, update
 from sqlalchemy.orm import Session
 
 from .schema import vertex_masks
@@ -22,13 +21,13 @@ class GraphMask:
     - Intended to be short-lived (no longer than the associated Graph).
     """
 
-    __slots__ = ("vector", "scenario_id", "mask_id", "_stored")
+    __slots__ = ("_stored", "mask_id", "scenario_id", "vector")
 
     def __init__(
         self,
         vector: Vector,
         scenario_id: str,
-        mask_id: Optional[str] = None,
+        mask_id: str | None = None,
     ) -> None:
         if vector.dtype is not gb.dtypes.BOOL:
             raise TypeError(f"GraphMask vector must have BOOL dtype, got {vector.dtype!r}")
@@ -150,7 +149,7 @@ class GraphMask:
         session: Session,
         scenario_id: int,
         mask_id: str,
-    ) -> List[int]:
+    ) -> list[int]:
         """
         Utility to fetch vertex indices for a persisted mask.
         """

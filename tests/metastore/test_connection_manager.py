@@ -1,11 +1,12 @@
 import uuid
-from typing import Any, Callable, List, Tuple
+from collections.abc import Callable
+from typing import Any
 
 import pytest
+from kazoo.client import KazooState
 
 # Adjust these imports to match your project structure
 from disco.metastore import ZkConnectionManager
-from kazoo.client import KazooState
 
 
 class FakeKazooClient:
@@ -61,8 +62,8 @@ def fake_kazoo(monkeypatch):
         _fake_create_zk_client,
     )
 
-    data_registrations: List[Tuple[FakeKazooClient, str, Callable]] = []
-    children_registrations: List[Tuple[FakeKazooClient, str, Callable]] = []
+    data_registrations: list[tuple[FakeKazooClient, str, Callable]] = []
+    children_registrations: list[tuple[FakeKazooClient, str, Callable]] = []
 
     def _fake_data_watch(client, path, func):
         data_registrations.append((client, path, func))

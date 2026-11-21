@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import pickle
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import pytest
-from kazoo.exceptions import BadVersionError, NoNodeError, NodeExistsError
+from kazoo.exceptions import BadVersionError, NodeExistsError, NoNodeError
 
 from disco.metastore.store import Metastore, MetastoreConflictError, VersionToken
 
@@ -29,7 +30,7 @@ class FakeLockingQueue:
 
     def __init__(self) -> None:
         self._items: list[bytes] = []
-        self._locked: Optional[bytes] = None
+        self._locked: bytes | None = None
 
     def put(self, item: bytes) -> None:
         self._items.append(item)
@@ -65,7 +66,7 @@ class FakeQueueFactory:
     """
 
     def __init__(self) -> None:
-        self.queues: Dict[str, FakeLockingQueue] = {}
+        self.queues: dict[str, FakeLockingQueue] = {}
 
     def __call__(self, client: Any, full_path: str) -> FakeLockingQueue:  # client unused
         q = self.queues.get(full_path)
@@ -95,9 +96,9 @@ class FakeKazooClient:
     """
 
     def __init__(self) -> None:
-        self.data: Dict[str, bytes] = {}
-        self.versions: Dict[str, int] = {}
-        self.ensure_calls: List[str] = []
+        self.data: dict[str, bytes] = {}
+        self.versions: dict[str, int] = {}
+        self.ensure_calls: list[str] = []
 
     # Basic CRUD ------------------------------------------------------------
 
@@ -128,7 +129,7 @@ class FakeKazooClient:
 
         return None
 
-    def get(self, path: str) -> Tuple[bytes, FakeStat]:
+    def get(self, path: str) -> tuple[bytes, FakeStat]:
         """
         Kazoo get() raises NoNodeError if missing and returns (data, stat) if present.
         """

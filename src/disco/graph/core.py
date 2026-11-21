@@ -1,16 +1,17 @@
 # src/disco/graph/core.py
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple, List, Sequence, Mapping, Union
+from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
-import numpy as np
 import graphblas as gb
+import numpy as np
 from graphblas import Matrix, Vector
 
 from disco.helpers import has_self_loop, matrix_has_cycle
-from .graph_mask import GraphMask
+
 from ..helpers.gb import submatrix
+from .graph_mask import GraphMask
 
 
 class Graph:
@@ -35,18 +36,18 @@ class Graph:
     """
 
     __slots__ = (
-        "_layers",
-        "num_vertices",
-        "scenario_id",
-        "_vertices",  # np.ndarray | None  (index i -> vertex key)
-        "_vertex_weight",  # np.ndarray[float64] of length num_vertices
-        "_mask",  # GraphMask | None
+        "_label_index_by_type_value",  # dict[tuple[str, str], int]
+        "_label_indices_by_type",  # dict[str, np.ndarray]
         "_label_matrix",  # Matrix[BOOL] | None
         "_label_meta",  # dict[int, tuple[str, str]]
         "_labels_by_type",  # dict[str, dict[str, int]]
-        "_label_indices_by_type",  # dict[str, np.ndarray]
-        "_label_index_by_type_value",  # dict[tuple[str, str], int]
+        "_layers",
+        "_mask",  # GraphMask | None
         "_num_labels",
+        "_vertex_weight",  # np.ndarray[float64] of length num_vertices
+        "_vertices",  # np.ndarray | None  (index i -> vertex key)
+        "num_vertices",
+        "scenario_id",
     )
 
     # ------------------------------------------------------------------ #
@@ -54,24 +55,24 @@ class Graph:
     # ------------------------------------------------------------------ #
     def __init__(
         self,
-        layers: Tuple[Matrix, ...],
+        layers: tuple[Matrix, ...],
         num_vertices: int,
         scenario_id: str = "",
         *,
-        vertices: Optional[np.ndarray] = None,
-        vertex_weight: Optional[np.ndarray] = None,
-        mask: Optional[Vector] = None,
-        label_matrix: Optional[Matrix] = None,
-        label_meta: Optional[Dict[int, Tuple[str, str]]] = None,
+        vertices: np.ndarray | None = None,
+        vertex_weight: np.ndarray | None = None,
+        mask: Vector | None = None,
+        label_matrix: Matrix | None = None,
+        label_meta: dict[int, tuple[str, str]] | None = None,
     ) -> None:
         # Avoid unnecessary copies; only wrap if needed
-        self._layers: Tuple[Matrix, ...] = layers
+        self._layers: tuple[Matrix, ...] = layers
 
         self.num_vertices = num_vertices
         self.scenario_id = scenario_id
 
         # vertices: 1D array mapping vertex index -> vertex key
-        self._vertices: Optional[np.ndarray] = np.asarray(vertices) if vertices is not None else None
+        self._vertices: np.ndarray | None = np.asarray(vertices) if vertices is not None else None
 
         # vertex_weight: per-vertex compute weight, default 1.0
         if vertex_weight is None:
@@ -82,16 +83,16 @@ class Graph:
         self.validate(check_cycles=False)
 
         # mask (GraphMask, internal)
-        self._mask: Optional[GraphMask] = None
+        self._mask: GraphMask | None = None
         if mask is not None:
             self.set_mask(mask)
 
         # labels
-        self._label_matrix: Optional[Matrix] = None
-        self._label_meta: Dict[int, Tuple[str, str]] = {}
-        self._labels_by_type: Dict[str, Dict[str, int]] = {}
-        self._label_indices_by_type: Dict[str, np.ndarray] = {}
-        self._label_index_by_type_value: Dict[tuple[str, str], int] = {}
+        self._label_matrix: Matrix | None = None
+        self._label_meta: dict[int, tuple[str, str]] = {}
+        self._labels_by_type: dict[str, dict[str, int]] = {}
+        self._label_indices_by_type: dict[str, np.ndarray] = {}
+        self._label_index_by_type_value: dict[tuple[str, str], int] = {}
         self._num_labels: int = 0
         if label_matrix is not None:
             self.set_labels(label_matrix, label_meta)
@@ -103,7 +104,7 @@ class Graph:
         *,
         num_vertices: int,
         scenario_id: str = "",
-        vertices: Optional[np.ndarray] = None,
+        vertices: np.ndarray | None = None,
     ) -> Graph:
         """
         Build a Graph from per-layer edge arrays.
@@ -117,7 +118,7 @@ class Graph:
         """
         num_vertices = int(num_vertices)
 
-        layers_dict: Dict[int, Matrix] = {}
+        layers_dict: dict[int, Matrix] = {}
         for layer_idx, (src, dst, w) in edge_layers.items():
             src_arr = np.asarray(src, dtype=np.int64)
             dst_arr = np.asarray(dst, dtype=np.int64)
@@ -176,7 +177,7 @@ class Graph:
     # Vertices
     # ------------------------------------------------------------------ #
     @property
-    def vertices(self) -> Optional[np.ndarray]:
+    def vertices(self) -> np.ndarray | None:
         """
         1D array of vertex keys (position i is the key for vertex i), or None
         if no vertex keys have been attached to this graph.
@@ -196,7 +197,7 @@ class Graph:
     # ------------------------------------------------------------------ #
     # Mask handling (public API: Vector; internal: GraphMask)
     # ------------------------------------------------------------------ #
-    def set_mask(self, mask_vector: Optional[Vector]) -> None:
+    def set_mask(self, mask_vector: Vector | None) -> None:
         """
         Set or clear the vertex mask.
 
@@ -215,14 +216,14 @@ class Graph:
         self._mask = GraphMask(mask_vector, scenario_id=self.scenario_id)
 
     @property
-    def mask_vector(self) -> Optional[Vector]:
+    def mask_vector(self) -> Vector | None:
         """Return the underlying GraphBLAS mask vector, if any."""
         if self._mask is None:
             return None
         return self._mask.vector
 
     @property
-    def graph_mask(self) -> Optional[GraphMask]:
+    def graph_mask(self) -> GraphMask | None:
         """
         Return the GraphMask wrapper for this graph, if any.
 
@@ -231,7 +232,7 @@ class Graph:
         """
         return self._mask
 
-    def _get_indices_masked(self, indices: Optional[np.ndarray] = None) -> np.ndarray:
+    def _get_indices_masked(self, indices: np.ndarray | None = None) -> np.ndarray:
         if indices is None:
             result = np.arange(self.num_vertices, dtype=np.uint64)
         else:
@@ -267,7 +268,7 @@ class Graph:
     def set_labels(
         self,
         label_matrix: Matrix,
-        label_meta: Optional[Dict[int, Tuple[str, str]]] = None,
+        label_meta: dict[int, tuple[str, str]] | None = None,
     ) -> None:
         """
         Attach label structures to the graph.
@@ -289,14 +290,14 @@ class Graph:
         self._rebuild_per_type_structures()
 
     @property
-    def label_matrix(self) -> Optional[Matrix]:
+    def label_matrix(self) -> Matrix | None:
         """
         Sparse boolean matrix of label assignments (vertices x labels).
         """
         return self._label_matrix
 
     @property
-    def label_matrix_masked(self) -> Optional[Matrix]:
+    def label_matrix_masked(self) -> Matrix | None:
         """
         Sparse boolean matrix of label assignments (vertices x labels).
         Masking applied.
@@ -308,7 +309,7 @@ class Graph:
             return submatrix(self._label_matrix, idxs)
 
     @property
-    def label_meta(self) -> Mapping[int, Tuple[str, str]]:
+    def label_meta(self) -> Mapping[int, tuple[str, str]]:
         """
         Read-only view of label_index -> (label_type, label_value).
         Mutating the underlying dict is still possible through other references,
@@ -331,7 +332,7 @@ class Graph:
     def label_indices_by_type(self) -> Mapping[str, np.ndarray]:
         return MappingProxyType(self._label_indices_by_type)
 
-    def labels_for_type(self, label_type: str, keep_label_indices: bool = True) -> Tuple[np.ndarray, Matrix]:
+    def labels_for_type(self, label_type: str, keep_label_indices: bool = True) -> tuple[np.ndarray, Matrix]:
         """
         Return (label_indices, submatrix) for a label type.
 
@@ -355,7 +356,7 @@ class Graph:
 
     def labels_for_type_masked(
         self, label_type: str, keep_label_indices: bool = True
-    ) -> Tuple[np.ndarray, Matrix]:
+    ) -> tuple[np.ndarray, Matrix]:
         """
         Return (label_indices, submatrix) for a label type.
 
@@ -400,7 +401,7 @@ class Graph:
         inverse = {idx: label for label, idx in mapping.items()}
         return MappingProxyType(inverse)
 
-    def label_info(self, label_index: int) -> Tuple[str, str]:
+    def label_info(self, label_index: int) -> tuple[str, str]:
         """
         Return (label_type, label_value) for a global label index.
         """
@@ -461,8 +462,8 @@ class Graph:
             base_cols = base_cols.astype(np.int64, copy=False)
             base_vals = base_vals.astype(bool, copy=False)
 
-        new_rows_list: List[np.ndarray] = []
-        new_cols_list: List[np.ndarray] = []
+        new_rows_list: list[np.ndarray] = []
+        new_cols_list: list[np.ndarray] = []
         affected_types: set[str] = set()
 
         # Ensure intermediate per-type structures exist
@@ -607,7 +608,7 @@ class Graph:
 
         return aug_mat
 
-    def by_distinct_labels(self, distinct: Sequence[str]) -> List[np.ndarray]:
+    def by_distinct_labels(self, distinct: Sequence[str]) -> list[np.ndarray]:
         """
         Compute distinct combinations of labels across one or more label types.
 
@@ -641,9 +642,9 @@ class Graph:
             return []
 
         # Per label type: (global_label_indices, original_width, augmented_matrix)
-        label_indices_list: List[np.ndarray] = []
-        original_widths: List[int] = []
-        augmented_matrices: List[Matrix] = []
+        label_indices_list: list[np.ndarray] = []
+        original_widths: list[int] = []
+        augmented_matrices: list[Matrix] = []
 
         for label_type in distinct:
             idxs, sub_mat = self.labels_for_type_masked(label_type, keep_label_indices=False)
@@ -685,7 +686,7 @@ class Graph:
 
         # Decode combination indices back into per-type global label indices,
         # using -1 as a sentinel for the unlabelled column.
-        rows_per_type: List[np.ndarray] = []
+        rows_per_type: list[np.ndarray] = []
         base = int(S.ncols)
         for label_indices, aug_mat, orig_width in zip(
             label_indices_list, augmented_matrices, original_widths
@@ -749,7 +750,7 @@ class Graph:
             raise RuntimeError("Graph has no labels attached (label_matrix is None)")
 
         # --- 1. Collect selected label columns and build sub-matrix ---
-        selected_label_indices: List[np.ndarray] = []
+        selected_label_indices: list[np.ndarray] = []
         for lt in label_types:
             try:
                 idxs = self._label_indices_by_type[lt]
@@ -771,8 +772,8 @@ class Graph:
         # using a bitmap key per group for fast overlap detection.
         ofs, ixs, _ = sub_mat.to_csc()
 
-        groups: List[np.ndarray] = []
-        keys: List[int] = []
+        groups: list[np.ndarray] = []
+        keys: list[int] = []
         for i in range(len(ofs) - 1):
             grp = ixs[ofs[i] : ofs[i + 1]]
             if grp.size == 0:
@@ -782,8 +783,8 @@ class Graph:
 
         if groups:
             while True:
-                ckeys: List[int] = []
-                cgroups: List[np.ndarray] = []
+                ckeys: list[int] = []
+                cgroups: list[np.ndarray] = []
 
                 seq = np.argsort([int(np.min(g)) for g in groups])
                 for s in seq:
@@ -898,7 +899,7 @@ class Graph:
     # Structural accessors
     # ------------------------------------------------------------------ #
     @property
-    def layers(self) -> Tuple[Matrix, ...]:
+    def layers(self) -> tuple[Matrix, ...]:
         """
         Read-only view of the internal layer sequence (no masking applied).
         """
@@ -927,7 +928,7 @@ class Graph:
     # ------------------------------------------------------------------ #
     # Graph view
     # ------------------------------------------------------------------ #
-    def get_view(self, mask: Optional[Vector] = None) -> Graph:
+    def get_view(self, mask: Vector | None = None) -> Graph:
         """
         Return a shallow view of this graph sharing structure and labels,
         but with an optional different GraphMask.
@@ -974,22 +975,22 @@ class SuperGraph(Graph):
     """
 
     __slots__ = (
-        "_vertex_map",
         "_num_original_vertices",
+        "_vertex_map",
     )
 
     def __init__(
         self,
-        layers: Tuple[Matrix, ...],
+        layers: tuple[Matrix, ...],
         num_vertices: int,
         scenario_id: str,
         *,
         vertex_map: np.ndarray,
         num_original_vertices: int,
         vertex_weight: np.ndarray,
-        mask: Optional[Vector] = None,
-        label_matrix: Optional[Matrix] = None,
-        label_meta: Optional[Dict[int, Tuple[str, str]]] = None,
+        mask: Vector | None = None,
+        label_matrix: Matrix | None = None,
+        label_meta: dict[int, tuple[str, str]] | None = None,
     ) -> None:
         self._vertex_map: np.ndarray = vertex_map
         self._num_original_vertices: int = num_original_vertices
@@ -1022,8 +1023,8 @@ class SuperGraph(Graph):
     # ------------------------------------------------------------------ #
     def decompress(
         self,
-        supervertices: Union[Vector, np.ndarray, Sequence[int], set[int]],
-    ) -> Union[Vector, np.ndarray]:
+        supervertices: Vector | np.ndarray | Sequence[int] | set[int],
+    ) -> Vector | np.ndarray:
         """
         Expand supervertex-indexed data to the original vertex space.
 

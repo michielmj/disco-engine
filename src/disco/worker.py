@@ -2,36 +2,36 @@
 from __future__ import annotations
 
 import traceback
+from collections.abc import Generator, Mapping
 from dataclasses import dataclass
 from multiprocessing.queues import Queue
 from pathlib import Path
 from queue import Empty
-from threading import RLock, Event
+from threading import Event, RLock
 from time import monotonic
-from typing import Dict, Generator, Mapping, Optional, cast, Any
+from typing import Any, cast
 
-from sqlalchemy.exc import OperationalError, DBAPIError
-from tools.mp_logging import getLogger
 from data_logger import DataLogger
+from sqlalchemy.exc import DBAPIError, OperationalError
+from tools.mp_logging import getLogger
 
-from .database import SessionManager
-from .exceptions import DiscoError, DiscoRuntimeError
-from .cluster import Cluster, WorkerState, DesiredWorkerState
+from .cluster import Cluster, DesiredWorkerState, WorkerState
 from .config import AppSettings
+from .database import SessionManager
 from .envelopes import EventEnvelope, PromiseEnvelope
-from .partitioning import Partitioning, NodeInstanceSpec, PartitioningNotFoundError, PartitioningCorruptError
+from .exceptions import DiscoError, DiscoRuntimeError
+from .experiments import Experiment, ExperimentStatus, ExperimentStore
+from .graph import Graph, load_graph_for_scenario
+from .graph_data import GraphData
+from .model import Model, load_model
+from .partitioning import NodeInstanceSpec, Partitioning, PartitioningCorruptError, PartitioningNotFoundError
+from .router import Router
+from .runtime import NodeRuntime
 from .transports.grpc_ingress import start_grpc_server
 from .transports.grpc_transport import GrpcTransport
 from .transports.inprocess import InProcessTransport
 from .transports.ipc_egress import IPCTransport
 from .transports.ipc_messages import IPCEventMsg, IPCPromiseMsg
-
-from .experiments import Experiment, ExperimentStore, ExperimentStatus
-from .model import Model, load_model
-from .graph import Graph, load_graph_for_scenario
-from .graph_data import GraphData
-from .runtime import NodeRuntime
-from .router import Router
 
 logger = getLogger(__name__)
 
@@ -151,7 +151,7 @@ class Worker:
         event_queues: Mapping[str, Queue[IPCEventMsg]],
         promise_queues: Mapping[str, Queue[IPCPromiseMsg]],
         settings: AppSettings,
-        name: Optional[str] = None,
+        name: str | None = None,
     ) -> None:
         # Identity
         self.address = address
@@ -190,7 +190,7 @@ class Worker:
 
         # NodeRuntime registry used by InProcessTransport (holds reference to dict).
         # Keep dict identity stable; mutate contents only.
-        self._nodes: Dict[str, NodeRuntime] = {}
+        self._nodes: dict[str, NodeRuntime] = {}
 
         # Router and data logger (exist for worker lifetime, but dlogger is per-run).
         self._router: Router
@@ -207,7 +207,7 @@ class Worker:
 
         # Cached partitioning and selection (partitioning tied to graph + selected_partitioning + partition index).
         self._partitioning: Partitioning | None = None
-        self._node_specs: Dict[str, NodeInstanceSpec] | None = None
+        self._node_specs: dict[str, NodeInstanceSpec] | None = None
         self._partitioning_id: str | None = None
 
         # Cached model (fixed plugin/package; loaded once per worker).
@@ -926,7 +926,7 @@ class Worker:
             return False
 
         partitioning = self._partitioning
-        node_specs = cast(Dict[str, NodeInstanceSpec], self._node_specs)
+        node_specs = cast(dict[str, NodeInstanceSpec], self._node_specs)
 
         # --- Model (load once per worker) ---
         # If model cannot load, that is typically worker-fatal because model is a fixed package.

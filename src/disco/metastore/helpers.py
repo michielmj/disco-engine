@@ -1,12 +1,13 @@
 # src/disco/metastore/helpers.py
 import threading
 import uuid
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
-from kazoo.client import KazooClient, KazooState, KazooRetry
-from kazoo.recipe.watchers import DataWatch, ChildrenWatch
-
+from kazoo.client import KazooClient, KazooRetry, KazooState
+from kazoo.recipe.watchers import ChildrenWatch, DataWatch
 from tools.mp_logging import getLogger
+
 from disco.config import ZookeeperSettings
 
 logger = getLogger(__name__)
@@ -77,15 +78,15 @@ class ZkConnectionManager:
 
     def __init__(self, settings: ZookeeperSettings) -> None:
         self._settings = settings
-        self._client: Optional[KazooClient] = None
+        self._client: KazooClient | None = None
 
         # watch_id -> (path, callback)
         # callback: Callable[[Optional[bytes], str], bool]
-        self._watched: Dict[uuid.UUID, tuple[str, Callable[[Optional[bytes], str], bool]]] = {}
+        self._watched: dict[uuid.UUID, tuple[str, Callable[[bytes | None, str], bool]]] = {}
 
         # watch_id -> (path, callback)
         # callback: Callable[[Optional[list[str]], str], bool]
-        self._children_watched: Dict[uuid.UUID, tuple[str, Callable[[Optional[list[str]], str], bool]]] = {}
+        self._children_watched: dict[uuid.UUID, tuple[str, Callable[[list[str] | None, str], bool]]] = {}
 
         self._lock = threading.RLock()
         self._session_lost = False
@@ -151,7 +152,7 @@ class ZkConnectionManager:
 
     # --- data watch registration / recovery --------------------------------
 
-    def watch_data(self, path: str, callback: Callable[[Optional[bytes], str], bool]) -> uuid.UUID:
+    def watch_data(self, path: str, callback: Callable[[bytes | None, str], bool]) -> uuid.UUID:
         """
         Register a data watch on `path`.
 
@@ -169,13 +170,13 @@ class ZkConnectionManager:
         self,
         watch_id: uuid.UUID,
         path: str,
-        callback: Callable[[Optional[bytes], str], bool],
+        callback: Callable[[bytes | None, str], bool],
     ) -> None:
         """
         Internal helper to attach a Kazoo DataWatch for a given cached callback.
         """
 
-        def _wrapped(data: Optional[bytes], stat: Any, event: Any) -> bool:
+        def _wrapped(data: bytes | None, stat: Any, event: Any) -> bool:
             keep = callback(data, path)
             if not keep:
                 # Remove from cache if callback decides to stop
@@ -188,7 +189,7 @@ class ZkConnectionManager:
     def watch_children(
         self,
         path: str,
-        callback: Callable[[Optional[list[str]], str], bool],
+        callback: Callable[[list[str] | None, str], bool],
     ) -> uuid.UUID:
         """
         Register a children watch on `path`.
@@ -207,13 +208,13 @@ class ZkConnectionManager:
         self,
         watch_id: uuid.UUID,
         path: str,
-        callback: Callable[[Optional[list[str]], str], bool],
+        callback: Callable[[list[str] | None, str], bool],
     ) -> None:
         """
         Internal helper to attach a Kazoo ChildrenWatch for a given cached callback.
         """
 
-        def _wrapped(children: Optional[list[str]]) -> bool:
+        def _wrapped(children: list[str] | None) -> bool:
             keep = callback(children, path)
             if not keep:
                 with self._lock:
@@ -227,10 +228,10 @@ class ZkConnectionManager:
         Reinstall all cached data and children watches after a LOST -> CONNECTED transition.
         """
         with self._lock:
-            data_items: list[tuple[uuid.UUID, tuple[str, Callable[[Optional[bytes], str], bool]]]] = list(
+            data_items: list[tuple[uuid.UUID, tuple[str, Callable[[bytes | None, str], bool]]]] = list(
                 self._watched.items()
             )
-            children_items: list[tuple[uuid.UUID, tuple[str, Callable[[Optional[list[str]], str], bool]]]] = (
+            children_items: list[tuple[uuid.UUID, tuple[str, Callable[[list[str] | None, str], bool]]]] = (
                 list(self._children_watched.items())
             )
 

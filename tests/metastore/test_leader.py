@@ -1,16 +1,16 @@
 # tests/metastore/test_leader.py
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from threading import Event
-from typing import Any, Callable, Mapping, Optional
+from typing import Any
 
 import pytest
 from kazoo.exceptions import NodeExistsError, NoNodeError
 
-from disco.metastore.store import Metastore
 from disco.metastore.leader import LeaderElection, LeaderRecord
-
+from disco.metastore.store import Metastore
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -54,7 +54,7 @@ class FakeKazooClient:
 
         # Behavior knobs
         self._create_raises_node_exists: bool = False
-        self._exists_stat: Optional[_FakeStat] = None
+        self._exists_stat: _FakeStat | None = None
         self._nodes: set[str] = set()
 
     def ensure_path(self, path: str) -> None:
@@ -78,7 +78,7 @@ class FakeKazooClient:
             raise NoNodeError()
         self._nodes.remove(path)
 
-    def exists(self, path: str) -> Optional[_FakeStat]:
+    def exists(self, path: str) -> _FakeStat | None:
         self.exists_calls.append(path)
         return self._exists_stat
 

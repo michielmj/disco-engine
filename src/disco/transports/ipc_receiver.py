@@ -2,10 +2,10 @@ from __future__ import annotations
 
 """Receiver loops for IPC queues."""
 
+import pickle
+from collections.abc import Mapping
 from multiprocessing import Queue
 from multiprocessing.shared_memory import SharedMemory
-from typing import Mapping
-import pickle
 
 from tools.mp_logging import getLogger
 

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
 
 from tools.mp_logging import getLogger
+
 from .envelopes import EventEnvelope, PromiseEnvelope
 from .exceptions import DiscoRuntimeError
 from .transports.base import Transport  # Protocol
@@ -61,7 +62,7 @@ class Router:
         """
 
         # Wrap transports with a name for debugging; fall back to class name.
-        self._transports: List[TransportInfo] = []
+        self._transports: list[TransportInfo] = []
         for t in transports:
             name = getattr(t, "name", t.__class__.__name__)
             self._transports.append(TransportInfo(transport=t, name=name))

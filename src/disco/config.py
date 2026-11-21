@@ -1,14 +1,14 @@
 # src/disco/config.py
 from __future__ import annotations
 
+import contextvars
 import pickle
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal, Optional, cast
-import contextvars
+from typing import Any, Literal, cast
 
-from pydantic import BaseModel, Field, DirectoryPath, SecretStr, model_validator
+from pydantic import BaseModel, DirectoryPath, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import PydanticBaseSettingsSource
 from sqlalchemy.engine import URL
@@ -155,7 +155,7 @@ class GrpcSettings(BaseModel):
     promise_retry_max_window_s: float = Field(
         3.0, description="Maximum time window for promise delivery retries in seconds."
     )
-    loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
+    loglevel: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] | None = Field(
         None, description="Logging level for gRPC (CRITICAL, WARNING, INFO, DEBUG)"
     )
 
@@ -182,7 +182,7 @@ class ZookeeperSettings(BaseModel):
         default=None, description="Path to client certificate file for mutual TLS."
     )
     client_key: str | None = Field(default=None, description="Path to client private key for mutual TLS.")
-    loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
+    loglevel: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] | None = Field(
         None, description="Logging level for Zookeeper / Kazoo (CRITICAL, WARNING, INFO, DEBUG)"
     )
 
@@ -234,7 +234,7 @@ class DatabaseSettings(BaseModel):
     max_overflow: int = 20
     pool_pre_ping: bool = True
 
-    loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
+    loglevel: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] | None = Field(
         None, description="Logging level for sqlalchemy (CRITICAL, WARNING, INFO, DEBUG)"
     )
 
@@ -260,7 +260,7 @@ class DataLoggerSettings(BaseModel):
     ring_bytes: int = Field(1 << 27, description="Ring buffer size (default=128 MB)")
     rotate_bytes: int = Field(256 << 20, description="Segment file size (default=256 MB)")
     zstd_level: int = Field(1, description="ZSTD Compression level (default=1)")
-    loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
+    loglevel: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] | None = Field(
         None, description="Logging level for data_logger (CRITICAL, WARNING, INFO, DEBUG)"
     )
 
@@ -273,7 +273,7 @@ class ModelSettings(BaseModel):
     model_yml: str = Field("model.yml", description="Name of the model definition file (default=model.yml).")
 
     @model_validator(mode="after")
-    def _validate_exactly_one_source(self) -> "ModelSettings":
+    def _validate_exactly_one_source(self) -> ModelSettings:
         count = sum(x is not None for x in (self.plugin, self.package, self.path))
         if count != 1:
             raise ValueError("Exactly one of `plugin`, `package`, or `path` must be provided.")

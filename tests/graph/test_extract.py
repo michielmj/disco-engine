@@ -1,44 +1,43 @@
 # tests/graph/test_extract.py
 from __future__ import annotations
 
-from typing import Iterator, Tuple
+from collections.abc import Iterator
 
 import numpy as np
+from graphblas import Vector
 from sqlalchemy import (
-    create_engine,
-    MetaData,
-    Table,
     Column,
-    String,
-    Integer,
     Float,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    create_engine,
     insert,
 )
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from disco.graph import Graph
-from disco.graph.schema import (
-    create_graph_schema,
-    vertices,
-    edges,
-)
 from disco.graph.extract import (
+    get_inbound_edge_data,
+    get_inbound_map,
+    get_outbound_edge_data,
+    get_outbound_map,
     get_vertex_data,
     get_vertex_numeric_vector,
-    get_outbound_edge_data,
-    get_inbound_edge_data,
-    get_outbound_map,
-    get_inbound_map,
 )
-from graphblas import Vector
-
+from disco.graph.schema import (
+    create_graph_schema,
+    edges,
+    vertices,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 
-def _create_model_tables(engine) -> Tuple[Table, Table]:
+def _create_model_tables(engine) -> tuple[Table, Table]:
     """
     Create key-based model node and edge tables for tests:
 

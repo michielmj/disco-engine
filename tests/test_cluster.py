@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import pytest
+from collections.abc import Callable
 from dataclasses import asdict
-from typing import Any, Callable, List, Tuple
+from typing import Any
 
+import pytest
 
 from disco.cluster import (
-    Cluster,
-    WorkerState,
-    WorkerInfo,
-    DesiredWorkerState,
+    DESIRED_STATE,
     REGISTERED_WORKERS,
     WORKERS,
-    DESIRED_STATE,
+    Cluster,
+    DesiredWorkerState,
+    WorkerInfo,
+    WorkerState,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fake Metastore
@@ -34,14 +34,14 @@ class FakeMetastore:
     """
 
     def __init__(self) -> None:
-        self.structure_calls: List[list[str]] = []
+        self.structure_calls: list[list[str]] = []
 
         # path -> value
         self.data: dict[str, Any] = {}
 
         # watches
-        self.children_watches: List[Tuple[str, Callable[[list[str], str], bool]]] = []
-        self.data_watches: List[Tuple[str, Callable[[Any, str], bool]]] = []
+        self.children_watches: list[tuple[str, Callable[[list[str], str], bool]]] = []
+        self.data_watches: list[tuple[str, Callable[[Any, str], bool]]] = []
 
     # --- Metastore-like API ------------------------------------------------
 

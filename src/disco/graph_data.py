@@ -1,19 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Generator, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import (
     Any,
-    Mapping,
-    Optional,
-    Sequence,
-    Iterable,
-    Tuple,
-    Generator,
     Self,
     cast,
-    TypeVar,
     overload,
-    Union,
 )
 
 import numpy as np
@@ -24,18 +17,17 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.schema import Table
 
 from disco.database import SessionManager
-from disco.model import Model, OrmBundle
-from disco.partitioning import Partitioning, NodeInstanceSpec
-
 from disco.graph import (
     Graph,
     GraphMask,
-    get_outbound_edge_data,
     get_inbound_edge_data,
-    get_outbound_map,
     get_inbound_map,
+    get_outbound_edge_data,
+    get_outbound_map,
     get_vertex_data,
 )
+from disco.model import Model, OrmBundle
+from disco.partitioning import NodeInstanceSpec, Partitioning
 
 
 def _normalize_column_element(column: ColumnElement[Any] | str, orm_table: Table) -> ColumnElement:
@@ -59,13 +51,13 @@ class SimProcGraphData:
     node_table: Table
     edge_table: Table
     layer_idx: int
-    node_mask: Optional[GraphMask]
+    node_mask: GraphMask | None
 
     def outbound_edge_data(
         self,
         columns: Sequence[ColumnElement[Any]] | Sequence[str],
         *,
-        mask: Optional[GraphMask] = None,
+        mask: GraphMask | None = None,
     ) -> DataFrame:
         columns = list(_normalize_column_elements(columns, self.edge_table))
 
@@ -83,7 +75,7 @@ class SimProcGraphData:
         self,
         columns: Sequence[ColumnElement[Any]],
         *,
-        mask: Optional[GraphMask] = None,
+        mask: GraphMask | None = None,
     ) -> DataFrame:
         columns = list(_normalize_column_elements(columns, self.edge_table))
 
@@ -98,7 +90,7 @@ class SimProcGraphData:
             )
 
     def outbound_map(
-        self, *, mask: Optional[GraphMask] = None, values: Optional[ColumnElement | str] = None
+        self, *, mask: GraphMask | None = None, values: ColumnElement | str | None = None
     ) -> Matrix:
         if values is not None:
             values = _normalize_column_element(values, self.edge_table)
@@ -113,7 +105,7 @@ class SimProcGraphData:
             )
 
     def inbound_map(
-        self, *, mask: Optional[GraphMask] = None, values: Optional[ColumnElement | str] = None
+        self, *, mask: GraphMask | None = None, values: ColumnElement | str | None = None
     ) -> Matrix:
         if values is not None:
             values = _normalize_column_element(values, self.edge_table)
@@ -152,7 +144,7 @@ class GraphData:
     node_table: Table
 
     layer_id_by_simproc: Mapping[str, int]
-    node_mask: Optional[GraphMask]
+    node_mask: GraphMask | None
 
     @classmethod
     def for_node(
@@ -172,7 +164,7 @@ class GraphData:
         spec = partitioning.node_specs[node_index]
 
         if graph.scenario_id == "":
-            raise ValueError(f"Graph.scenario_id must be defined.")
+            raise ValueError("Graph.scenario_id must be defined.")
 
         node_mask = GraphMask(
             vector=partitioning.incidence[node_index, :].new(), scenario_id=graph.scenario_id
@@ -203,7 +195,7 @@ class GraphData:
         self,
         columns: Sequence[ColumnElement[Any]] | Sequence[str],
         *,
-        mask: Optional[Vector] = None,
+        mask: Vector | None = None,
     ) -> DataFrame:
         columns = list(_normalize_column_elements(columns, self.node_table))
 
@@ -221,7 +213,7 @@ class GraphData:
         return self.partitioning.incidence
 
     @property
-    def node_specs(self) -> Tuple[NodeInstanceSpec, ...]:
+    def node_specs(self) -> tuple[NodeInstanceSpec, ...]:
         return self.partitioning.node_specs
 
     @property
@@ -253,18 +245,18 @@ class GraphData:
         )
 
     @overload
-    def by_node(self, idxs: int) -> Generator[Tuple[str, int], None, None]: ...
+    def by_node(self, idxs: int) -> Generator[tuple[str, int], None, None]: ...
     @overload
-    def by_node(self, idxs: list) -> Generator[Tuple[str, list], None, None]: ...
+    def by_node(self, idxs: list) -> Generator[tuple[str, list], None, None]: ...
     @overload
-    def by_node(self, idxs: np.ndarray) -> Generator[Tuple[str, np.ndarray], None, None]: ...
+    def by_node(self, idxs: np.ndarray) -> Generator[tuple[str, np.ndarray], None, None]: ...
     @overload
-    def by_node(self, idxs: Vector) -> Generator[Tuple[str, Vector], None, None]: ...
+    def by_node(self, idxs: Vector) -> Generator[tuple[str, Vector], None, None]: ...
 
     def by_node(
         self,
-        idxs: Union[Vector, np.ndarray, list, int],
-    ) -> Generator[Tuple[str, Union[Vector, np.ndarray, list, int]], None, None]:
+        idxs: Vector | np.ndarray | list | int,
+    ) -> Generator[tuple[str, Vector | np.ndarray | list | int], None, None]:
         if isinstance(idxs, (Vector, VectorExpression)):
             yield from self._by_node_vector(idxs)
         elif isinstance(idxs, (np.ndarray, list)):

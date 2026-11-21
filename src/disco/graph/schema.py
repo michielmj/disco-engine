@@ -2,16 +2,16 @@
 from __future__ import annotations
 
 from sqlalchemy import (
-    MetaData,
-    Table,
-    Column,
-    Integer,
     BigInteger,
-    String,
-    Float,
+    Column,
     DateTime,
+    Float,
     ForeignKey,
     ForeignKeyConstraint,
+    Integer,
+    MetaData,
+    String,
+    Table,
 )
 from sqlalchemy.engine import Engine
 

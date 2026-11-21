@@ -31,20 +31,19 @@ Algorithm
 from __future__ import annotations
 
 import heapq
-from typing import List, Tuple
 
 import graphblas as gb
 import graphblas_algorithms as ga
-from sklearn.cluster import SpectralClustering
 import numpy as np
+from sklearn.cluster import SpectralClustering
 
-from disco.helpers import vstack_rows_from_coo
 from disco.graph import Graph
+from disco.helpers import vstack_rows_from_coo
 from disco.model import Model
 from disco.partitioning import NodeInstanceSpec, Partitioning
 
-from ._protocol import NODE_TYPE
 from ._helpers import _iter_node_instances
+from ._protocol import NODE_TYPE
 
 
 class SpectralClusteringPartitioner:
@@ -139,7 +138,7 @@ class SpectralClusteringPartitioner:
         final_components = self._combine_components(components, target_partition_count, target_weight)
 
         # ---- Step 5: build Partitioning ----
-        node_specs: List[NodeInstanceSpec] = []
+        node_specs: list[NodeInstanceSpec] = []
         row_vectors = []
 
         # DEBUG
@@ -176,7 +175,7 @@ class SpectralClusteringPartitioner:
         )
 
     @staticmethod
-    def _get_connected_components(E: gb.Matrix, weights: np.ndarray) -> List[Tuple[float, np.ndarray]]:
+    def _get_connected_components(E: gb.Matrix, weights: np.ndarray) -> list[tuple[float, np.ndarray]]:
         """
         Returns a list of ``(total_weight, sv_indices)`` tuples.
         """
@@ -198,7 +197,7 @@ class SpectralClusteringPartitioner:
     @staticmethod
     def _split_component(
         E: gb.Matrix, component: np.ndarray, vertex_weights: np.ndarray, target_weight: float
-    ) -> List[Tuple[float, np.ndarray]]:
+    ) -> list[tuple[float, np.ndarray]]:
         weight = vertex_weights[component].sum()
         n_clusters = min(component.shape[0], max(2, int(np.round(weight / target_weight))))
         Es = gb.io.to_scipy_sparse(E[component, component], format="csr")

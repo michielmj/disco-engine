@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from threading import Event, Thread
 from time import monotonic
-from typing import Any, Optional
+from typing import Any
 
 from tools.mp_logging import getLogger
 
 from disco.cluster import Cluster, WorkerState
 from disco.config import OrchestratorSettings
-from disco.experiments import ExperimentStatus, ExperimentStore, Experiment, Submission
+from disco.experiments import Experiment, ExperimentStatus, ExperimentStore, Submission
 from disco.partitioning import Partitioning
 
 logger = getLogger(__name__)
@@ -477,7 +477,7 @@ class Orchestrator:
             return
 
     def _mark_replication_failed(
-        self, *, expid: str, repid: str, exc: Optional[dict[str, Any]] = None
+        self, *, expid: str, repid: str, exc: dict[str, Any] | None = None
     ) -> None:
         try:
             if exc:

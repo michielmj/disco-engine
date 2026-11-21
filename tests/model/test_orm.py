@@ -4,7 +4,6 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Optional
 
 import pytest
 import sqlalchemy as sa
@@ -19,7 +18,6 @@ from disco.model.orm import (
     db_validate,
 )
 
-
 # -----------------------------
 # Helpers
 # -----------------------------
@@ -32,10 +30,10 @@ def _engine() -> Engine:
 
 def _spec(
     *,
-    orm: Optional[str] = None,
+    orm: str | None = None,
     node_table: str = "warehouse_data",
-    default_edge_table: Optional[str] = "edges_default",
-    demand_edge_table: Optional[str] = "demand_edges",
+    default_edge_table: str | None = "edges_default",
+    demand_edge_table: str | None = "demand_edges",
 ):
     """
     Build a minimal 'spec' object with the attributes expected by disco.model.orm.

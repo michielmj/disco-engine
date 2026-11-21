@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-import numpy as np
 import graphblas as gb
+import numpy as np
 import pytest
 
 from disco.graph.core import Graph, SuperGraph

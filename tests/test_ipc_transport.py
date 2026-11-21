@@ -9,7 +9,6 @@ from disco.transports.ipc_egress import IPCTransport
 from disco.transports.ipc_messages import IPCEventMsg, IPCPromiseMsg
 from disco.transports.ipc_receiver import IPCReceiver
 
-
 GET_TIMEOUT = 1.0  # seconds
 
 

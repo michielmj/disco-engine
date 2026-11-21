@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Set, Tuple, Mapping
+from typing import Any
 
 import pytest
 
@@ -9,7 +10,6 @@ from disco.envelopes import EventEnvelope, PromiseEnvelope
 from disco.exceptions import DiscoRuntimeError
 from disco.node import Event, Node, NodeStatus
 from disco.runtime import NodeRuntime
-
 
 # ---------------------------------------------------------------------------
 # Test doubles
@@ -43,7 +43,7 @@ class RecordingRouter:
     """Captures outgoing envelopes and preserves send order."""
 
     def __init__(self) -> None:
-        self.calls: List[Tuple[str, Any]] = []  # ("promise"|"event", envelope)
+        self.calls: list[tuple[str, Any]] = []  # ("promise"|"event", envelope)
 
     def send_event(self, env: EventEnvelope) -> None:
         self.calls.append(("event", env))
@@ -55,16 +55,16 @@ class RecordingRouter:
 class DummyPartitioning:
     def __init__(
         self,
-        preds: Dict[Tuple[str, str], Set[Tuple[str, str]]] | None = None,
-        succs: Dict[Tuple[str, str], Set[Tuple[str, str]]] | None = None,
+        preds: dict[tuple[str, str], set[tuple[str, str]]] | None = None,
+        succs: dict[tuple[str, str], set[tuple[str, str]]] | None = None,
     ) -> None:
         self._preds = preds or {}
         self._succs = succs or {}
 
-    def predecessors(self, node_name: str, simproc_name: str) -> Set[Tuple[str, str]]:
+    def predecessors(self, node_name: str, simproc_name: str) -> set[tuple[str, str]]:
         return set(self._preds.get((node_name, simproc_name), set()))
 
-    def successors(self, node_name: str, simproc_name: str) -> Set[Tuple[str, str]]:
+    def successors(self, node_name: str, simproc_name: str) -> set[tuple[str, str]]:
         return set(self._succs.get((node_name, simproc_name), set()))
 
 
@@ -73,16 +73,16 @@ class DummyNodeInstanceSpec:
     partition: int = 0
     node_name: str = "node"
     node_type: str = "DummyNode"
-    distinct_labels: Dict[str, str] | None = None
+    distinct_labels: dict[str, str] | None = None
 
 
 @dataclass(slots=True)
 class DummyModelSpec:
-    simprocs: List[str]
+    simprocs: list[str]
 
 
 class DummyModel:
-    def __init__(self, simprocs: List[str], node_cls: type[Node]) -> None:
+    def __init__(self, simprocs: list[str], node_cls: type[Node]) -> None:
         self.spec = DummyModelSpec(simprocs=simprocs)
         self._node_cls = node_cls
 
@@ -99,10 +99,10 @@ class RecordingNode(Node):
 
     def __init__(self, params: dict[str, Any]):
         super().__init__(params)
-        self.init_kwargs: Dict[str, Any] = params
-        self.calls: List[Tuple[str, float | None, str | None]] = []
-        self.emit_event: Tuple[str, str, float, Any, Dict[str, str] | None] | None = None
-        self.set_wakeup: Tuple[float, bool] | None = (1.0, False)  # default: keep simproc alive
+        self.init_kwargs: dict[str, Any] = params
+        self.calls: list[tuple[str, float | None, str | None]] = []
+        self.emit_event: tuple[str, str, float, Any, dict[str, str] | None] | None = None
+        self.set_wakeup: tuple[float, bool] | None = (1.0, False)  # default: keep simproc alive
 
     def on_events(self, simproc: str, events: Iterable[Event]) -> None:
         # Record runtime context visible to model code.
@@ -126,10 +126,10 @@ class RecordingNode(Node):
 
 def make_runtime(
     *,
-    simprocs: List[str],
+    simprocs: list[str],
     node_cls: type[Node] = RecordingNode,
-    preds: Dict[Tuple[str, str], Set[Tuple[str, str]]] | None = None,
-    succs: Dict[Tuple[str, str], Set[Tuple[str, str]]] | None = None,
+    preds: dict[tuple[str, str], set[tuple[str, str]]] | None = None,
+    succs: dict[tuple[str, str], set[tuple[str, str]]] | None = None,
 ) -> tuple[NodeRuntime, RecordingRouter, RecordingNode]:
     router = RecordingRouter()
     model = DummyModel(simprocs=simprocs, node_cls=node_cls)

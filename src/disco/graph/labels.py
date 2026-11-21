@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from typing import Iterable, List
+from collections.abc import Iterable
 
-import numpy as np
 import graphblas as gb
+import numpy as np
 from graphblas import Vector
+from sqlalchemy import insert, select
 from sqlalchemy.orm import Session
-from sqlalchemy import select, insert
 
-from .schema import labels, vertex_labels
 from .core import Graph
+from .schema import labels, vertex_labels
 
 
 def ensure_label(
@@ -70,7 +70,7 @@ def get_vertex_indices_for_label(
     scenario_id: str,
     label_type: str,
     label_value: str,
-) -> List[int]:
+) -> list[int]:
     """
     Return all vertex_index values that have the given (type, value) label
     in a scenario.

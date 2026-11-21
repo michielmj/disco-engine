@@ -14,17 +14,19 @@ Design goals:
 - Workers are identified by their Cluster address string "host:port".
 """
 
+import logging
 import os
 import signal
 import socket
 import threading
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from multiprocessing import cpu_count
 from multiprocessing.process import BaseProcess
 from multiprocessing.queues import Queue as MPQueue
-from typing import Dict, List, Mapping, Optional, Sequence, Any, cast
-import logging
+from typing import Any, cast
+
 from tools import mp_logging
 
 from disco.cluster import Cluster
@@ -93,7 +95,7 @@ def _is_loopback_host(host: str) -> bool:
     return False
 
 
-def _infer_non_loopback_ipv4() -> Optional[str]:
+def _infer_non_loopback_ipv4() -> str | None:
     """Infer a non-loopback IPv4 address without relying on env.
 
     Uses a UDP "connect" trick to let the OS select an outbound interface.
@@ -122,7 +124,7 @@ def _infer_non_loopback_ipv4() -> Optional[str]:
     return None
 
 
-def _resolve_bind_host(settings: AppSettings, explicit: Optional[str]) -> str:
+def _resolve_bind_host(settings: AppSettings, explicit: str | None) -> str:
     """Resolve a bind/advertise host suitable for worker addresses.
 
     Rules:
@@ -154,10 +156,10 @@ def _resolve_bind_host(settings: AppSettings, explicit: Optional[str]) -> str:
     return inferred
 
 
-def _pick_free_ports(bind_host: str, n: int) -> List[int]:
+def _pick_free_ports(bind_host: str, n: int) -> list[int]:
     """Ask the OS for `n` currently-free TCP ports on bind_host."""
-    sockets: List[socket.socket] = []
-    ports: List[int] = []
+    sockets: list[socket.socket] = []
+    ports: list[int] = []
     try:
         for _ in range(n):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -178,9 +180,9 @@ def _pick_free_ports(bind_host: str, n: int) -> List[int]:
 def _determine_worker_ports(
     *,
     bind_host: str,
-    workers: Optional[int],
-    ports: Optional[Sequence[int]],
-) -> List[int]:
+    workers: int | None,
+    ports: Sequence[int] | None,
+) -> list[int]:
     if ports is not None:
         return [int(p) for p in ports]
     if workers is not None:
@@ -190,8 +192,8 @@ def _determine_worker_ports(
     return _pick_free_ports(bind_host, count)
 
 
-def _build_worker_specs(bind_host: str, ports: Sequence[int]) -> List[WorkerSpec]:
-    specs: List[WorkerSpec] = []
+def _build_worker_specs(bind_host: str, ports: Sequence[int]) -> list[WorkerSpec]:
+    specs: list[WorkerSpec] = []
     for idx, port in enumerate(ports):
         addr = f"{bind_host}:{int(port)}"
         specs.append(WorkerSpec(address=addr, name=f"worker-{idx}"))
@@ -203,8 +205,8 @@ def _worker_main(
     event_queues: Mapping[str, MPQueue],
     promise_queues: Mapping[str, MPQueue],
     settings: AppSettings,
-    group: Optional[str],
-    name: Optional[str],
+    group: str | None,
+    name: str | None,
     log_queue: Any,
     stop_event: Any,
     loglevel: mp_logging.LevelConfig,
@@ -233,7 +235,7 @@ def _worker_main(
 def _orchestrator_process_entry(
     address: str,
     settings: AppSettings,
-    group: Optional[str],
+    group: str | None,
     stop_event: Any,
     log_queue: Any,
     loglevel: mp_logging.LevelConfig,
@@ -280,13 +282,13 @@ class Server:
         self,
         settings: AppSettings,
         *,
-        workers: Optional[int] = None,
-        ports: Optional[List[int]] = None,
-        bind_host: Optional[str] = None,
-        group: Optional[str] = None,
-        grace_s: Optional[int] = None,
+        workers: int | None = None,
+        ports: list[int] | None = None,
+        bind_host: str | None = None,
+        group: str | None = None,
+        grace_s: int | None = None,
         orchestrator: bool = True,
-        loglevel: Optional[str] = None,
+        loglevel: str | None = None,
     ) -> None:
         self._settings = settings
         self._workers_arg = workers
@@ -299,12 +301,12 @@ class Server:
         self._logscope = _get_logging_scope(settings, loglevel)
 
         self._shutdown_requested = threading.Event()
-        self._cluster: Optional[Cluster] = None
+        self._cluster: Cluster | None = None
 
-        self._worker_specs: List[WorkerSpec] = []
-        self._worker_procs: Dict[str, BaseProcess] = {}
-        self._orchestrator_proc: Optional[BaseProcess] = None
-        self._stop: Optional[Any] = None
+        self._worker_specs: list[WorkerSpec] = []
+        self._worker_procs: dict[str, BaseProcess] = {}
+        self._orchestrator_proc: BaseProcess | None = None
+        self._stop: Any | None = None
 
     def start(self) -> None:
         self._acquire_singleton_guard()
@@ -344,8 +346,8 @@ class Server:
         ctx = self._mp_context()
 
         # Shared IPC queues: address -> Queue
-        event_queues: Dict[str, MPQueue] = {}
-        promise_queues: Dict[str, MPQueue] = {}
+        event_queues: dict[str, MPQueue] = {}
+        promise_queues: dict[str, MPQueue] = {}
         for spec in self._worker_specs:
             event_queues[spec.address] = ctx.Queue()
             promise_queues[spec.address] = ctx.Queue()

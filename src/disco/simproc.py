@@ -43,15 +43,16 @@ These are the basic properties of simprocs:
 """
 
 import dataclasses
-from heapq import heappush, heappop
-from typing import Any, Dict, Tuple, Callable, Iterable, Set
+from collections.abc import Callable, Iterable
+from heapq import heappop, heappush
+from typing import Any
 
 from tools.ctypes import MAX_UINT32
 from tools.mp_logging import getLogger
 
-from .exceptions import DiscoRuntimeError
-from .event_queue import EventQueue
 from .envelopes import EventEnvelope, PromiseEnvelope
+from .event_queue import EventQueue
+from .exceptions import DiscoRuntimeError
 from .node import Event
 
 logger = getLogger(__name__)
@@ -83,7 +84,7 @@ class Successor:
 
     def __str__(self):
         return (
-            f"last_promise={str(self.last_promise)}, advance_promise={str(self.advance_promise)}, "
+            f"last_promise={self.last_promise!s}, advance_promise={self.advance_promise!s}, "
             f"epochs={self.epochs}"
         )
 
@@ -98,8 +99,8 @@ class SimProc:
         on_events: Callable[[str, Iterable[Event]], None],
         route_event: Callable[[EventEnvelope], None],
         route_promise: Callable[[PromiseEnvelope], None],
-        predecessors: Set[Tuple[str, str]],  # set of source_node, source_process
-        successors: Set[Tuple[str, str]],  # set of target_node, target_process
+        predecessors: set[tuple[str, str]],  # set of source_node, source_process
+        successors: set[tuple[str, str]],  # set of target_node, target_process
     ):
         """
         :param name: name of the simproc (used for identifying sender of events)
@@ -135,8 +136,8 @@ class SimProc:
         return (
             f"{self._name}(epoch={self._epoch}, "
             f"next_epoch={self._next_epoch}, "
-            f"Queue=({str(self._queue)}), "
-            f"successors={{{', '.join([f'{n}: ({str(s)})' for n, s in self._successors.items()])}}})"
+            f"Queue=({self._queue!s}), "
+            f"successors={{{', '.join([f'{n}: ({s!s})' for n, s in self._successors.items()])}}})"
         )
 
     def try_next_epoch(self):
@@ -240,8 +241,8 @@ class SimProc:
             # error
             if next_epoch is None:
                 raise NoMoreEventsError(
-                    f"SimProc will not see Any more invocations because there is no wakeup set and "
-                    f"there are no predecessors."
+                    "SimProc will not see Any more invocations because there is no wakeup set and "
+                    "there are no predecessors."
                 )
 
         # Possibility 2: no wakeup and the queue has an epoch that is ready to be processed.
@@ -302,8 +303,8 @@ class SimProc:
             # if next_epoch is not yet known.
             if (
                 (next_epoch is None and successor.advance_promise > self._epoch)
-                or next_epoch is not None
-                and successor.advance_promise > next_epoch
+                or (next_epoch is not None
+                and successor.advance_promise > next_epoch)
             ):
                 next_epoch = successor.advance_promise
 
@@ -394,7 +395,7 @@ class SimProc:
         target_simproc: str,
         epoch: float,
         data: Any,
-        headers: Dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ):
         """
         Send the events that are collected in the simproc' outbox
@@ -537,7 +538,7 @@ class SimProc:
         sender_simproc: str,
         epoch: float,
         data: Any,
-        headers: Dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> bool:
         """
         Receive an event. Called from the node_controller. Originates from try_next_epoch on a predecessor.

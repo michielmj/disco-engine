@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import Literal, Optional
+from typing import Literal
 
 import pytest
 from pydantic import BaseModel, Field
@@ -14,10 +14,10 @@ class DemoModel(BaseModel):
     group: str = Field(description="Group name.")
 
     # optionals
-    workers: Optional[int] = Field(None, description="Worker count.")
-    ports: Optional[list[int]] = Field(None, description="Port list.")
+    workers: int | None = Field(None, description="Worker count.")
+    ports: list[int] | None = Field(None, description="Port list.")
     orchestrator: bool = Field(True, description="Enable orchestrator.")
-    loglevel: Optional[Literal["INFO", "DEBUG"]] = Field(None, description="Log level.")
+    loglevel: Literal["INFO", "DEBUG"] | None = Field(None, description="Log level.")
 
 
 def test_add_model_to_parser_required_field_enforced() -> None:

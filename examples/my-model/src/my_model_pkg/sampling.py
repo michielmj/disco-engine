@@ -1,7 +1,7 @@
 import numpy as np
-from numpy.random import Generator
 import pandas as pd
 from graphblas import Vector, op
+from numpy.random import Generator
 from scipy.stats import distributions as scipy_dists
 
 

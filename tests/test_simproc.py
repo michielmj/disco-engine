@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 import pytest
 
-from disco.envelopes import PromiseEnvelope, EventEnvelope
+from disco.envelopes import EventEnvelope, PromiseEnvelope
 from disco.node import Event
-from disco.simproc import SimProc, DiscoTimingError
+from disco.simproc import DiscoTimingError, SimProc
 
 
 class HandleOnEvents:

@@ -2,21 +2,20 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, Optional, Tuple
 
-import numpy as np
 import graphblas as gb
-from sqlalchemy import select, insert, delete, func, literal
+import numpy as np
+from sqlalchemy import delete, insert, literal, select
 from sqlalchemy.orm import Session
 
 from .core import Graph
 from .schema import (
-    scenarios,
-    vertices,
     edges,
     labels,
+    scenarios,
     vertex_labels,
     vertex_masks,
+    vertices,
 )
 
 
@@ -150,7 +149,7 @@ def _store_labels_for_scenario(session: Session, graph: Graph) -> None:
 
     # Insert labels from Graph.label_meta; ensure we have metadata for each index
     label_meta = graph.label_meta  # mapping index -> (type, value)
-    label_index_to_db_id: Dict[int, int] = {}
+    label_index_to_db_id: dict[int, int] = {}
 
     for lbl_idx in range(graph.num_labels):
         if lbl_idx not in label_meta:
@@ -193,7 +192,7 @@ def store_graph(
     session: Session,
     graph: Graph,
     *,
-    description: Optional[str] = None,
+    description: str | None = None,
     replace: bool = False,
     chunk_size: int = 10_000,
 ) -> None:
@@ -276,7 +275,7 @@ def store_graph(
 # ---------------------------------------------------------------------------
 
 
-def _load_vertices(session: Session, scenario_id: str) -> Tuple[np.ndarray, np.ndarray]:
+def _load_vertices(session: Session, scenario_id: str) -> tuple[np.ndarray, np.ndarray]:
     """
     Load vertex keys and weights for a scenario from graph_vertices, ordered by index.
 
@@ -302,7 +301,7 @@ def _load_edge_layers(
     session: Session,
     scenario_id: str,
     num_vertices: int,
-) -> Tuple[gb.Matrix, ...]:
+) -> tuple[gb.Matrix, ...]:
     """
     Load edges from graph_edges for a scenario and build one GraphBLAS Matrix per layer.
 
@@ -319,9 +318,9 @@ def _load_edge_layers(
         ).where(edges.c.scenario_id == literal(scenario_id))
     )
 
-    layer_sources: Dict[int, list[int]] = {}
-    layer_targets: Dict[int, list[int]] = {}
-    layer_weights: Dict[int, list[float]] = {}
+    layer_sources: dict[int, list[int]] = {}
+    layer_targets: dict[int, list[int]] = {}
+    layer_weights: dict[int, list[float]] = {}
 
     for layer_idx, src, tgt, w in result:
         lid = int(layer_idx)
@@ -329,7 +328,7 @@ def _load_edge_layers(
         layer_targets.setdefault(lid, []).append(int(tgt))
         layer_weights.setdefault(lid, []).append(float(w))
 
-    edge_layers: Dict[int, gb.Matrix] = {}
+    edge_layers: dict[int, gb.Matrix] = {}
     for layer_idx, src_list in layer_sources.items():
         tgt_list = layer_targets[layer_idx]
         w_list = layer_weights[layer_idx]
@@ -365,7 +364,7 @@ def _load_labels_for_scenario(
     session: Session,
     scenario_id: str,
     num_vertices: int,
-) -> tuple[Optional[gb.Matrix], Dict[int, tuple[str, str]]]:
+) -> tuple[gb.Matrix | None, dict[int, tuple[str, str]]]:
     """
     Load labels and vertex_labels for a scenario and build:
 
@@ -387,8 +386,8 @@ def _load_labels_for_scenario(
     # Sort by DB id to get a deterministic label index order
     label_rows_sorted = sorted(label_rows, key=lambda r: int(r[0]))
 
-    label_id_to_index: Dict[int, int] = {}
-    label_meta: Dict[int, tuple[str, str]] = {}
+    label_id_to_index: dict[int, int] = {}
+    label_meta: dict[int, tuple[str, str]] = {}
 
     for idx, (db_id, ltype, lvalue) in enumerate(label_rows_sorted):
         db_id_int = int(db_id)

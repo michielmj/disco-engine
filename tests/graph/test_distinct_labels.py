@@ -1,6 +1,6 @@
 # tests/graph/test_distinct_labels.py
-import numpy as np
 import graphblas as gb
+import numpy as np
 import pytest
 
 from disco.graph import Graph

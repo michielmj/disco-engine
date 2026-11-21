@@ -29,20 +29,19 @@ The transport is purely outbound. The corresponding gRPC server
 NodeController queues on the receiving Worker.
 """
 
-from dataclasses import dataclass
 import time
-from typing import Any, Callable, Dict, Iterable, Optional
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from typing import Any
 
 import grpc
+from tools.mp_logging import getLogger
 
 from ..cluster import Cluster, WorkerState
 from ..config import GrpcSettings
 from ..envelopes import EventEnvelope, PromiseEnvelope
 from .base import Transport
-
 from .proto import transport_pb2, transport_pb2_grpc  # generated from transport.proto
-
-from tools.mp_logging import getLogger
 
 logger = getLogger(__name__)
 
@@ -82,8 +81,8 @@ class GrpcTransport(Transport):
         *,
         serializer: Callable[[Any], tuple[bytes, str]] | None = None,  # data -> packed_data, protocol
         # Optional injection points to ease testing or customization:
-        channel_factory: Optional[Callable[[str, GrpcSettings], grpc.Channel]] = None,
-        stub_factory: Optional[Callable[[grpc.Channel], transport_pb2_grpc.DiscoTransportStub]] = None,
+        channel_factory: Callable[[str, GrpcSettings], grpc.Channel] | None = None,
+        stub_factory: Callable[[grpc.Channel], transport_pb2_grpc.DiscoTransportStub] | None = None,
     ) -> None:
         self._cluster = cluster
         self._settings = settings
@@ -92,7 +91,7 @@ class GrpcTransport(Transport):
         self._stub_factory = stub_factory or _default_stub_factory
 
         # address -> _RemoteEndpoint
-        self._endpoints: Dict[str, _RemoteEndpoint] = {}
+        self._endpoints: dict[str, _RemoteEndpoint] = {}
 
         # Cache retry configuration locally for speed
         delays = list(settings.promise_retry_delays_s)

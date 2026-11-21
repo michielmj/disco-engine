@@ -1,24 +1,24 @@
 # tests/graph/test_db.py
-from typing import Iterator
+from collections.abc import Iterator
 
-import numpy as np
 import graphblas as gb
-from graphblas import Vector
+import numpy as np
 import pytest
+from graphblas import Vector
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from disco.graph import (
     Graph,
     create_graph_schema,
-    store_graph,
-    load_graph_for_scenario,
     get_outbound_map,
+    load_graph_for_scenario,
     schema,
+    store_graph,
 )
-from disco.graph.schema import vertices as vertices_table
 from disco.graph.schema import edges as edges_table
 from disco.graph.schema import vertex_masks as vertex_masks_table
+from disco.graph.schema import vertices as vertices_table
 
 
 @pytest.fixture

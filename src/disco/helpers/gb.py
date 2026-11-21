@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import pickle
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
-from graphblas import Vector, Matrix, dtypes, semiring, monoid, unary, op
-import math
+from graphblas import Matrix, Vector, dtypes, monoid, op, semiring, unary
 
 
 def vstack_rows_from_coo(rows: list[Vector], *, ncols: int | None = None) -> Matrix:
@@ -34,7 +33,7 @@ def vstack_rows_from_coo(rows: list[Vector], *, ncols: int | None = None) -> Mat
     return Matrix.from_coo(R, C, V, nrows=m, ncols=n, dtype=dt)
 
 
-def submatrix(M: Matrix, rows: Optional[Any] = None, cols: Optional[Any] = None) -> Matrix:
+def submatrix(M: Matrix, rows: Any | None = None, cols: Any | None = None) -> Matrix:
     if rows is None:
         rows = slice(None, None, None)
     if cols is None:

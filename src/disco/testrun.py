@@ -4,16 +4,17 @@ from __future__ import annotations
 import contextlib
 import logging as _logging
 import uuid
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator, Optional, Tuple, Any
+from typing import Any
 
 from data_logger import DataLogger
 from numpy.random import SeedSequence
-
 from tools import mp_logging
 from tools.mp_logging import getLogger
 
 from .config import AppSettings
+from .database import SessionManager
 from .exceptions import DiscoError
 from .experiments import Experiment, ExperimentStatus
 from .graph import Graph
@@ -24,7 +25,6 @@ from .partitioning import Partitioning
 from .router import Router
 from .runtime import NodeRuntime
 from .transports.inprocess import InProcessTransport
-from .database import SessionManager
 
 logger = getLogger(__name__)
 
@@ -70,7 +70,7 @@ class TestRun:
         dlogger: DataLogger | None = None,
         partitioning: Partitioning | None = None,
         master_seed: int | SeedSequence | None = None,
-        loglevel: Optional[str] = None,
+        loglevel: str | None = None,
     ) -> None:
         # Set up logging for this single-process run.
         if loglevel is not None:
@@ -243,7 +243,7 @@ class TestRun:
         logger.info("TestRun starting run: duration=%s", duration)
 
         # Create one runner per node for this duration.
-        runners: Tuple[Generator[object, None, None], ...] = tuple(
+        runners: tuple[Generator[object, None, None], ...] = tuple(
             self.nodes[ns.node_name].runner(duration=duration) for ns in self._partitioning.node_specs
         )
         active = list(range(len(runners)))

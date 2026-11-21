@@ -1,19 +1,20 @@
 # src/disco/cluster.py
 from __future__ import annotations
 
-from contextlib import contextmanager
-from enum import IntEnum
-from types import MappingProxyType
 import uuid
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass, field
+from enum import IntEnum
 from functools import partial
 from threading import Condition, RLock
-from dataclasses import asdict, dataclass, field
-from typing import Mapping, cast, Callable, Any, Iterator
+from types import MappingProxyType
+from typing import Any, cast
 
 from tools.mp_logging import getLogger
 
 from disco.config import ZookeeperSettings
-from disco.metastore import Metastore, ZkConnectionManager, LeaderElection, LeaderRecord
+from disco.metastore import LeaderElection, LeaderRecord, Metastore, ZkConnectionManager
 
 logger = getLogger(__name__)
 

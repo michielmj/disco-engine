@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pytest
 from numpy.random import SeedSequence
 
 import disco.testrun as testrun_mod
 from disco.experiments import ExperimentStatus
-
 
 # -----------------------------
 # Minimal fakes / test doubles
@@ -28,7 +27,7 @@ class FakePartitioning:
     partitioning_id: str = "pid"
     scenario_id: str = "sid"
     num_partitions: int = 1
-    node_specs: Tuple[FakeNodeInstanceSpec, ...] = ()
+    node_specs: tuple[FakeNodeInstanceSpec, ...] = ()
 
     def assignment_vector(self, node_name: str) -> object:
         # Any opaque mask object is fine for the TestRun code path.
@@ -39,7 +38,7 @@ class FakeGraph:
     def __init__(self, scenario_id: str = "sid") -> None:
         self.scenario_id = scenario_id
 
-    def get_view(self, mask: object) -> "FakeGraph":
+    def get_view(self, mask: object) -> FakeGraph:
         # In real code this likely creates a masked view; for tests we can return self.
         return self
 
@@ -48,8 +47,8 @@ class FakeExperiment:
     def __init__(
         self,
         expid: str = "exp1",
-        replications: Dict[str, Any] | None = None,
-        params: Dict[str, Any] | None = None,
+        replications: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> None:
         self.expid = expid
         self.replications = replications or {}
@@ -81,7 +80,7 @@ class FakeSettings:
 
 class FakeSessionManager:
     @classmethod
-    def from_settings(cls, _db_settings: object) -> "FakeSessionManager":
+    def from_settings(cls, _db_settings: object) -> FakeSessionManager:
         return cls()
 
 
@@ -111,12 +110,12 @@ class FakeGraphDataFactory:
 
 
 class FakeInProcessTransport:
-    def __init__(self, *, nodes: Dict[str, object]) -> None:
+    def __init__(self, *, nodes: dict[str, object]) -> None:
         self.nodes = nodes
 
 
 class FakeRouter:
-    def __init__(self, *, transports: List[object]) -> None:
+    def __init__(self, *, transports: list[object]) -> None:
         self.transports = transports
 
 
@@ -151,8 +150,8 @@ class CapturingNodeRuntime:
         self.seed_sequence = seed_sequence
         self.data = data
 
-        self.initialize_calls: List[Dict[str, Any]] = []
-        self.runner_calls: List[float] = []
+        self.initialize_calls: list[dict[str, Any]] = []
+        self.runner_calls: list[float] = []
         self._last_duration: float = float("-inf")
 
     def initialize(self, params: dict[str, Any]) -> None:
@@ -177,7 +176,7 @@ class FakePartitioner:
     def __init__(self, *, graph: object, model: object) -> None:
         self.graph = graph
         self.model = model
-        self.partition_calls: List[int] = []
+        self.partition_calls: list[int] = []
 
     def partition(self, n: int) -> FakePartitioning:
         self.partition_calls.append(n)
@@ -208,7 +207,7 @@ def patch_testrun_deps(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(testrun_mod, "load_model", lambda **kwargs: FakeModel())
     # Default SimplePartitioner yields 1-partition FakePartitioning
     # We patch the class itself to produce an instance we can inspect if needed.
-    created: Dict[str, Any] = {}
+    created: dict[str, Any] = {}
 
     def _make_partitioner(*, graph: object, model: object) -> FakePartitioner:
         p = FakePartitioner(graph=graph, model=model)

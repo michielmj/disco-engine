@@ -20,7 +20,6 @@ from multiprocessing import Queue
 from typing import TYPE_CHECKING
 
 import grpc
-
 from tools.mp_logging import getLogger
 
 from ..cluster import WorkerState

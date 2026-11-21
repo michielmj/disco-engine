@@ -3,7 +3,7 @@ from __future__ import annotations
 """Envelope definitions for disco routing."""
 
 from dataclasses import dataclass, field
-from typing import Final, Any, Dict
+from typing import Any, Final
 
 
 @dataclass(slots=True)
@@ -17,7 +17,7 @@ class EventEnvelope:
     target_simproc: str
     epoch: float
     data: Any
-    headers: Dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)
 
     kind: Final[str] = "event"
 

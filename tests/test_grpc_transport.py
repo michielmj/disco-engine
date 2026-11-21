@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, List
 
 import grpc  # type: ignore[import]
 
@@ -9,7 +9,6 @@ from disco.config import GrpcSettings
 from disco.envelopes import EventEnvelope, PromiseEnvelope
 from disco.transports.grpc_transport import GrpcTransport
 from disco.transports.proto import transport_pb2
-
 
 # ---------------------------------------------------------------------------
 # Fakes / helpers
@@ -73,8 +72,8 @@ class FakeStub:
         self,
         target: str,
         *,
-        events_sink: List[RecordedEventCall],
-        promises_sink: List[RecordedPromiseCall],
+        events_sink: list[RecordedEventCall],
+        promises_sink: list[RecordedPromiseCall],
         promise_failures_before_success: int = 0,
     ) -> None:
         self._target = target
@@ -149,8 +148,8 @@ def test_send_event_creates_correct_proto_and_uses_target_address() -> None:
     # Map (repid, node) -> remote address
     cluster.address_book[("r1", "beta")] = "remote-host:6000"
 
-    recorded_events: List[RecordedEventCall] = []
-    recorded_promises: List[RecordedPromiseCall] = []
+    recorded_events: list[RecordedEventCall] = []
+    recorded_promises: list[RecordedPromiseCall] = []
 
     def channel_factory(target: str, _settings: GrpcSettings) -> FakeChannel:
         return FakeChannel(target)
@@ -202,8 +201,8 @@ def test_send_promise_success_without_retry() -> None:
 
     cluster.address_book[("r1", "beta")] = "remote-host:6001"
 
-    recorded_events: List[RecordedEventCall] = []
-    recorded_promises: List[RecordedPromiseCall] = []
+    recorded_events: list[RecordedEventCall] = []
+    recorded_promises: list[RecordedPromiseCall] = []
 
     def channel_factory(target: str, _settings: GrpcSettings) -> FakeChannel:
         return FakeChannel(target)

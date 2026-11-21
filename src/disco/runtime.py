@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from data_logger import DataLogger
-from numpy.random import SeedSequence, Generator as NpGenerator, default_rng
+from numpy.random import Generator as NpGenerator
+from numpy.random import SeedSequence, default_rng
 
 from .exceptions import DiscoRuntimeError
 from .graph_data import GraphData
@@ -30,13 +31,15 @@ Those will be added later; for now, NodeRuntime stores incoming
 envelopes in simple lists to keep the system testable.
 """
 
-from typing import Generator, Any, Dict
+from collections.abc import Generator
+from typing import Any
+
 from tools.mp_logging import getLogger
 
 from .envelopes import EventEnvelope, PromiseEnvelope
 from .model import Model
+from .node import Node, NodeRuntimeLike, NodeStatus
 from .router import Router
-from .node import NodeStatus, NodeRuntimeLike, Node
 
 logger = getLogger(__name__)
 
@@ -180,7 +183,7 @@ class NodeRuntime(NodeRuntimeLike):
         target_simproc: str,
         epoch: float,
         data: Any,
-        headers: Dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         if self._status == NodeStatus.ACTIVE:
             assert self._active_simproc is not None

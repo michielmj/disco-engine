@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from typing import Iterable, Any, Dict, Protocol, TYPE_CHECKING
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import IntEnum
-from numpy.random import Generator
+from typing import TYPE_CHECKING, Any, Protocol
 
 from data_logger import DataLogger
+from numpy.random import Generator
 
 if TYPE_CHECKING:
-    from .graph import Graph
     from .graph_data import GraphData
 
 
@@ -27,7 +27,7 @@ class NodeRuntimeLike(Protocol):
         target_simproc: str,
         epoch: float,
         data: Any,
-        headers: Dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None: ...
 
     @property
@@ -69,7 +69,7 @@ class Event:
     sender_simproc: str
     epoch: float
     data: Any
-    headers: Dict[str, str]
+    headers: dict[str, str]
 
 
 class Node(ABC):
