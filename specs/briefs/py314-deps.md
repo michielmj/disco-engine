@@ -121,3 +121,82 @@ The owner has since released both, for 3.14 and 3.15 (round 4):
   pass, on 3.15. Whether GitHub runs the matrix green, and the wheel builds,
   is "not checked, for the owner".
 - The branch is pushed, with a Surfaced decisions commit.
+
+## Round 1 (2026-11-21): the Linux script, the pandas note, the record, the example
+
+The review of 0a4a4dd found four FAILs. A re-review follows only for
+finding 2, whose remedy is described.
+
+### Finding 1: the Linux test script cannot run on this branch
+
+<finding>
+scripts/test_linux.sh:32-34 builds the image tag
+`ghcr.io/astral-sh/uv:0.12.15-python3.15-trixie` from `.python-version`
+(3.15). That tag does not exist ("manifest unknown"). The architect checked
+with `docker manifest inspect` that `0.13.9-python3.15-trixie` and
+`0.13.9-python3.14-trixie` both exist. A scratch copy of the script with
+`UV_VERSION="0.13.9"` ran at 0a4a4dd and gave Python 3.15.2, 522 passed and
+1 skipped.
+</finding>
+
+Remedy (prescribed): set `UV_VERSION="0.13.9"` in `scripts/test_linux.sh`,
+then run `bash scripts/test_linux.sh py314-deps` on the fixed head and record
+its counts. Docker is running now. If CI or another script pins the uv
+version too, keep them in step and list each one.
+
+### Finding 2: the pandas 3 note says the reverse of what changed
+
+<finding>
+README.md:55-63. "Missing text values are `NaN`, as before" is wrong for
+frames built from DB rows, which is how `graph/extract.py::_rows_to_df`
+builds them. With a `None` text value, pandas 2.3.3 keeps `None` (dtype
+object) and pandas 3.1.1 gives `nan` (dtype str), so model code that tests
+`is None` changes behaviour. "`df.where(cond, None)` ... no longer turns them
+into `None`" is wrong for float columns: 2.3.3 also left `NaN` there
+(`[1.0, nan]` on both). The same misstatement is in the comment at
+src/disco/database.py:72-73.
+</finding>
+
+Remedy (described): rewrite the note and the comment so that each claim
+holds on both versions. Check each claim with a scratch script run against
+pandas 2.3.3 (staging's `.venv` in the main checkout, `python -I`) and
+pandas 3.1.1, and put each claim and both results in the Evidence. Keep the
+note short: what a model author's code sees differently, and what to do
+about it.
+
+### Finding 3: the recorded BOOL DISCREPANCY is wrong
+
+<finding>
+The Surfaced decisions in 0a4a4dd, DISCREPANCY (1), say that `monoid.plus`,
+`agg.sum` and `plus_times` on BOOL "now raise KeyError instead of OR-ing".
+They raise identically on python-graphblas 2025.2.0 (staging's lock); the
+architect confirmed this for `monoid.plus` and `agg.sum`. On both versions
+the `"plus"` string and `gb.op.plus` still OR on BOOL. The upgrade changed
+nothing here.
+</finding>
+
+Remedy (prescribed): an empty commit, `Correct the Surfaced decisions in
+0a4a4dd`, which states that the behaviour is the same on 2025.2.0 and
+2026.11.0, with your own check on both versions. Do not edit
+`.claude/rules/graph.md`: the architect has escalated its wording to the
+owner.
+
+### Finding 4: the example model does not install
+
+<finding>
+`uv pip compile --python-version 3.15 examples/my-model/pyproject.toml`
+fails: disco-toolbox>=0.0.2 requires python-graphblas<2026, and the example
+now pins ~=2026.11. With disco-toolbox installed `--no-deps`, the example's
+test fails at `testrun.initialize()` with a missing `params` argument;
+`testrun.py`'s signature is not touched by this branch.
+</finding>
+
+The owner is releasing a disco-toolbox that allows graphblas 2026.x.
+Remedy (described):
+- If that release is on PyPI, raise the example's `disco-toolbox` floor to
+  it, and bring the example's test in line with the current
+  `testrun.initialize()` signature. The example teaches model authors the
+  API, so it must call it as it is. Then install the example against this
+  branch on 3.15 and run its tests.
+- If the release is not on PyPI yet, do findings 1–3, record finding 4 as
+  ESCALATED (blocking), and report. Do not wait for it.
