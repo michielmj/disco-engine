@@ -229,7 +229,6 @@ scripts/*
 /docker-compose.yaml
 /local_tests
 
-uv.lock
 /dlogger
 *.errsnap
 

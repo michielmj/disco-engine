@@ -33,7 +33,7 @@ dependencies = [
   "scikit-learn>=1.5",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "pytest>=8",
   "pytest-cov>=5",
@@ -59,7 +59,25 @@ build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
 editable.mode = "redirect"
+build-dir = "build/{wheel_tag}"
 wheel.packages = ["src/disco"]
+
+[tool.uv]
+# uv rebuilds the native core only when one of these changes. A native source
+# that is not listed here is not rebuilt, and the tests then run against a
+# stale build without saying so.
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "CMakeLists.txt" },
+  { file = "cmake/**" },
+  { file = "src/**/CMakeLists.txt" },
+  { file = "src/**/*.cpp" },
+  { file = "src/**/*.hpp" },
+  { file = "src/**/*.h" },
+  { file = "src/**/*.pyx" },
+  { file = "src/**/*.pxd" },
+  { git = { commit = true, tags = true } },
+]
 
 [tool.scikit-build.cmake.define]
 CMAKE_DOWNLOAD_TIMEOUT = 30
@@ -78,7 +96,7 @@ fallback_version = "0.0.0"
 build = "cp311-* cp312-* cp313-*"
 skip = "*-musllinux_*"
 test-command = "pytest -q {project}/tests"
-test-extras = ["dev"]
+test-groups = ["dev"]
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64"]
