@@ -54,10 +54,11 @@ Disco uses **pandas 3** (`pandas~=3.1`). The data frames that `disco.graph` and 
 semantics, which can change your own model code:
 
 - **Copy-on-write.** A column or slice you take from a data frame is never a view of it: writing to it no longer
-  changes the frame (it did in pandas 2). Write through the frame, as `df.loc[mask, "x"] = 1`.
+  changes the frame (in pandas 2 it could, for a column or a positional slice). Write through the frame, as `df.loc[mask, "x"] = 1`.
 - **Text columns.** They have the `str` dtype, not `object`, so `df[c].dtype == object` is false for them: use
   `pd.api.types.is_string_dtype(df[c])`. A missing text value from the database is now `NaN`, where pandas 2 kept
-  `None`: replace `value is None` with `pd.isna(value)`.
+  `None`: replace `value is None` with `pd.isna(value)`. A column whose values are all missing stays `object`
+  and keeps `None`; `pd.isna` handles both.
 
 The pandas 3 release notes list the other changes.
 

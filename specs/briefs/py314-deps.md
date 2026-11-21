@@ -200,3 +200,19 @@ Remedy (described):
   branch on 3.15 and run its tests.
 - If the release is not on PyPI yet, do findings 1–3, record finding 4 as
   ESCALATED (blocking), and report. Do not wait for it.
+
+## Round 2 (2026-11-21): the example model, once disco-toolbox is released
+
+The scoped re-review of round 1 (head 70cf679) found 0 FAIL. The architect
+then qualified two sentences of the pandas note in the README, using facts
+the reviewer checked on pandas 2.3.3 and 3.1.1. Leave that wording as it is.
+
+What remains is round 1, finding 4, with the remedy round 1 gives. It starts
+when the owner says the new disco-toolbox is on PyPI:
+- raise the example's `disco-toolbox` floor to that release;
+- call `testrun.initialize()` with its current signature;
+- install `examples/my-model` against this branch on 3.15, and run its tests.
+
+If an example test still fails after that for a reason outside the example,
+stop and report it as an ESCALATED item. Do not change `src/disco` to make
+it pass. No re-review follows, unless the fix reaches `src/disco`.
