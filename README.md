@@ -54,7 +54,7 @@ Disco uses **pandas 3** (`pandas~=3.1`). The data frames that `disco.graph` and 
 semantics, which can change your own model code:
 
 - **Copy-on-write.** Assigning through a chained expression, such as `df[mask]["x"] = 1`, no longer changes `df`
-  (pandas warns with `ChainedAssignmentWarning`). Use `df.loc[mask, "x"] = 1`. A slice or a column you take from a data
+  (pandas warns with `ChainedAssignmentError`, a warning class). Use `df.loc[mask, "x"] = 1`. A slice or a column you take from a data
   frame is never a view of it, so changing one does not change the other.
 - **String dtype.** Text columns have the `str` dtype by default, not `object`. Code that tests
   `df[c].dtype == object` is now false for text columns: use `pd.api.types.is_string_dtype`, or
