@@ -29,7 +29,7 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-UV_VERSION="0.12.15"
+UV_VERSION="0.13.9"
 PYTHON_VERSION="$(tr -d '[:space:]' < .python-version)"
 IMAGE="ghcr.io/astral-sh/uv:${UV_VERSION}-python${PYTHON_VERSION}-trixie"
 

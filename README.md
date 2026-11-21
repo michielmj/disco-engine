@@ -53,14 +53,11 @@ Disco requires **Python 3.14 or later** (tested on 3.14 and 3.15). Its `disco-da
 Disco uses **pandas 3** (`pandas~=3.1`). The data frames that `disco.graph` and `GraphData` return follow pandas 3
 semantics, which can change your own model code:
 
-- **Copy-on-write.** Assigning through a chained expression, such as `df[mask]["x"] = 1`, no longer changes `df`
-  (pandas warns with `ChainedAssignmentError`, a warning class). Use `df.loc[mask, "x"] = 1`. A slice or a column you take from a data
-  frame is never a view of it, so changing one does not change the other.
-- **String dtype.** Text columns have the `str` dtype by default, not `object`. Code that tests
-  `df[c].dtype == object` is now false for text columns: use `pd.api.types.is_string_dtype`, or
-  `select_dtypes("str")`. Missing text values are `NaN`, as before.
-- **Missing values.** `df.where(cond, None)` keeps `NaN` in float and `str` columns; it no longer turns them into
-  `None`. Disco's `df_to_table` handles this for the rows it stores.
+- **Copy-on-write.** A column or slice you take from a data frame is never a view of it: writing to it no longer
+  changes the frame (it did in pandas 2). Write through the frame, as `df.loc[mask, "x"] = 1`.
+- **Text columns.** They have the `str` dtype, not `object`, so `df[c].dtype == object` is false for them: use
+  `pd.api.types.is_string_dtype(df[c])`. A missing text value from the database is now `NaN`, where pandas 2 kept
+  `None`: replace `value is None` with `pd.isna(value)`.
 
 The pandas 3 release notes list the other changes.
 
