@@ -33,7 +33,7 @@ class Router:
     """
     Worker-local router that selects a transport for each envelope.
 
-    Responsibilities (ENGINEERING_SPEC chapter 6):
+    Responsibilities (ENGINEERING.md chapter 6):
 
     - Own an ordered list of Transports (InProcess, IPC, Grpc, ...).
     - For each outgoing envelope:

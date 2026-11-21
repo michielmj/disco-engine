@@ -10,7 +10,7 @@ service DiscoTransport {
   rpc SendPromise(stream PromiseEnvelopeMsg) returns (TransportAck);
 }
 
-Design (ENGINEERING_SPEC chapter 6):
+Design (ENGINEERING.md chapter 6):
 
 - Events:
     - Sent via a client-streaming RPC (SendEvents).
@@ -61,7 +61,7 @@ class GrpcTransport(Transport):
     """
     Transport that delivers envelopes to remote Workers via gRPC.
 
-    Responsibilities (ENGINEERING_SPEC §6.7):
+    Responsibilities (ENGINEERING.md §6.7):
 
     - Decide whether it handles a node based on Cluster.address_book.
       Any node with an address in the address_book is considered
