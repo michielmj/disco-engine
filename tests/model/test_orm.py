@@ -4,7 +4,6 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Optional
 
 import pytest
 import sqlalchemy as sa
@@ -19,7 +18,6 @@ from disco.model.orm import (
     db_validate,
 )
 
-
 # -----------------------------
 # Helpers
 # -----------------------------
@@ -32,10 +30,10 @@ def _engine() -> Engine:
 
 def _spec(
     *,
-    orm: Optional[str] = None,
+    orm: str | None = None,
     node_table: str = "warehouse_data",
-    default_edge_table: Optional[str] = "edges_default",
-    demand_edge_table: Optional[str] = "demand_edges",
+    default_edge_table: str | None = "edges_default",
+    demand_edge_table: str | None = "demand_edges",
 ):
     """
     Build a minimal 'spec' object with the attributes expected by disco.model.orm.
@@ -159,7 +157,7 @@ def test_node_table_requires_unique_per_scenario():
     spec = _spec(orm=None, default_edge_table="edges_default", demand_edge_table=None)
     bundle = build_orm_bundle(spec=spec, db=eng, schema=None)
 
-    with pytest.raises(ModelOrmValidationError, match="uniqueness.*\\(scenario_id, key\\)"):
+    with pytest.raises(ModelOrmValidationError, match=r"uniqueness.*\(scenario_id, key\)"):
         db_validate(bundle, eng, schema=None)
 
 
@@ -203,7 +201,7 @@ def test_node_table_requires_scenario_id_not_null():
     spec = _spec(orm=None, default_edge_table="edges_default", demand_edge_table=None)
     bundle = build_orm_bundle(spec=spec, db=eng, schema=None)
 
-    with pytest.raises(ModelOrmValidationError, match="scenario_id.*NOT NULL"):
+    with pytest.raises(ModelOrmValidationError, match=r"scenario_id.*NOT NULL"):
         db_validate(bundle, eng, schema=None)
 
 
@@ -306,7 +304,7 @@ def test_provider_mode_db_install_creates_and_validates(tmp_path, monkeypatch):
 
 
 def test_provider_mode_missing_table_in_metadata_raises(tmp_path, monkeypatch):
-    eng = _engine()
+    _engine()
 
     # Provider defines only node table, but spec references edge table too.
     _write_py(

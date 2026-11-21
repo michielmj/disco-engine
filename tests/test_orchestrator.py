@@ -1,20 +1,21 @@
 # tests/test_orchestrator.py
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from threading import Event
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 
 import disco.orchestrator as orchestrator_mod
 from disco.cluster import WorkerState
 
-
 # ---------------------------------------------------------------------------
 # Small fakes
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class FakeSubmission:
@@ -117,6 +118,7 @@ class FakeStore:
     """
     Minimal fake ExperimentStore to drive Orchestrator behavior.
     """
+
     def __init__(self, _meta: object) -> None:
         self._queue: list[FakeSubmission | None] = []
         self.load_map: dict[str, FakeExperiment] = {}
@@ -150,7 +152,9 @@ class FakeStore:
         )
         return exp
 
-    def set_replication_exc(self, *, expid: str, repid: str, exc: dict[str, Any], fail_replication: bool) -> None:
+    def set_replication_exc(
+        self, *, expid: str, repid: str, exc: dict[str, Any], fail_replication: bool
+    ) -> None:
         self.failed_exc.append((expid, repid, exc, fail_replication))
 
     def set_replication_status(self, *, expid: str, repid: str, status: Any) -> None:
@@ -161,6 +165,7 @@ class FakeThread:
     """
     Deterministic Thread replacement (no real threading in tests).
     """
+
     def __init__(self, *, target: Callable[..., Any], args: tuple[Any, ...], daemon: bool) -> None:
         self._target = target
         self._args = args
@@ -187,6 +192,7 @@ class FakeThread:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def fake_cluster() -> FakeCluster:
     return FakeCluster()
@@ -207,7 +213,9 @@ def settings() -> Any:
 
 
 @pytest.fixture
-def orch(fake_cluster: FakeCluster, fake_store: FakeStore, settings: Any, monkeypatch: pytest.MonkeyPatch) -> orchestrator_mod.Orchestrator:
+def orch(
+    fake_cluster: FakeCluster, fake_store: FakeStore, settings: Any, monkeypatch: pytest.MonkeyPatch
+) -> orchestrator_mod.Orchestrator:
     # Avoid real threads.
     monkeypatch.setattr(orchestrator_mod, "Thread", FakeThread)
 
@@ -221,13 +229,14 @@ def orch(fake_cluster: FakeCluster, fake_store: FakeStore, settings: Any, monkey
     return orchestrator_mod.Orchestrator(
         address="orch-1",
         cluster=fake_cluster,  # type: ignore[arg-type]
-        settings=settings,     # type: ignore[arg-type]
+        settings=settings,  # type: ignore[arg-type]
     )
 
 
 # ---------------------------------------------------------------------------
 # Tests: leader-loop handling of queue entities
 # ---------------------------------------------------------------------------
+
 
 def test_on_stop_requested_releases_entity_and_exits(
     orch: orchestrator_mod.Orchestrator,
@@ -238,7 +247,9 @@ def test_on_stop_requested_releases_entity_and_exits(
     fake_store.push_dequeue(entity)
 
     # Make _handle_submission raise _StopRequested to simulate "stop during pre-launch stage".
-    monkeypatch.setattr(orch, "_handle_submission", lambda *, entity: (_ for _ in ()).throw(orchestrator_mod._StopRequested()))
+    monkeypatch.setattr(
+        orch, "_handle_submission", lambda *, entity: (_ for _ in ()).throw(orchestrator_mod._StopRequested())
+    )
 
     # Run lead callback once. FakeElection calls synchronously.
     orch.run_forever(Event())
@@ -286,6 +297,7 @@ def test_on_unexpected_exception_marks_failed_and_consumes(
 # Tests: _handle_submission handover rules
 # ---------------------------------------------------------------------------
 
+
 def test_handle_submission_reserves_consumes_and_starts_thread(
     orch: orchestrator_mod.Orchestrator,
     fake_cluster: FakeCluster,
@@ -331,6 +343,7 @@ def test_handle_submission_reserves_consumes_and_starts_thread(
 # Tests: launch thread logic (call directly, no real threads)
 # ---------------------------------------------------------------------------
 
+
 def test_launch_replication_timeout_marks_failed(
     orch: orchestrator_mod.Orchestrator,
     fake_store: FakeStore,
@@ -342,10 +355,12 @@ def test_launch_replication_timeout_marks_failed(
         allowed_partitionings=["p1"],
         selected_partitioning="p1",
         replications={
-            "rep1": FakeReplication(assignments={
-                0: FakeAssignment(0, "w1"),
-                1: FakeAssignment(1, "w2"),
-            })
+            "rep1": FakeReplication(
+                assignments={
+                    0: FakeAssignment(0, "w1"),
+                    1: FakeAssignment(1, "w2"),
+                }
+            )
         },
     )
 
@@ -385,10 +400,12 @@ def test_launch_replication_stop_marks_failed(
         allowed_partitionings=["p1"],
         selected_partitioning="p1",
         replications={
-            "rep1": FakeReplication(assignments={
-                0: FakeAssignment(0, "w1"),
-                1: FakeAssignment(1, "w2"),
-            })
+            "rep1": FakeReplication(
+                assignments={
+                    0: FakeAssignment(0, "w1"),
+                    1: FakeAssignment(1, "w2"),
+                }
+            )
         },
     )
 
@@ -413,6 +430,7 @@ def test_launch_replication_stop_marks_failed(
 # Tests: reservation
 # ---------------------------------------------------------------------------
 
+
 def test_reserve_workers_timeout_raises_and_cleans_up(
     orch: orchestrator_mod.Orchestrator,
     fake_cluster: FakeCluster,
@@ -424,13 +442,17 @@ def test_reserve_workers_timeout_raises_and_cleans_up(
     RESERVED and raise RuntimeError.
     """
     # Disable auto-transition so we can control which workers reach RESERVED.
-    original_set = fake_cluster.set_desired_state.__func__  # type: ignore[attr-defined]
 
     def set_desired_no_auto(self, *, worker_address, state, expid=None, repid=None, partition=None):
-        self.desired_calls.append(dict(
-            worker_address=worker_address, state=state,
-            expid=expid, repid=repid, partition=partition,
-        ))
+        self.desired_calls.append(
+            dict(
+                worker_address=worker_address,
+                state=state,
+                expid=expid,
+                repid=repid,
+                partition=partition,
+            )
+        )
         # Only w1 transitions to RESERVED; w2 stays stuck.
         if state == WorkerState.RESERVED and worker_address == "w1":
             self._states[worker_address] = WorkerState.RESERVED
@@ -447,9 +469,7 @@ def test_reserve_workers_timeout_raises_and_cleans_up(
         orch._reserve_workers(expid="exp1", repid="rep1", assignments=["w1", "w2"])
 
     # w1 reached RESERVED, so it should receive a TERMINATED cleanup call.
-    terminated_calls = [
-        c for c in fake_cluster.desired_calls if c["state"] == WorkerState.TERMINATED
-    ]
+    terminated_calls = [c for c in fake_cluster.desired_calls if c["state"] == WorkerState.TERMINATED]
     assert any(c["worker_address"] == "w1" for c in terminated_calls)
 
 
@@ -467,9 +487,11 @@ def test_launch_sends_ready_and_active_without_assignment(
         allowed_partitionings=["p1"],
         selected_partitioning="p1",
         replications={
-            "rep1": FakeReplication(assignments={
-                0: FakeAssignment(0, "w1"),
-            })
+            "rep1": FakeReplication(
+                assignments={
+                    0: FakeAssignment(0, "w1"),
+                }
+            )
         },
     )
 
@@ -477,10 +499,15 @@ def test_launch_sends_ready_and_active_without_assignment(
     fake_cluster._states["w1"] = WorkerState.RESERVED
 
     def fake_set_desired(*, worker_address, state, expid=None, repid=None, partition=None):
-        fake_cluster.desired_calls.append(dict(
-            worker_address=worker_address, state=state,
-            expid=expid, repid=repid, partition=partition,
-        ))
+        fake_cluster.desired_calls.append(
+            dict(
+                worker_address=worker_address,
+                state=state,
+                expid=expid,
+                repid=repid,
+                partition=partition,
+            )
+        )
         fake_cluster._states[worker_address] = state
 
     monkeypatch.setattr(fake_cluster, "set_desired_state", fake_set_desired)

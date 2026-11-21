@@ -1,11 +1,13 @@
-from __future__ import annotations
-
 """IPC transport for sending envelopes to peer processes."""
 
+from __future__ import annotations
+
+import contextlib
 import sys
+from collections.abc import Callable, Mapping
 from multiprocessing import Queue
 from multiprocessing.shared_memory import SharedMemory
-from typing import Any, Mapping, Callable
+from typing import Any
 
 from tools.mp_logging import getLogger
 
@@ -19,13 +21,14 @@ logger = getLogger(__name__)
 
 class IPCTransport(Transport):
     """Transport that delivers envelopes via queues and shared memory."""
+
     def __init__(
         self,
         cluster: Cluster,
         event_queues: Mapping[str, Queue[IPCEventMsg]],
         promise_queues: Mapping[str, Queue[IPCPromiseMsg]],
         large_payload_threshold: int = 64 * 1024,
-        serializer: Callable[[Any], tuple[bytes, str]] | None = None  # data -> packed_data, protocol
+        serializer: Callable[[Any], tuple[bytes, str]] | None = None,  # data -> packed_data, protocol
     ) -> None:
         self._cluster = cluster
         self._event_queues = event_queues
@@ -41,10 +44,8 @@ class IPCTransport(Transport):
 
     def __del__(self) -> None:
         for shm in self._open_shm.values():
-            try:
+            with contextlib.suppress(Exception):
                 shm.close()
-            except Exception:
-                pass
         self._open_shm.clear()
 
     def handles_node(self, repid: str, node: str) -> bool:
@@ -76,7 +77,7 @@ class IPCTransport(Transport):
             data = envelope.data
         else:
             data, serialization_protocol = self._serializer(envelope.data)
-            headers = headers | {'serialization_protocol': serialization_protocol}
+            headers = headers | {"serialization_protocol": serialization_protocol}
 
         if len(envelope.data) <= self._large_payload_threshold:
             msg = IPCEventMsg(
@@ -118,7 +119,7 @@ class IPCTransport(Transport):
                 shm.unlink()
                 raise
 
-            if sys.platform == 'win32':
+            if sys.platform == "win32":
                 # Windows: keep the sender's handle open so the receiver can
                 # open the mapping by name.  Released via __del__ (or when the
                 # receiver signals completion through an external mechanism).
@@ -159,4 +160,4 @@ def _default_serializer(value: Any) -> tuple[bytes, str]:
     """
     import pickle
 
-    return pickle.dumps(value), f'PICKLE{pickle.DEFAULT_PROTOCOL}'
+    return pickle.dumps(value), f"PICKLE{pickle.DEFAULT_PROTOCOL}"

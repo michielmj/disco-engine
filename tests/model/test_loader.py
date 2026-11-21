@@ -25,6 +25,7 @@ except Exception:  # pragma: no cover
 class FakeRuntime:
     pass
 
+
 def _engine():
     # In-memory SQLite is sufficient for install + reflection.
     return sa.create_engine("sqlite+pysqlite:///:memory:")
@@ -255,6 +256,7 @@ def test_load_model_from_entrypoint_strict_contract_success(tmp_path, monkeypatc
     ep = im.EntryPoint(name="test_model", value="epmod:model_package", group="disco.models")
 
     import disco.model.loader as loader
+
     monkeypatch.setattr(loader, "discover_model_entrypoints", lambda group="disco.models": {"test_model": ep})
 
     m = load_model_from_entrypoint("test_model", db=eng)
@@ -286,6 +288,7 @@ def test_load_model_from_entrypoint_strict_contract_rejects_non_str(tmp_path, mo
     ep = im.EntryPoint(name="bad_model", value="epmod2:model_package", group="disco.models")
 
     import disco.model.loader as loader
+
     monkeypatch.setattr(loader, "discover_model_entrypoints", lambda group="disco.models": {"bad_model": ep})
 
     with pytest.raises(ModelLoadError):

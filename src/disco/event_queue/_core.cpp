@@ -1,12 +1,12 @@
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+
 #include <cmath>
 #include <cstdint>
 #include <map>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
 
 #include "EventQueue.h"
 
@@ -42,13 +42,8 @@ py::list events_to_py_list(std::vector<disco::Event>&& events) {
         py::dict headers = headers_to_py(ev.headers);
 
         // Flat 5-tuple: (sender_node, sender_simproc, epoch, data, headers)
-        out.append(py::make_tuple(
-            std::move(ev.sender_node),
-            std::move(ev.sender_simproc),
-            ev.epoch,
-            std::move(data),
-            std::move(headers)
-        ));
+        out.append(py::make_tuple(std::move(ev.sender_node), std::move(ev.sender_simproc), ev.epoch,
+                                  std::move(data), std::move(headers)));
     }
     return out;
 }
@@ -61,96 +56,59 @@ PYBIND11_MODULE(_core, m) {
     py::class_<disco::EventQueue>(m, "EventQueue")
         .def(py::init<>())
 
-        .def_property_readonly(
-            "epoch",
-            [](disco::EventQueue& q) -> double {
-                // NOTE: We intentionally do NOT release the GIL here,
-                // because the core implementation may INCREF/DECREF under internal locks.
-                return q.getEpoch();
-            })
+        .def_property_readonly("epoch",
+                               [](disco::EventQueue& q) -> double {
+                                   // NOTE: We intentionally do NOT release the GIL here,
+                                   // because the core implementation may INCREF/DECREF under internal locks.
+                                   return q.getEpoch();
+                               })
 
-        .def_property_readonly(
-            "next_epoch",
-            [](disco::EventQueue& q) -> py::object {
-                const double v = q.getNextEpoch();
-                if (std::isnan(v)) {
-                    return py::none();
-                }
-                return py::float_(v);
-            })
+        .def_property_readonly("next_epoch",
+                               [](disco::EventQueue& q) -> py::object {
+                                   const double v = q.getNextEpoch();
+                                   if (std::isnan(v)) {
+                                       return py::none();
+                                   }
+                                   return py::float_(v);
+                               })
 
-        .def_property_readonly(
-            "waiting_for",
-            [](disco::EventQueue& q) -> std::string {
-                return q.getWaitingFor();
-            })
+        .def_property_readonly("waiting_for",
+                               [](disco::EventQueue& q) -> std::string { return q.getWaitingFor(); })
 
         .def(
             "push",
-            [](disco::EventQueue& q,
-               const std::string& sender_node,
-               const std::string& sender_simproc,
-               double epoch,
-               py::object data,
-               py::object headers_obj) -> bool {
+            [](disco::EventQueue& q, const std::string& sender_node, const std::string& sender_simproc,
+               double epoch, py::object data, py::object headers_obj) -> bool {
                 disco::Headers headers = headers_from_py(headers_obj);
 
                 // Core queue will INCREF the borrowed PyObject* internally (RAII).
                 return q.push(sender_node, sender_simproc, epoch, data.ptr(), headers);
             },
-            py::arg("sender_node"),
-            py::arg("sender_simproc"),
-            py::arg("epoch"),
-            py::arg("data"),
+            py::arg("sender_node"), py::arg("sender_simproc"), py::arg("epoch"), py::arg("data"),
             py::arg("headers") = py::none())
 
-        .def(
-            "pop",
-            [](disco::EventQueue& q) -> py::list {
-                return events_to_py_list(q.pop());
-            })
+        .def("pop", [](disco::EventQueue& q) -> py::list { return events_to_py_list(q.pop()); })
 
         .def(
             "promise",
-            [](disco::EventQueue& q,
-               const std::string& sender_node,
-               const std::string& sender_simproc,
-               uint64_t seqnr,
-               double epoch,
-               uint64_t num_events) -> bool {
+            [](disco::EventQueue& q, const std::string& sender_node, const std::string& sender_simproc,
+               uint64_t seqnr, double epoch, uint64_t num_events) -> bool {
                 return q.promise(sender_node, sender_simproc, seqnr, epoch, num_events);
             },
-            py::arg("sender_node"),
-            py::arg("sender_simproc"),
-            py::arg("seqnr"),
-            py::arg("epoch"),
+            py::arg("sender_node"), py::arg("sender_simproc"), py::arg("seqnr"), py::arg("epoch"),
             py::arg("num_events"))
 
-        .def(
-            "try_next_epoch",
-            [](disco::EventQueue& q) -> bool {
-                return q.tryNextEpoch();
-            })
+        .def("try_next_epoch", [](disco::EventQueue& q) -> bool { return q.tryNextEpoch(); })
 
-        .def_property_readonly(
-            "has_predecessors",
-            [](disco::EventQueue& q) -> bool {
-                return q.hasPredecessors();
-            })
+        .def_property_readonly("has_predecessors",
+                               [](disco::EventQueue& q) -> bool { return q.hasPredecessors(); })
 
         .def(
             "register_predecessor",
-            [](disco::EventQueue& q,
-               const std::string& sender_node,
-               const std::string& sender_simproc) {
+            [](disco::EventQueue& q, const std::string& sender_node, const std::string& sender_simproc) {
                 q.registerPredecessor(sender_node, sender_simproc);
             },
-            py::arg("sender_node"),
-            py::arg("sender_simproc"))
+            py::arg("sender_node"), py::arg("sender_simproc"))
 
-        .def_property_readonly(
-            "empty",
-            [](disco::EventQueue& q) -> bool {
-                return q.empty();
-            });
+        .def_property_readonly("empty", [](disco::EventQueue& q) -> bool { return q.empty(); });
 }

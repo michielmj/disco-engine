@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from typing import Iterable, Any, Dict, Protocol, TYPE_CHECKING
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import IntEnum
-from numpy.random import Generator
+from typing import TYPE_CHECKING, Any, Protocol
 
 from data_logger import DataLogger
+from numpy.random import Generator
 
 if TYPE_CHECKING:
-    from .graph import Graph
     from .graph_data import GraphData
 
 
@@ -22,12 +22,12 @@ class NodeStatus(IntEnum):
 
 class NodeRuntimeLike(Protocol):
     def send_event(
-            self,
-            target_node: str,
-            target_simproc: str,
-            epoch: float,
-            data: Any,
-            headers: Dict[str, str] | None = None,
+        self,
+        target_node: str,
+        target_simproc: str,
+        epoch: float,
+        data: Any,
+        headers: dict[str, str] | None = None,
     ) -> None: ...
 
     @property
@@ -35,7 +35,7 @@ class NodeRuntimeLike(Protocol):
         raise NotImplementedError
 
     @property
-    def epoch(self) -> float | None :
+    def epoch(self) -> float | None:
         raise NotImplementedError
 
     @property
@@ -69,7 +69,7 @@ class Event:
     sender_simproc: str
     epoch: float
     data: Any
-    headers: Dict[str, str]
+    headers: dict[str, str]
 
 
 class Node(ABC):
@@ -79,26 +79,23 @@ class Node(ABC):
 
     __runtime__: NodeRuntimeLike
 
-    def __init__(self, params: dict[str, Any]):
+    # Deliberately concrete and empty: subclasses that need no setup need not override it.
+    def __init__(self, params: dict[str, Any]):  # noqa: B027
         pass
 
     @abstractmethod
     def on_events(self, simproc: str, events: Iterable[Event]) -> None: ...
 
     def send_event(
-            self,
-            target_node: str,
-            target_simproc: str,
-            epoch: float,
-            data: Any,
-            headers: dict[str, str] | None = None
+        self,
+        target_node: str,
+        target_simproc: str,
+        epoch: float,
+        data: Any,
+        headers: dict[str, str] | None = None,
     ):
         self.__runtime__.send_event(
-            target_node=target_node,
-            target_simproc=target_simproc,
-            epoch=epoch,
-            data=data,
-            headers=headers
+            target_node=target_node, target_simproc=target_simproc, epoch=epoch, data=data, headers=headers
         )
 
     @property

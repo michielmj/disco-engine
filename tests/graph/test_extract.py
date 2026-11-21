@@ -1,44 +1,43 @@
 # tests/graph/test_extract.py
 from __future__ import annotations
 
-from typing import Iterator, Tuple
+from collections.abc import Iterator
 
 import numpy as np
+from graphblas import Vector
 from sqlalchemy import (
-    create_engine,
-    MetaData,
-    Table,
     Column,
-    String,
-    Integer,
     Float,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    create_engine,
     insert,
 )
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from disco.graph import Graph
-from disco.graph.schema import (
-    create_graph_schema,
-    vertices,
-    edges,
-)
 from disco.graph.extract import (
+    get_inbound_edge_data,
+    get_inbound_map,
+    get_outbound_edge_data,
+    get_outbound_map,
     get_vertex_data,
     get_vertex_numeric_vector,
-    get_outbound_edge_data,
-    get_inbound_edge_data,
-    get_outbound_map,
-    get_inbound_map,
 )
-from graphblas import Vector
-
+from disco.graph.schema import (
+    create_graph_schema,
+    edges,
+    vertices,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 
-def _create_model_tables(engine) -> Tuple[Table, Table]:
+def _create_model_tables(engine) -> tuple[Table, Table]:
     """
     Create key-based model node and edge tables for tests:
 
@@ -119,9 +118,7 @@ def _populate_vertices_and_edges(
     )
 
 
-def engine_session_and_model_tables() -> Iterator[
-    tuple[object, sessionmaker, Table, Table]
-]:
+def engine_session_and_model_tables() -> Iterator[tuple[object, sessionmaker, Table, Table]]:
     """
     Helper generator for tests.
 
@@ -140,6 +137,7 @@ def engine_session_and_model_tables() -> Iterator[
         yield engine, SessionLocal, node_data, edge_data
     finally:
         engine.dispose()
+
 
 # ---------------------------------------------------------------------------
 # Tests: vertex data
@@ -250,7 +248,7 @@ def test_get_vertex_numeric_vector() -> None:
 
 
 def test_get_outbound_and_inbound_edge_data_indices_and_keys() -> None:
-    for _, SessionLocal, node_data, edge_data in engine_session_and_model_tables():
+    for _, SessionLocal, _node_data, edge_data in engine_session_and_model_tables():
         session: Session = SessionLocal()
         scenario_id = "S1"
 
@@ -327,7 +325,7 @@ def test_get_outbound_and_inbound_edge_data_indices_and_keys() -> None:
 
 
 def test_edge_data_with_mask() -> None:
-    for _, SessionLocal, node_data, edge_data in engine_session_and_model_tables():
+    for _, SessionLocal, _node_data, edge_data in engine_session_and_model_tables():
         session: Session = SessionLocal()
         scenario_id = "S1"
 
@@ -398,7 +396,7 @@ def test_edge_data_with_mask() -> None:
 
 
 def test_outbound_and_inbound_map() -> None:
-    for _, SessionLocal, node_data, _ in engine_session_and_model_tables():
+    for _, SessionLocal, _node_data, _ in engine_session_and_model_tables():
         session: Session = SessionLocal()
         scenario_id = "S1"
 
@@ -417,12 +415,12 @@ def test_outbound_and_inbound_map() -> None:
 
         # Check basic structure: non-zero entries in the right places
         rows, cols, vals = out_mat.to_coo()
-        entries = {(int(r), int(c)): float(v) for r, c, v in zip(rows, cols, vals)}
+        entries = {(int(r), int(c)): float(v) for r, c, v in zip(rows, cols, vals, strict=False)}
         assert entries.get((0, 1)) == 1.5
         assert entries.get((1, 2)) == 2.5
 
         rows_i, cols_i, vals_i = in_mat.to_coo()
-        entries_i = {(int(r), int(c)): float(v) for r, c, v in zip(rows_i, cols_i, vals_i)}
+        entries_i = {(int(r), int(c)): float(v) for r, c, v in zip(rows_i, cols_i, vals_i, strict=False)}
         assert entries_i.get((0, 1)) == 1.5
         assert entries_i.get((1, 2)) == 2.5
 

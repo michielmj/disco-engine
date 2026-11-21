@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
 
 from tools.mp_logging import getLogger
+
 from .envelopes import EventEnvelope, PromiseEnvelope
 from .exceptions import DiscoRuntimeError
 from .transports.base import Transport  # Protocol
@@ -13,6 +14,7 @@ logger = getLogger(__name__)
 
 class RouterError(DiscoRuntimeError):
     """Base exception for routing errors."""
+
     pass
 
 
@@ -25,6 +27,7 @@ class TransportInfo:
     Router uses the original order of the transports list to determine
     priority (InProcess -> IPC -> gRPC).
     """
+
     transport: Transport
     name: str
 
@@ -59,7 +62,7 @@ class Router:
         """
 
         # Wrap transports with a name for debugging; fall back to class name.
-        self._transports: List[TransportInfo] = []
+        self._transports: list[TransportInfo] = []
         for t in transports:
             name = getattr(t, "name", t.__class__.__name__)
             self._transports.append(TransportInfo(transport=t, name=name))
@@ -139,7 +142,7 @@ class Router:
         # No transport claimed responsibility; this is a configuration error.
         msg = (
             f"No transport available for node={target_node!r}, "
-            f"repid={repid!r}. Known transports={ [ti.name for ti in self._transports] }"
+            f"repid={repid!r}. Known transports={[ti.name for ti in self._transports]}"
         )
         logger.error(msg)
         raise RouterError(msg)

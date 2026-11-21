@@ -161,6 +161,7 @@ def test_modelspec_simproc_edge_data_table_graph_prefix_rejected():
 
 # Standard infrastructure table names (graph_ prefix, exact names)
 
+
 def test_modelspec_node_data_table_graph_scenarios_rejected():
     d = _base_model_dict_list_simprocs()
     d["node-types"]["Warehouse"]["node-data-table"] = "graph_scenarios"

@@ -2,9 +2,9 @@ import gc
 import sys
 
 import pytest
+from tools.ctypes import MAX_UINT64
 
 from disco.event_queue import EventQueue
-from tools.ctypes import MAX_UINT64
 
 
 def drain(queue: EventQueue) -> list:
@@ -330,18 +330,18 @@ def test_3predecessors_waiting_for_messages_states_2():
 def test_2predecessors_fail_pop():
 
     queue = EventQueue()
-    queue.register_predecessor('pred1', 'simproc')
-    queue.register_predecessor('pred2', 'simproc')
+    queue.register_predecessor("pred1", "simproc")
+    queue.register_predecessor("pred2", "simproc")
 
-    queue.promise('pred1', 'simproc', 1, 20., 1)
-    queue.promise('pred1', 'simproc', 1, 20., 1)
-    queue.push('pred1', 'simproc', 20., b'', {})
-    queue.promise('pred2', 'simproc', 1, 10., 1)
-    queue.push('pred2', 'simproc', 10., b'', {})
+    queue.promise("pred1", "simproc", 1, 20.0, 1)
+    queue.promise("pred1", "simproc", 1, 20.0, 1)
+    queue.push("pred1", "simproc", 20.0, b"", {})
+    queue.promise("pred2", "simproc", 1, 10.0, 1)
+    queue.push("pred2", "simproc", 10.0, b"", {})
 
-    assert queue.epoch == 10.
+    assert queue.epoch == 10.0
     events = queue.pop()
     assert len(events) == 1
-    n, s, e, d, h = events[0]
-    assert n == 'pred2'
-    assert e == 10.
+    n, _s, e, _d, _h = events[0]
+    assert n == "pred2"
+    assert e == 10.0

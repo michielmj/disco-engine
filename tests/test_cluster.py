@@ -1,24 +1,25 @@
 from __future__ import annotations
 
-import pytest
+from collections.abc import Callable
 from dataclasses import asdict
-from typing import Any, Callable, List, Tuple
+from typing import Any
 
+import pytest
 
 from disco.cluster import (
-    Cluster,
-    WorkerState,
-    WorkerInfo,
-    DesiredWorkerState,
+    DESIRED_STATE,
     REGISTERED_WORKERS,
     WORKERS,
-    DESIRED_STATE
+    Cluster,
+    DesiredWorkerState,
+    WorkerInfo,
+    WorkerState,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fake Metastore
 # ---------------------------------------------------------------------------
+
 
 class FakeMetastore:
     """
@@ -33,14 +34,14 @@ class FakeMetastore:
     """
 
     def __init__(self) -> None:
-        self.structure_calls: List[list[str]] = []
+        self.structure_calls: list[list[str]] = []
 
         # path -> value
         self.data: dict[str, Any] = {}
 
         # watches
-        self.children_watches: List[Tuple[str, Callable[[list[str], str], bool]]] = []
-        self.data_watches: List[Tuple[str, Callable[[Any, str], bool]]] = []
+        self.children_watches: list[tuple[str, Callable[[list[str], str], bool]]] = []
+        self.data_watches: list[tuple[str, Callable[[Any, str], bool]]] = []
 
     # --- Metastore-like API ------------------------------------------------
 
@@ -132,7 +133,7 @@ class FakeMetastore:
             return True
 
         prefix = item.rstrip("/") + "/"
-        return any(key.startswith(prefix) for key in self.data.keys())
+        return any(key.startswith(prefix) for key in self.data)
 
     # listing ---------------------------------------------------------------
 
@@ -141,7 +142,7 @@ class FakeMetastore:
         plen = len(prefix) + 1
         children: set[str] = set()
 
-        for p in self.data.keys():
+        for p in self.data:
             if not p.startswith(prefix + "/"):
                 continue
             tail = p[plen:]
@@ -270,6 +271,7 @@ def test_get_available_prefers_matching_expid_and_unique_partitions(meta: FakeMe
 # Desired state tests
 # ---------------------------------------------------------------------------
 
+
 def test_set_desired_state_writes_desired_worker_state(meta: FakeMetastore, cluster: Cluster):
     worker = "w1"
     cluster.set_desired_state(
@@ -348,4 +350,3 @@ def test_on_desired_state_change_writes_ack_on_error(meta: FakeMetastore, cluste
     assert ack["request_id"] == desired_obj.request_id
     assert ack["success"] is False
     assert ack["error"] == "boom"
-    

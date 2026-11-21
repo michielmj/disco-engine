@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from multiprocessing import Queue
-from typing import Any, Callable, Optional
+from typing import Any
 
 import pytest
 
@@ -13,10 +14,10 @@ import disco.worker as worker_mod
 from disco.cluster import WorkerState
 from disco.experiments import ExperimentStatus
 
-
 # -----------------------------
 # Fakes / test helpers
 # -----------------------------
+
 
 class FakeCluster:
     def __init__(self) -> None:
@@ -24,8 +25,8 @@ class FakeCluster:
         self.register_calls: list[tuple[str, WorkerState]] = []
         self.unregister_calls: list[str] = []
         self.worker_state_calls: list[tuple[str, WorkerState]] = []
-        self.worker_info_calls: list[tuple[str, Optional[int], Optional[str], Optional[str]]] = []
-        self._desired_cb: dict[str, Callable[[Any], Optional[str]]] = {}
+        self.worker_info_calls: list[tuple[str, int | None, str | None, str | None]] = []
+        self._desired_cb: dict[str, Callable[[Any], str | None]] = {}
 
     def register_worker(self, worker: str, state: WorkerState) -> None:
         self.register_calls.append((worker, state))
@@ -40,17 +41,17 @@ class FakeCluster:
         self,
         *,
         worker: str,
-        partition: Optional[int],
-        expid: Optional[str],
-        repid: Optional[str],
+        partition: int | None,
+        expid: str | None,
+        repid: str | None,
     ) -> None:
         self.worker_info_calls.append((worker, partition, expid, repid))
 
-    def on_desired_state_change(self, worker: str, cb: Callable[[Any], Optional[str]]) -> None:
+    def on_desired_state_change(self, worker: str, cb: Callable[[Any], str | None]) -> None:
         self._desired_cb[worker] = cb
 
     # helper for tests
-    def push_desired(self, worker: str, desired: Any) -> Optional[str]:
+    def push_desired(self, worker: str, desired: Any) -> str | None:
         return self._desired_cb[worker](desired)
 
 
@@ -66,6 +67,7 @@ class FakeExperimentStore:
     - set_partition_status()
     - set_partition_exc()
     """
+
     def __init__(self, meta: Any) -> None:
         self.meta = meta
         self.load_calls: list[str] = []
@@ -100,9 +102,9 @@ class FakeExperimentStore:
 class FakeDesired:
     request_id: str
     state: WorkerState
-    expid: Optional[str] = None
-    repid: Optional[str] = None
-    partition: Optional[int] = None
+    expid: str | None = None
+    repid: str | None = None
+    partition: int | None = None
 
     def validate_assignment(self) -> bool:
         # Assignment is required on RESERVED (where it is bound).
@@ -130,6 +132,7 @@ class FakeNodeRuntime:
     - runner(duration=...) returns a generator (provided at construction time)
     - receive_event / receive_promise record calls
     """
+
     def __init__(self, gen_factory: Callable[[], Any]) -> None:
         self._gen_factory = gen_factory
         self.events: list[Any] = []
@@ -151,6 +154,7 @@ def gen_yield_n_then_stop(n: int):
             yield object()
         return
         yield  # pragma: no cover
+
     return _g
 
 
@@ -158,12 +162,14 @@ def gen_raise(exc: BaseException):
     def _g():
         raise exc
         yield  # pragma: no cover
+
     return _g
 
 
 # -----------------------------
 # Fixtures
 # -----------------------------
+
 
 @pytest.fixture()
 def worker_env(monkeypatch: pytest.MonkeyPatch):
@@ -180,7 +186,7 @@ def worker_env(monkeypatch: pytest.MonkeyPatch):
     # Patch SessionManager.from_settings (not used in these tests because we patch _setup_run_locked).
     class DummySessionManager:
         @classmethod
-        def from_settings(cls, settings: Any) -> "DummySessionManager":
+        def from_settings(cls, settings: Any) -> DummySessionManager:
             return cls()
 
     monkeypatch.setattr(worker_mod, "SessionManager", DummySessionManager)
@@ -234,8 +240,9 @@ def worker_env(monkeypatch: pytest.MonkeyPatch):
 # Tests
 # -----------------------------
 
+
 def test_on_desired_state_change_sets_pending_and_kicks(worker_env):
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, _ev_q, _pr_q = worker_env
 
     desired = FakeDesired(
         request_id="r1",
@@ -253,8 +260,10 @@ def test_on_desired_state_change_sets_pending_and_kicks(worker_env):
     assert w._kick.is_set()
 
 
-def test_apply_desired_reserved_then_ready_transitions_and_calls_setup(monkeypatch: pytest.MonkeyPatch, worker_env):
-    w, cluster, store, ev_q, pr_q = worker_env
+def test_apply_desired_reserved_then_ready_transitions_and_calls_setup(
+    monkeypatch: pytest.MonkeyPatch, worker_env
+):
+    w, cluster, store, _ev_q, _pr_q = worker_env
 
     called = {"setup": 0}
 
@@ -291,9 +300,7 @@ def test_apply_desired_reserved_then_ready_transitions_and_calls_setup(monkeypat
     assert w._assignment.partition == 0
     assert (w.address, WorkerState.RESERVED) in cluster.worker_state_calls
     # Should have published worker info with assignment.
-    assert any(
-        (w.address, 0, "e1", "rep1") == call for call in cluster.worker_info_calls
-    )
+    assert any((w.address, 0, "e1", "rep1") == call for call in cluster.worker_info_calls)
     # No setup should have happened yet.
     assert called["setup"] == 0
 
@@ -319,7 +326,7 @@ def test_apply_desired_reserved_then_ready_transitions_and_calls_setup(monkeypat
 
 
 def test_active_creates_runners_only_on_ready_to_active(monkeypatch: pytest.MonkeyPatch, worker_env):
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, _ev_q, _pr_q = worker_env
 
     # Prepare READY state with nodes (patch setup).
     def fake_setup_locked() -> bool:
@@ -372,7 +379,7 @@ def test_active_creates_runners_only_on_ready_to_active(monkeypatch: pytest.Monk
 
 def test_reserved_sets_assignment_and_publishes_info(worker_env):
     """RESERVED should bind the assignment and publish worker info, with no heavy I/O."""
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, cluster, store, _ev_q, _pr_q = worker_env
 
     desired = FakeDesired("r-reserved", WorkerState.RESERVED, "e1", "rep1", 0)
 
@@ -390,17 +397,16 @@ def test_reserved_sets_assignment_and_publishes_info(worker_env):
 
 def test_ready_from_available_raises(worker_env):
     """READY without a preceding RESERVED should be rejected."""
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, _ev_q, _pr_q = worker_env
 
     desired_ready = FakeDesired("r-ready", WorkerState.READY)
-    with w._lock:
-        with pytest.raises(worker_mod.WorkerError, match="Cannot transition to READY from AVAILABLE"):
-            w._apply_desired_locked(desired_ready)
+    with w._lock, pytest.raises(worker_mod.WorkerError, match="Cannot transition to READY from AVAILABLE"):
+        w._apply_desired_locked(desired_ready)
 
 
 def test_terminated_from_reserved_returns_to_available(worker_env):
     """TERMINATED from RESERVED should clear assignment and return to AVAILABLE without setting CANCELED."""
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, store, _ev_q, _pr_q = worker_env
 
     # Enter RESERVED.
     desired_reserved = FakeDesired("r-reserved", WorkerState.RESERVED, "e1", "rep1", 0)
@@ -421,7 +427,7 @@ def test_terminated_from_reserved_returns_to_available(worker_env):
 
 
 def test_step_runners_once_removes_finished(worker_env):
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, _ev_q, _pr_q = worker_env
 
     # Two runners: first finishes immediately, second yields once then finishes.
     w._runners = (gen_yield_n_then_stop(0)(), gen_yield_n_then_stop(1)())
@@ -437,7 +443,7 @@ def test_step_runners_once_removes_finished(worker_env):
 
 
 def test_step_runners_once_exception_fails_partition(monkeypatch: pytest.MonkeyPatch, worker_env):
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, _ev_q, _pr_q = worker_env
 
     # Need an assignment for _fail_partition_locked to work.
     w._assignment = worker_mod.Assignment(expid="e1", repid="rep1", partition=0)
@@ -473,7 +479,7 @@ def test_runner_loop_finishes_partition_and_returns_available(monkeypatch: pytes
     - Worker calls _end_run_locked(FINISHED) -> AVAILABLE
     Then we stop the loop with request_stop.
     """
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, store, _ev_q, _pr_q = worker_env
 
     # Set up assignment and minimal experiment
     w._assignment = worker_mod.Assignment(expid="e1", repid="rep1", partition=0)
@@ -513,20 +519,22 @@ def test_no_kick_needed_for_ingress_in_ready_or_paused(worker_env):
     This test asserts that delivering a message does not implicitly set _kick.
     (Only desired-state changes and request_stop should set it.)
     """
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, ev_q, _pr_q = worker_env
 
     # Put a dummy message in queue; _kick should remain unchanged until we process control plane.
     w._kick.clear()
-    ev_q.put_nowait(worker_mod.IPCEventMsg(  # type: ignore[attr-defined]
-        repid="rep1",
-        sender_node="a",
-        sender_simproc="s",
-        target_node="missing",   # will break if delivered, but we won't drain here
-        target_simproc="t",
-        epoch=0.0,
-        data={"x": 1},
-        headers={},
-        shm_name=None,
-        size=0,
-    ))
+    ev_q.put_nowait(
+        worker_mod.IPCEventMsg(  # type: ignore[attr-defined]
+            repid="rep1",
+            sender_node="a",
+            sender_simproc="s",
+            target_node="missing",  # will break if delivered, but we won't drain here
+            target_simproc="t",
+            epoch=0.0,
+            data={"x": 1},
+            headers={},
+            shm_name=None,
+            size=0,
+        )
+    )
     assert not w._kick.is_set()

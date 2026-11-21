@@ -1,24 +1,24 @@
 # tests/graph/test_db.py
-from typing import Iterator
+from collections.abc import Iterator
 
-import numpy as np
 import graphblas as gb
-from graphblas import Vector
+import numpy as np
 import pytest
+from graphblas import Vector
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from disco.graph import (
     Graph,
     create_graph_schema,
-    store_graph,
-    load_graph_for_scenario,
     get_outbound_map,
+    load_graph_for_scenario,
     schema,
+    store_graph,
 )
-from disco.graph.schema import vertices as vertices_table
 from disco.graph.schema import edges as edges_table
 from disco.graph.schema import vertex_masks as vertex_masks_table
+from disco.graph.schema import vertices as vertices_table
 
 
 @pytest.fixture
@@ -60,9 +60,7 @@ def _build_graph_with_vertices(
 # ---------------------------------------------------------------------------
 
 
-def test_store_graph_inserts_vertices(
-    engine_and_session_factory: tuple[object, sessionmaker]
-) -> None:
+def test_store_graph_inserts_vertices(engine_and_session_factory: tuple[object, sessionmaker]) -> None:
     _, SessionLocal = engine_and_session_factory
     session: Session = SessionLocal()
 
@@ -92,9 +90,7 @@ def test_store_graph_inserts_vertices(
     session.close()
 
 
-def test_store_graph_duplicate_raises(
-    engine_and_session_factory: tuple[object, sessionmaker]
-) -> None:
+def test_store_graph_duplicate_raises(engine_and_session_factory: tuple[object, sessionmaker]) -> None:
     _, SessionLocal = engine_and_session_factory
     session: Session = SessionLocal()
 
@@ -120,9 +116,7 @@ def test_store_graph_duplicate_raises(
     session.close()
 
 
-def test_store_graph_chunked_insert_large(
-    engine_and_session_factory: tuple[object, sessionmaker]
-) -> None:
+def test_store_graph_chunked_insert_large(engine_and_session_factory: tuple[object, sessionmaker]) -> None:
     """
     Sanity-check that chunked inserts work for larger numbers of vertices.
     """
@@ -156,9 +150,7 @@ def test_store_graph_chunked_insert_large(
     session.close()
 
 
-def test_store_graph_without_vertices_raises(
-    engine_and_session_factory: tuple[object, sessionmaker]
-) -> None:
+def test_store_graph_without_vertices_raises(engine_and_session_factory: tuple[object, sessionmaker]) -> None:
     """store_graph must raise if the graph has no vertices attached."""
     _, SessionLocal = engine_and_session_factory
     session: Session = SessionLocal()
@@ -177,7 +169,7 @@ def test_store_graph_without_vertices_raises(
 
 
 def test_store_and_load_graph_with_labels_and_mask(
-    engine_and_session_factory: tuple[object, sessionmaker]
+    engine_and_session_factory: tuple[object, sessionmaker],
 ) -> None:
     _, SessionLocal = engine_and_session_factory
     session: Session = SessionLocal()
@@ -192,9 +184,7 @@ def test_store_and_load_graph_with_labels_and_mask(
     src = np.array([0, 1], dtype=np.int64)
     tgt = np.array([1, 2], dtype=np.int64)
     wgt = np.array([1.0, 2.0], dtype=np.float64)
-    edge_layers: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {
-        0: (src, tgt, wgt)
-    }
+    edge_layers: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {0: (src, tgt, wgt)}
 
     graph = Graph.from_edges(
         edge_layers,
@@ -248,9 +238,7 @@ def test_store_and_load_graph_with_labels_and_mask(
     session.commit()
 
     # Quick sanity: edges really exist in DB
-    db_edges = session.execute(
-        edges_table.select().where(edges_table.c.scenario_id == scenario_id)
-    ).all()
+    db_edges = session.execute(edges_table.select().where(edges_table.c.scenario_id == scenario_id)).all()
     assert len(db_edges) == 2
 
     # Quick sanity: vertices really exist in DB
@@ -322,9 +310,7 @@ def test_store_and_load_graph_with_labels_and_mask(
 
     # And ensure underlying vertex_masks table was populated for this scenario
     vm_rows = session.execute(
-        vertex_masks_table.select().where(
-            vertex_masks_table.c.scenario_id == scenario_id
-        )
+        vertex_masks_table.select().where(vertex_masks_table.c.scenario_id == scenario_id)
     ).all()
     # We only assert that some rows exist; exact count depends on mask usage
     assert len(vm_rows) > 0
@@ -338,7 +324,7 @@ def test_store_and_load_graph_with_labels_and_mask(
 
 
 def test_store_and_load_vertex_weight_roundtrip(
-    engine_and_session_factory: tuple[object, sessionmaker]
+    engine_and_session_factory: tuple[object, sessionmaker],
 ) -> None:
     """Custom vertex_weight values survive a store → load roundtrip."""
     _, SessionLocal = engine_and_session_factory
@@ -364,7 +350,7 @@ def test_store_and_load_vertex_weight_roundtrip(
 
 
 def test_store_and_load_default_vertex_weight_is_ones(
-    engine_and_session_factory: tuple[object, sessionmaker]
+    engine_and_session_factory: tuple[object, sessionmaker],
 ) -> None:
     """Default all-ones vertex_weight is stored as NULL and loaded back as ones."""
     _, SessionLocal = engine_and_session_factory
@@ -383,6 +369,7 @@ def test_store_and_load_default_vertex_weight_is_ones(
 
     # NULL stored in DB
     from disco.graph.schema import vertices as vtable
+
     rows = session.execute(
         select(vtable.c.weight).where(vtable.c.scenario_id == scenario_id).order_by(vtable.c.index)
     ).all()

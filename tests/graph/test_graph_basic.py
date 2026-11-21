@@ -1,8 +1,8 @@
 # tests/graph/test_graph_basic.py
-import numpy as np
 import graphblas as gb
-from graphblas import Vector
+import numpy as np
 import pytest
+from graphblas import Vector
 
 from disco.graph import Graph
 

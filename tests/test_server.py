@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple, cast
+from typing import Any, ClassVar, cast
 
 import pytest
 
@@ -10,10 +11,10 @@ import disco.server as server_mod
 from disco.config import ConfigError
 from disco.worker import WorkerState
 
-
 # ---------------------------------------------------------------------------
 # Minimal fake settings types (explicit attributes, no getattr tricks)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(slots=True)
 class FakeGrpcSettings:
@@ -26,11 +27,6 @@ class FakeGrpcSettings:
 class FakeZookeeperSettings:
     default_group: str = "default"
     loglevel: str = "INFO"
-
-
-@dataclass(slots=True)
-class FakeLoggingSettings:
-    loglevel: str = "DEBUG"
 
 
 @dataclass(slots=True)
@@ -62,6 +58,7 @@ class FakeAppSettings:
 # Fakes for Cluster/Worker and a no-OS "multiprocessing context"
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class DesiredStateCall:
     worker_address: str
@@ -70,7 +67,7 @@ class DesiredStateCall:
 
 class FakeCluster:
     def __init__(self) -> None:
-        self.calls: List[DesiredStateCall] = []
+        self.calls: list[DesiredStateCall] = []
 
     def set_desired_state(self, worker_address: str, state: WorkerState) -> None:
         self.calls.append(DesiredStateCall(worker_address=worker_address, state=state))
@@ -94,7 +91,7 @@ class FakeEvent:
     def set(self) -> None:
         self._is_set = True
 
-    def wait(self, timeout: Optional[float] = None) -> bool:
+    def wait(self, timeout: float | None = None) -> bool:
         _ = timeout
         return self._is_set
 
@@ -109,13 +106,13 @@ class FakeProcess:
     _pid_seq = 1000
 
     def __init__(
-            self,
-            *,
-            name: str,
-            target: Any,
-            args: Tuple[Any, ...],
-            daemon: bool,
-            autorun: bool,
+        self,
+        *,
+        name: str,
+        target: Any,
+        args: tuple[Any, ...],
+        daemon: bool,
+        autorun: bool,
     ) -> None:
         self.name = name
         self._target = target
@@ -143,7 +140,7 @@ class FakeProcess:
             finally:
                 self._alive = False
 
-    def join(self, timeout: Optional[float] = None) -> None:
+    def join(self, timeout: float | None = None) -> None:
         _ = timeout
         # If this is the orchestrator entrypoint, it blocks on a stop_event.
         # We simulate that: if stop_event is set, process can exit.
@@ -157,7 +154,8 @@ class FakeProcess:
 
     def terminate(self) -> None:
         self.terminate_called = True
-        # Simulate terminate not always working immediately; leave alive until killed or join logic changes it.
+        # Simulate terminate not always working immediately; leave alive until killed or join
+        # logic changes it.
 
     def kill(self) -> None:
         self.kill_called = True
@@ -176,7 +174,7 @@ class FakeCtx:
     def Event(self) -> FakeEvent:
         return FakeEvent()
 
-    def Process(self, *, name: str, target: Any, args: Tuple[Any, ...], daemon: bool) -> FakeProcess:
+    def Process(self, *, name: str, target: Any, args: tuple[Any, ...], daemon: bool) -> FakeProcess:
         # Only autorun workers; never autorun orchestrator because it waits on stop_event.
         autorun = self._autorun_workers and (target is server_mod._worker_main)
         return FakeProcess(name=name, target=target, args=args, daemon=daemon, autorun=autorun)
@@ -185,17 +183,17 @@ class FakeCtx:
 class FakeWorker:
     """Captures constructor args and exits immediately in run_forever()."""
 
-    instances: List["FakeWorker"] = []
+    instances: ClassVar[list[FakeWorker]] = []
 
     def __init__(
-            self,
-            *,
-            address: str,
-            cluster: Any,
-            event_queues: Mapping[str, Any],
-            promise_queues: Mapping[str, Any],
-            settings: Any,
-            name: Optional[str] = None,
+        self,
+        *,
+        address: str,
+        cluster: Any,
+        event_queues: Mapping[str, Any],
+        promise_queues: Mapping[str, Any],
+        settings: Any,
+        name: str | None = None,
     ) -> None:
         self.address = address
         self.cluster = cluster
@@ -212,6 +210,7 @@ class FakeWorker:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_resolve_bind_host_requires_non_loopback_if_not_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = FakeAppSettings(grpc=FakeGrpcSettings(bind_host=None))

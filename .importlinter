@@ -1,0 +1,211 @@
+# Layering, enforced in CI (`uv run lint-imports`). Never add an exception to
+# make a change compile: restructure the change instead, or escalate
+# (CLAUDE.md). These contracts describe the layering disco already has; every
+# one holds today.
+#
+# What disco does NOT have yet is a strict top-to-bottom layering: node <->
+# graph_data <-> model and transports <-> runtime import each other, and
+# transports.grpc_ingress imports `worker` for type checking. Those belong to
+# the restructuring requirement, not to a contract here.
+
+[importlinter]
+root_package = disco
+include_external_packages = True
+
+[importlinter:contract:only-config-reads-env]
+name = Only disco.config imports pydantic_settings
+type = forbidden
+source_modules =
+    disco.__main__
+    disco.cli
+    disco.client
+    disco.cluster
+    disco.database
+    disco.envelopes
+    disco.event_queue
+    disco.exceptions
+    disco.experiments
+    disco.graph
+    disco.graph_data
+    disco.graph_factory
+    disco.helpers
+    disco.metastore
+    disco.model
+    disco.node
+    disco.orchestrator
+    disco.partitioner
+    disco.partitioning
+    disco.router
+    disco.runtime
+    disco.server
+    disco.simproc
+    disco.testrun
+    disco.transports
+    disco.worker
+forbidden_modules =
+    pydantic_settings
+allow_indirect_imports = True
+
+[importlinter:contract:graph-core-is-database-agnostic]
+name = disco.graph.core imports no sqlalchemy
+type = forbidden
+source_modules =
+    disco.graph.core
+forbidden_modules =
+    sqlalchemy
+# Direct imports only: core imports graph_mask, which imports sqlalchemy (a backlog item
+# for the restructuring requirement, recorded in the branch report).
+allow_indirect_imports = True
+
+[importlinter:contract:metastore-is-a-base]
+name = The metastore imports no other disco package than config and exceptions
+type = forbidden
+source_modules =
+    disco.metastore
+forbidden_modules =
+    disco.__main__
+    disco.cli
+    disco.client
+    disco.cluster
+    disco.database
+    disco.envelopes
+    disco.event_queue
+    disco.experiments
+    disco.graph
+    disco.graph_data
+    disco.graph_factory
+    disco.helpers
+    disco.model
+    disco.node
+    disco.orchestrator
+    disco.partitioner
+    disco.partitioning
+    disco.router
+    disco.runtime
+    disco.server
+    disco.simproc
+    disco.testrun
+    disco.transports
+    disco.worker
+
+[importlinter:contract:graph-is-self-contained]
+name = The graph package imports no model, partitioning, runtime or control-plane module
+type = forbidden
+source_modules =
+    disco.graph
+forbidden_modules =
+    disco.__main__
+    disco.cli
+    disco.client
+    disco.cluster
+    disco.database
+    disco.envelopes
+    disco.event_queue
+    disco.experiments
+    disco.graph_data
+    disco.graph_factory
+    disco.metastore
+    disco.model
+    disco.node
+    disco.orchestrator
+    disco.partitioner
+    disco.partitioning
+    disco.router
+    disco.runtime
+    disco.server
+    disco.simproc
+    disco.testrun
+    disco.transports
+    disco.worker
+
+[importlinter:contract:data-plane-below-the-entry-points]
+name = Transports, router and simproc import no orchestrator, server, client or CLI
+type = forbidden
+source_modules =
+    disco.transports
+    disco.router
+    disco.simproc
+forbidden_modules =
+    disco.__main__
+    disco.cli
+    disco.client
+    disco.orchestrator
+    disco.server
+    disco.testrun
+
+[importlinter:contract:grpc-only-in-transports]
+name = Only disco.transports imports grpc
+type = forbidden
+source_modules =
+    disco.__main__
+    disco.cli
+    disco.client
+    disco.cluster
+    disco.config
+    disco.database
+    disco.envelopes
+    disco.event_queue
+    disco.exceptions
+    disco.experiments
+    disco.graph
+    disco.graph_data
+    disco.graph_factory
+    disco.helpers
+    disco.metastore
+    disco.model
+    disco.node
+    disco.orchestrator
+    disco.partitioner
+    disco.partitioning
+    disco.router
+    disco.runtime
+    disco.server
+    disco.simproc
+    disco.testrun
+    disco.worker
+forbidden_modules =
+    grpc
+allow_indirect_imports = True
+
+[importlinter:contract:kazoo-only-in-the-metastore]
+name = Only disco.metastore and disco.experiments import kazoo
+type = forbidden
+source_modules =
+    disco.__main__
+    disco.cli
+    disco.client
+    disco.cluster
+    disco.config
+    disco.database
+    disco.envelopes
+    disco.event_queue
+    disco.exceptions
+    disco.graph
+    disco.graph_data
+    disco.graph_factory
+    disco.helpers
+    disco.model
+    disco.node
+    disco.orchestrator
+    disco.partitioner
+    disco.partitioning
+    disco.router
+    disco.runtime
+    disco.server
+    disco.simproc
+    disco.testrun
+    disco.transports
+    disco.worker
+forbidden_modules =
+    kazoo
+allow_indirect_imports = True
+
+[importlinter:contract:control-plane-layers]
+name = Control-plane layers: cli, server, orchestrator and worker, cluster, metastore
+type = layers
+layers =
+    disco.cli
+    disco.server
+    disco.orchestrator | disco.worker
+    disco.cluster
+    disco.metastore

@@ -2,15 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 
 import graphblas as gb
 import numpy as np
 import pytest
 
 from disco.graph import Graph
-from disco.partitioner import SpectralClusteringPartitioner, NODE_TYPE
-
+from disco.partitioner import NODE_TYPE, SpectralClusteringPartitioner
 
 # ------------------------------------------------------------------ #
 # Stubs
@@ -19,15 +17,15 @@ from disco.partitioner import SpectralClusteringPartitioner, NODE_TYPE
 
 @dataclass(frozen=True, slots=True)
 class NodeTypeSpecStub:
-    distinct_nodes: List[str]
-    same_node: List[str]
-    self_relations: List[Tuple[str, str]]
+    distinct_nodes: list[str]
+    same_node: list[str]
+    self_relations: list[tuple[str, str]]
 
 
 @dataclass(frozen=True, slots=True)
 class ModelSpecStub:
-    simprocs: List[str]
-    node_types: Dict[str, NodeTypeSpecStub]
+    simprocs: list[str]
+    node_types: dict[str, NodeTypeSpecStub]
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,18 +39,19 @@ class ModelStub:
 
 
 def _make_model(
-    node_types: Dict[str, NodeTypeSpecStub] | None = None,
-    simprocs: List[str] | None = None
+    node_types: dict[str, NodeTypeSpecStub] | None = None, simprocs: list[str] | None = None
 ) -> ModelStub:
     """Single node-type 'A' with region as distinct label, no same_node."""
     if node_types is None:
         node_types = {
             "A": NodeTypeSpecStub(
-                distinct_nodes=["region"], same_node=[], self_relations=[],
+                distinct_nodes=["region"],
+                same_node=[],
+                self_relations=[],
             ),
         }
     if simprocs is None:
-        simprocs = ['simproc']
+        simprocs = ["simproc"]
     return ModelStub(spec=ModelSpecStub(simprocs=simprocs, node_types=node_types))
 
 
@@ -61,9 +60,9 @@ def _coo_indices(v: gb.Vector) -> set[int]:
     return set(idx.tolist())
 
 
-def _partition_vertex_sets(part) -> Dict[int, set[int]]:
+def _partition_vertex_sets(part) -> dict[int, set[int]]:
     """Group assigned vertex indices by partition number."""
-    result: Dict[int, set[int]] = {}
+    result: dict[int, set[int]] = {}
     for ns in part.node_specs:
         verts = _coo_indices(part.assignment_vector(ns.node_name))
         result.setdefault(ns.partition, set()).update(verts)
@@ -129,8 +128,8 @@ def _make_four_pair_graph() -> Graph:
         3: ("region", "r2"),
         4: ("region", "r3"),
     }
-    rows: List[int] = []
-    cols: List[int] = []
+    rows: list[int] = []
+    cols: list[int] = []
     for v in range(nv):
         rows.append(v)
         cols.append(0)
@@ -173,8 +172,8 @@ def _make_barbell_graph() -> Graph:
         1: ("region", "north"),
         2: ("region", "south"),
     }
-    rows: List[int] = []
-    cols: List[int] = []
+    rows: list[int] = []
+    cols: list[int] = []
     for v in range(nv):
         rows.append(v)
         cols.append(0)
@@ -227,7 +226,9 @@ def test_constructor_rejects_missing_same_node_label_type() -> None:
     model = _make_model(
         node_types={
             "A": NodeTypeSpecStub(
-                distinct_nodes=[], same_node=["location"], self_relations=[],
+                distinct_nodes=[],
+                same_node=["location"],
+                self_relations=[],
             ),
         },
     )
@@ -343,8 +344,12 @@ def test_incidence_shape_matches_node_specs_and_graph() -> None:
 def test_get_connected_components_mixed() -> None:
     """One connected pair and two isolated vertices."""
     E = gb.Matrix.from_coo(
-        [0, 1], [1, 0], [1.0, 1.0],
-        nrows=4, ncols=4, dtype=gb.dtypes.FP64,
+        [0, 1],
+        [1, 0],
+        [1.0, 1.0],
+        nrows=4,
+        ncols=4,
+        dtype=gb.dtypes.FP64,
     )
     weights = np.array([1.0, 2.0, 3.0, 4.0])
 
@@ -374,7 +379,9 @@ def test_get_connected_components_single_component() -> None:
         [0, 0, 1, 1, 2, 2],
         [1, 2, 0, 2, 0, 1],
         [1.0] * 6,
-        nrows=3, ncols=3, dtype=gb.dtypes.FP64,
+        nrows=3,
+        ncols=3,
+        dtype=gb.dtypes.FP64,
     )
     weights = np.array([1.0, 1.0, 1.0])
 
@@ -407,7 +414,10 @@ def test_split_component_separates_barbell() -> None:
 
     # target_weight=4 → n_clusters = max(2, round(6/4)) = 2
     result = SpectralClusteringPartitioner._split_component(
-        E, component, weights, target_weight=4.0,
+        E,
+        component,
+        weights,
+        target_weight=4.0,
     )
 
     assert len(result) == 2
@@ -427,7 +437,10 @@ def test_split_component_preserves_total_weight() -> None:
     weights = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
 
     result = SpectralClusteringPartitioner._split_component(
-        E, component, weights, target_weight=11.0,
+        E,
+        component,
+        weights,
+        target_weight=11.0,
     )
 
     all_verts = set()
@@ -471,10 +484,7 @@ def test_combine_balanced_assignment() -> None:
     result = _combine(components, 2, 10.0)
 
     assert len(result) == 2
-    weights = sorted(
-        sum(c[0] for c in components if set(c[1].tolist()) <= set(r.tolist()))
-        for r in result
-    )
+    weights = sorted(sum(c[0] for c in components if set(c[1].tolist()) <= set(r.tolist())) for r in result)
     assert weights == pytest.approx([5.0, 5.0])
 
 
@@ -541,9 +551,6 @@ def test_combine_swap_does_not_overshoot() -> None:
     result = _combine(components, 2, 20.0)
 
     assert len(result) == 2
-    p_weights = sorted(
-        sum(c[0] for c in components if set(c[1].tolist()) <= set(r.tolist()))
-        for r in result
-    )
+    p_weights = sorted(sum(c[0] for c in components if set(c[1].tolist()) <= set(r.tolist())) for r in result)
     # LPT gives [11, 9]; no valid refinement can improve this.
     assert p_weights == pytest.approx([9.0, 11.0])

@@ -37,32 +37,32 @@ top-level `disco.graph_data` module and are not part of this subpackage.
 from __future__ import annotations
 
 from .core import Graph, SuperGraph
-from .schema import create_graph_schema
 from .db import (
-    store_graph,
     load_graph_for_scenario,
+    store_graph,
 )
 from .extract import (
-    get_vertex_data,
-    get_vertex_numeric_vector,
     get_inbound_edge_data,
     get_inbound_map,
     get_outbound_edge_data,
     get_outbound_map,
+    get_vertex_data,
+    get_vertex_numeric_vector,
 )
 from .graph_mask import GraphMask
+from .schema import create_graph_schema
 
 __all__ = [
     "Graph",
-    "SuperGraph",
     "GraphMask",
+    "SuperGraph",
     "create_graph_schema",
-    "store_graph",
-    "load_graph_for_scenario",
+    "get_inbound_edge_data",
+    "get_inbound_map",
+    "get_outbound_edge_data",
+    "get_outbound_map",
     "get_vertex_data",
     "get_vertex_numeric_vector",
-    "get_outbound_map",
-    "get_outbound_edge_data",
-    "get_inbound_map",
-    "get_inbound_edge_data",
+    "load_graph_for_scenario",
+    "store_graph",
 ]

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator, Union, Self, Optional
+from typing import Self
 
 import pandas as pd
-from sqlalchemy import create_engine, Connection, insert, delete, literal
+from sqlalchemy import Connection, create_engine, delete, insert, literal
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -43,7 +44,7 @@ class SessionManager:
             sess.close()
 
 
-DbHandle = Union[Engine, Connection, SessionManager]
+DbHandle = Engine | Connection | SessionManager
 
 
 def normalize_db_handle(db: DbHandle) -> Engine:
@@ -58,19 +59,13 @@ def df_to_table(
     df: pd.DataFrame,
     *,
     clear_all: bool = False,
-    clear_scenario: Optional[str] = None,
+    clear_scenario: str | None = None,
     chunk_size: int = 10_000,
 ):
     if clear_all:
         session.execute(delete(table))  # portable "clear table"
     elif clear_scenario is not None:
-        session.execute(
-            delete(
-                table
-            ).where(
-                table.c['scenario_id'] == literal(clear_scenario)
-            )
-        )
+        session.execute(delete(table).where(table.c["scenario_id"] == literal(clear_scenario)))
 
     cols = {c.name for c in table.columns}
     df2 = df[[c for c in df.columns if c in cols]].copy()

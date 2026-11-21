@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import pickle
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import pytest
-from kazoo.exceptions import BadVersionError, NoNodeError, NodeExistsError
+from kazoo.exceptions import BadVersionError, NodeExistsError, NoNodeError
 
 from disco.metastore.store import Metastore, MetastoreConflictError, VersionToken
 
@@ -29,7 +30,7 @@ class FakeLockingQueue:
 
     def __init__(self) -> None:
         self._items: list[bytes] = []
-        self._locked: Optional[bytes] = None
+        self._locked: bytes | None = None
 
     def put(self, item: bytes) -> None:
         self._items.append(item)
@@ -65,7 +66,7 @@ class FakeQueueFactory:
     """
 
     def __init__(self) -> None:
-        self.queues: Dict[str, FakeLockingQueue] = {}
+        self.queues: dict[str, FakeLockingQueue] = {}
 
     def __call__(self, client: Any, full_path: str) -> FakeLockingQueue:  # client unused
         q = self.queues.get(full_path)
@@ -95,9 +96,9 @@ class FakeKazooClient:
     """
 
     def __init__(self) -> None:
-        self.data: Dict[str, bytes] = {}
-        self.versions: Dict[str, int] = {}
-        self.ensure_calls: List[str] = []
+        self.data: dict[str, bytes] = {}
+        self.versions: dict[str, int] = {}
+        self.ensure_calls: list[str] = []
 
     # Basic CRUD ------------------------------------------------------------
 
@@ -123,12 +124,12 @@ class FakeKazooClient:
 
         # Any child under this node => parent "exists" for our tests
         child_prefix = prefix + "/"
-        if any(p.startswith(child_prefix) for p in self.data.keys()):
+        if any(p.startswith(child_prefix) for p in self.data):
             return FakeStat(self.versions.get(prefix, 0))
 
         return None
 
-    def get(self, path: str) -> Tuple[bytes, FakeStat]:
+    def get(self, path: str) -> tuple[bytes, FakeStat]:
         """
         Kazoo get() raises NoNodeError if missing and returns (data, stat) if present.
         """
@@ -198,7 +199,7 @@ class FakeKazooClient:
         p_len = len(prefix)
 
         children = set()
-        for p in self.data.keys():
+        for p in self.data:
             if not p.startswith(prefix):
                 continue
             if p == prefix:
@@ -258,6 +259,7 @@ def connection(fake_client):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 # noinspection PyTypeChecker,PyUnresolvedReferences,PyArgumentList, PyUnusedLocal
 def test_init_ensures_base_structure_without_group(connection, fake_client):
@@ -482,6 +484,7 @@ def test_dequeue_force_mode_consume_drops_locked_head(connection, fake_client, m
 # Tests: versioning / CAS / atomic update
 # ---------------------------------------------------------------------------
 
+
 # noinspection PyTypeChecker,PyUnresolvedReferences,PyArgumentList
 def test_get_key_with_version_missing_returns_none(connection, fake_client):
     m = Metastore(connection=connection, group=None)
@@ -632,7 +635,9 @@ def test_atomic_update_key_create_race_then_retry(connection, fake_client, monke
     real_create = fake_client.create
     calls = {"n": 0}
 
-    def flaky_create(path: str, value: bytes, makepath: bool = False, ephemeral: bool = False, **kwargs: Any) -> None:
+    def flaky_create(
+        path: str, value: bytes, makepath: bool = False, ephemeral: bool = False, **kwargs: Any
+    ) -> None:
         calls["n"] += 1
         if calls["n"] == 1:
             real_create(path, pickle.dumps("other"), makepath=makepath, ephemeral=ephemeral, **kwargs)

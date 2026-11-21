@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple
+from typing import Any
 
 import graphblas as gb
 import pytest
@@ -17,7 +18,7 @@ class FakeMetastore:
     """
 
     def __init__(self) -> None:
-        self._kv: Dict[str, Any] = {}
+        self._kv: dict[str, Any] = {}
 
     def update_key(self, path: str, value: Any) -> None:
         self._kv[path] = value
@@ -28,14 +29,14 @@ class FakeMetastore:
 
 @dataclass(frozen=True, slots=True)
 class NodeTypeSpecStub:
-    self_relations: List[Tuple[str, str]]
+    self_relations: list[tuple[str, str]]
 
 
 @dataclass(frozen=True, slots=True)
 class ModelSpecStub:
     # Per your contract: list[str] already ordered by layer.
-    simprocs: List[str]
-    node_types: Dict[str, NodeTypeSpecStub]
+    simprocs: list[str]
+    node_types: dict[str, NodeTypeSpecStub]
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,24 +48,24 @@ class ModelStub:
 class GraphStub:
     scenario_id: str
     num_vertices: int
-    layers: List[int]
-    matrices: Dict[int, gb.Matrix]
+    layers: list[int]
+    matrices: dict[int, gb.Matrix]
 
     def get_matrix(self, layer: int) -> gb.Matrix:
         return self.matrices[layer]
 
 
-def _incidence_from_rows(n_vertices: int, rows: List[Sequence[int]]) -> gb.Matrix:
+def _incidence_from_rows(n_vertices: int, rows: list[Sequence[int]]) -> gb.Matrix:
     # rows[i] are vertex indices assigned to node row i
-    I: List[int] = []
-    J: List[int] = []
-    X: List[bool] = []
+    II: list[int] = []
+    J: list[int] = []
+    X: list[bool] = []
     for r, cols in enumerate(rows):
         for c in cols:
-            I.append(r)
+            II.append(r)
             J.append(int(c))
             X.append(True)
-    return gb.Matrix.from_coo(I, J, X, nrows=len(rows), ncols=n_vertices, dtype=bool)
+    return gb.Matrix.from_coo(II, J, X, nrows=len(rows), ncols=n_vertices, dtype=bool)
 
 
 def _empty_topology(node_name: str, node_type: str) -> NodeTopology:
@@ -79,7 +80,7 @@ def _empty_topology(node_name: str, node_type: str) -> NodeTopology:
 
 def _coo_structure(m: gb.Matrix) -> set[tuple[int, int]]:
     r, c, _ = m.to_coo()
-    return set(zip(r.tolist(), c.tolist()))
+    return set(zip(r.tolist(), c.tolist(), strict=False))
 
 
 def _coo_indices(v: gb.Vector) -> set[int]:
@@ -87,8 +88,8 @@ def _coo_indices(v: gb.Vector) -> set[int]:
     return set(idx.tolist())
 
 
-def _node_indices_for_specs(specs: Sequence[NodeInstanceSpec]) -> Dict[str, int]:
-    out: Dict[str, int] = {}
+def _node_indices_for_specs(specs: Sequence[NodeInstanceSpec]) -> dict[str, int]:
+    out: dict[str, int] = {}
     for i, ns in enumerate(specs):
         if ns.node_name in out:
             raise ValueError(f"duplicate node_name in test node_specs: {ns.node_name}")
@@ -143,7 +144,7 @@ def test_partitioning_post_init_validates_incidence_and_topology() -> None:
         )
 
     incidence_ok = _incidence_from_rows(n_vertices, rows=[[0]])
-    topo_missing: Dict[str, NodeTopology] = {}
+    topo_missing: dict[str, NodeTopology] = {}
     with pytest.raises(ValueError, match="missing topology for node"):
         Partitioning(
             partitioning_id="pid",
@@ -156,7 +157,7 @@ def test_partitioning_post_init_validates_incidence_and_topology() -> None:
         )
 
     topo_mismatch = {"p0-A": _empty_topology("p0-A", "WRONG")}
-    with pytest.raises(ValueError, match="topology.node_type"):
+    with pytest.raises(ValueError, match=r"topology.node_type"):
         Partitioning(
             partitioning_id="pid",
             scenario_id="s",

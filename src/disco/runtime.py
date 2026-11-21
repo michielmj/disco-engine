@@ -1,13 +1,3 @@
-from __future__ import annotations
-
-from data_logger import DataLogger
-from numpy.random import SeedSequence, Generator as NpGenerator, default_rng
-
-from .exceptions import DiscoRuntimeError
-from .graph_data import GraphData
-from .partitioning import NodeInstanceSpec, Partitioning
-from .simproc import SimProc
-
 """
 NodeRuntime placeholder implementation.
 
@@ -30,13 +20,24 @@ Those will be added later; for now, NodeRuntime stores incoming
 envelopes in simple lists to keep the system testable.
 """
 
-from typing import Generator, Any, Dict
+from __future__ import annotations
+
+from collections.abc import Generator
+from typing import Any
+
+from data_logger import DataLogger
+from numpy.random import Generator as NpGenerator
+from numpy.random import SeedSequence, default_rng
 from tools.mp_logging import getLogger
 
 from .envelopes import EventEnvelope, PromiseEnvelope
+from .exceptions import DiscoRuntimeError
+from .graph_data import GraphData
 from .model import Model
+from .node import Node, NodeRuntimeLike, NodeStatus
+from .partitioning import NodeInstanceSpec, Partitioning
 from .router import Router
-from .node import NodeStatus, NodeRuntimeLike, Node
+from .simproc import SimProc
 
 logger = getLogger(__name__)
 
@@ -60,15 +61,15 @@ class NodeRuntime(NodeRuntimeLike):
     """
 
     def __init__(
-            self,
-            repid: str,
-            spec: NodeInstanceSpec,
-            model: Model,
-            partitioning: Partitioning,
-            router: Router,
-            dlogger: DataLogger,
-            seed_sequence: SeedSequence,
-            data: GraphData,
+        self,
+        repid: str,
+        spec: NodeInstanceSpec,
+        model: Model,
+        partitioning: Partitioning,
+        router: Router,
+        dlogger: DataLogger,
+        seed_sequence: SeedSequence,
+        data: GraphData,
     ) -> None:
         """
         Parameters
@@ -99,17 +100,20 @@ class NodeRuntime(NodeRuntimeLike):
         self._rng = default_rng(seed_sequence)
         self._node = model.node_factory(spec.node_type, self)
 
-        self._simprocs = tuple(SimProc(
-            name=s,
-            number=i,
-            node_name=self._name,
-            repid=repid,
-            on_events=self._node.on_events,
-            route_event=router.send_event,
-            route_promise=router.send_promise,
-            predecessors=partitioning.predecessors(node_name=self._name, simproc_name=s),
-            successors=partitioning.successors(node_name=self._name, simproc_name=s)
-        ) for i, s in enumerate(model.spec.simprocs))
+        self._simprocs = tuple(
+            SimProc(
+                name=s,
+                number=i,
+                node_name=self._name,
+                repid=repid,
+                on_events=self._node.on_events,
+                route_event=router.send_event,
+                route_promise=router.send_promise,
+                predecessors=partitioning.predecessors(node_name=self._name, simproc_name=s),
+                successors=partitioning.successors(node_name=self._name, simproc_name=s),
+            )
+            for i, s in enumerate(model.spec.simprocs)
+        )
 
         self._status = NodeStatus.INITIALIZED
         self._waiting_for: str | None = None
@@ -172,12 +176,12 @@ class NodeRuntime(NodeRuntimeLike):
         return self._rng
 
     def send_event(
-            self,
-            target_node: str,
-            target_simproc: str,
-            epoch: float,
-            data: Any,
-            headers: Dict[str, str] | None = None,
+        self,
+        target_node: str,
+        target_simproc: str,
+        epoch: float,
+        data: Any,
+        headers: dict[str, str] | None = None,
     ) -> None:
         if self._status == NodeStatus.ACTIVE:
             assert self._active_simproc is not None
@@ -191,12 +195,18 @@ class NodeRuntime(NodeRuntimeLike):
             )
 
             self._active_simproc.send_event(
-                target_node=target_node, target_simproc=target_simproc, epoch=epoch, data=data, headers=headers
+                target_node=target_node,
+                target_simproc=target_simproc,
+                epoch=epoch,
+                data=data,
+                headers=headers,
             )
 
         else:
-            raise DiscoRuntimeError(f'NodeRuntime[{self._name}]: `send_event` called on a non-active status: '
-                                    f'status={self._status}')
+            raise DiscoRuntimeError(
+                f"NodeRuntime[{self._name}]: `send_event` called on a non-active status: "
+                f"status={self._status}"
+            )
 
     def wakeup(self, epoch: float, hard: bool) -> None:
         if self._status == NodeStatus.ACTIVE:
@@ -211,8 +221,9 @@ class NodeRuntime(NodeRuntimeLike):
 
             self._active_simproc.wakeup(epoch=epoch, hard=hard)
         else:
-            raise DiscoRuntimeError(f'NodeRuntime[{self._name}]: `wakeup` called on a non-active status: '
-                                    f'status={self._status}')
+            raise DiscoRuntimeError(
+                f"NodeRuntime[{self._name}]: `wakeup` called on a non-active status: status={self._status}"
+            )
 
     def advance_promise(self, target_node: str, target_simproc: str, epoch: float) -> None:
 
@@ -227,10 +238,14 @@ class NodeRuntime(NodeRuntimeLike):
                 epoch,
             )
 
-            self._active_simproc.advance_promise(target_node=target_node, target_simproc=target_simproc, epoch=epoch)
+            self._active_simproc.advance_promise(
+                target_node=target_node, target_simproc=target_simproc, epoch=epoch
+            )
         else:
-            raise DiscoRuntimeError(f'NodeRuntime[{self._name}]: `advance_promise` called on a non-active status: '
-                                    f'status={self._status}')
+            raise DiscoRuntimeError(
+                f"NodeRuntime[{self._name}]: `advance_promise` called on a non-active status: "
+                f"status={self._status}"
+            )
 
     # ------------------------------------------------------------------ #
     # Ingress API (used by transports / Worker)
@@ -306,8 +321,9 @@ class NodeRuntime(NodeRuntimeLike):
                 yield
 
             else:
-                # The next epoch is the smallest of next_epochs among the processes. If any simproc has next_epoch equal
-                # to None, we de not know what level to simproc next and we must wait for further promises.
+                # The next epoch is the smallest of next_epochs among the processes. If any simproc has
+                # next_epoch equal to None, we de not know what level to simproc next and we must wait
+                # for further promises.
                 next_epoch: float | None = float("inf")
                 for simproc in self._simprocs:
                     if simproc.next_epoch is None:
@@ -316,8 +332,8 @@ class NodeRuntime(NodeRuntimeLike):
                         next_epoch = None
                         break
 
-                    # SimProcs are iterated in priority order (higher → lower). We select the SimProc with the smallest
-                    # next_epoch; ties keep the first encountered, so higher-order SimProcs win ties.
+                    # SimProcs are iterated in priority order (higher → lower). We select the SimProc with the
+                    # smallest next_epoch; ties keep the first encountered, so higher-order SimProcs win ties.
                     elif simproc.next_epoch < next_epoch:
                         next_epoch = simproc.next_epoch
                         self._active_simproc = simproc
@@ -350,8 +366,7 @@ class NodeRuntime(NodeRuntimeLike):
                     assert self._active_simproc is not None
                     if not self._active_simproc.try_next_epoch():
                         self._waiting_for = (
-                            f"{self._active_simproc.name} waiting for "
-                            f"{self._active_simproc.waiting_for}"
+                            f"{self._active_simproc.name} waiting for {self._active_simproc.waiting_for}"
                         )
                         no_news = NO_NEWS_SKIP
                         yield

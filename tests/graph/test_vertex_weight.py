@@ -2,6 +2,7 @@
 """
 Tests for the vertex_weight attribute on Graph and SuperGraph.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -22,6 +23,7 @@ def _simple_graph(num_vertices: int = 4, vertex_weight: np.ndarray | None = None
 # --------------------------------------------------------------------------- #
 # Graph.vertex_weight
 # --------------------------------------------------------------------------- #
+
 
 def test_graph_default_vertex_weight_is_ones() -> None:
     g = _simple_graph(num_vertices=5)
@@ -58,6 +60,7 @@ def test_vertex_weight_length_mismatch_raises() -> None:
 # --------------------------------------------------------------------------- #
 # SuperGraph.vertex_weight via _build_supergraph
 # --------------------------------------------------------------------------- #
+
 
 def test_supergraph_vertex_weight_is_summed() -> None:
     """
@@ -98,6 +101,7 @@ def test_supergraph_inherits_vertex_weight_from_graph() -> None:
     )
     # Attach labels: two groups share label "region=north" (v0,v1) and "region=south" (v2,v3)
     from disco.partitioner import NODE_TYPE
+
     label_meta = {0: (NODE_TYPE, "A"), 1: ("region", "north"), 2: ("region", "south")}
     rows = [0, 0, 1, 1, 2, 2, 3, 3]
     cols = [0, 1, 0, 1, 0, 2, 0, 2]

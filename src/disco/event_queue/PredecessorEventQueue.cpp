@@ -8,7 +8,7 @@ namespace {
 
 // Safe GIL guard for refcount ops (also works when called from non-Python threads).
 class GilGuard {
-public:
+   public:
     GilGuard() : active_(Py_IsInitialized() != 0), state_() {
         if (active_) {
             state_ = PyGILState_Ensure();
@@ -23,7 +23,7 @@ public:
     GilGuard(const GilGuard&) = delete;
     GilGuard& operator=(const GilGuard&) = delete;
 
-private:
+   private:
     bool active_;
     PyGILState_STATE state_;
 };
@@ -48,9 +48,7 @@ inline void decref(PyObject* obj) {
 
 PredecessorEvent::PredecessorEvent() noexcept : epoch(0.0), data(nullptr), headers() {}
 
-PredecessorEvent::PredecessorEvent(double epoch_,
-                                   PyObject* data_,
-                                   Headers headers_)
+PredecessorEvent::PredecessorEvent(double epoch_, PyObject* data_, Headers headers_)
     : epoch(epoch_), data(data_), headers(std::move(headers_)) {
     // data_ is BORROWED -> take our own reference
     incref(data);
@@ -203,7 +201,6 @@ bool PredecessorEventQueue::_tryNextEpoch() {
 
     while ((_events.empty() || _events.top().epoch > _epoch) &&
            (_num_events.find(try_seqnr) != _num_events.end())) {
-
         const double try_epoch = _epochs.find(try_seqnr)->second;
         const uint64_t num_events = _num_events.find(try_seqnr)->second;
 

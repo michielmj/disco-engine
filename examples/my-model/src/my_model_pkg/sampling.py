@@ -1,23 +1,23 @@
 import numpy as np
-from numpy.random import Generator
 import pandas as pd
 from graphblas import Vector, op
+from numpy.random import Generator
 from scipy.stats import distributions as scipy_dists
 
 
 def sample_dists(
-        rng: Generator,
-        dists: list[tuple[any, np.ndarray]],  # distribution, indices
-        sample_indices: np.ndarray,
-        num_vertices: int,
-        round_values: bool = False,
-        lower: float = -float("inf"),
-        upper: float = float("inf"),
+    rng: Generator,
+    dists: list[tuple[any, np.ndarray]],  # distribution, indices
+    sample_indices: np.ndarray,
+    num_vertices: int,
+    round_values: bool = False,
+    lower: float = -float("inf"),
+    upper: float = float("inf"),
 ) -> Vector:
     sample = Vector.from_coo(
         indices=sample_indices,
         values=np.zeros_like(sample_indices, dtype=np.dtypes.Float64DType),
-        size=num_vertices
+        size=num_vertices,
     )
 
     for dist, indices, params in dists:
@@ -44,7 +44,7 @@ def sample_dists(
 
             sample(op.plus) << Vector.from_coo(indices=needed, values=values, size=num_vertices)
 
-    return sample.select('!=', 0).new()
+    return sample.select("!=", 0).new()
 
 
 def get_dists(data: pd.DataFrame, dists_column: str, params_column: str):

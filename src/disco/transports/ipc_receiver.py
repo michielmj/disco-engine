@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Receiver loops for IPC queues."""
 
+from __future__ import annotations
+
+import pickle
+from collections.abc import Mapping
 from multiprocessing import Queue
 from multiprocessing.shared_memory import SharedMemory
-from typing import Mapping
-import pickle
 
 from tools.mp_logging import getLogger
 
@@ -107,13 +107,11 @@ class IPCReceiver:
                 shm.close()
                 shm.unlink()
 
-        if 'serialization_protocol' in msg.headers:
-            protocol = msg.headers.pop('serialization_protocol')
-            if protocol[:6] == 'PICKLE':
+        if "serialization_protocol" in msg.headers:
+            protocol = msg.headers.pop("serialization_protocol")
+            if protocol[:6] == "PICKLE":
                 data = pickle.loads(data)
             else:
-                raise NotImplementedError(f'Serializaiton protocol {protocol} is not supported.')
+                raise NotImplementedError(f"Serializaiton protocol {protocol} is not supported.")
 
         return data
-
-

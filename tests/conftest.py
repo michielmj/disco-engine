@@ -9,6 +9,7 @@ indefinitely after all tests have finished.  cancel_join_thread() tells the
 Queue not to wait for the feeder thread on close(), which is always correct
 for tests because they never span multiple OS processes.
 """
+
 from __future__ import annotations
 
 import multiprocessing.queues
