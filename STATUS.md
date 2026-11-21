@@ -26,3 +26,4 @@ This is where the work stands. Specs say *what* (`specs/`); this file says
 |---|---|---|---|
 | 1 | scaffold-adoption | Restructure the package layout, breaking changes allowed (owner, 2026-11-21) | unset |
 | 2 | scaffold-adoption | Move mypy to `strict = true`; `.claude/rules/python.md` already asks for it | unset |
+| 3 | scaffold-lint-layering | Restructuring: move SQLAlchemy out of `graph.graph_mask` and `graph.schema`, then drop `allow_indirect_imports` from the graph-core contract (decision 0001) | with item 1 |
