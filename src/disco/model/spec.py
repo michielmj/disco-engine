@@ -334,7 +334,7 @@ class ModelSpec(BaseModel):
         # optionally: ensure no duplicate table names across simproc_edge_data_tables
         # (helps avoid confusion)
         seen_tables: set[str] = set()
-        for sp_name, table_name in self.simproc_edge_data_tables.items():
+        for _sp_name, table_name in self.simproc_edge_data_tables.items():
             if table_name in seen_tables:
                 raise ValueError(f"duplicate edge-data-table '{table_name}' used for multiple simprocs")
             seen_tables.add(table_name)

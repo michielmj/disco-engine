@@ -350,7 +350,7 @@ class Orchestrator:
             used_workers: set[str] = set()
 
             # Keep preferred bindings that fit within [0..num_partitions-1].
-            for worker, part in zip(preferred_workers, preferred_partitions):
+            for worker, part in zip(preferred_workers, preferred_partitions, strict=False):
                 if 0 <= part < num_partitions and part not in plan:
                     plan[part] = worker
                     used_workers.add(worker)

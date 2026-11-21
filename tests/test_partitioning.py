@@ -57,15 +57,15 @@ class GraphStub:
 
 def _incidence_from_rows(n_vertices: int, rows: list[Sequence[int]]) -> gb.Matrix:
     # rows[i] are vertex indices assigned to node row i
-    I: list[int] = []
+    II: list[int] = []
     J: list[int] = []
     X: list[bool] = []
     for r, cols in enumerate(rows):
         for c in cols:
-            I.append(r)
+            II.append(r)
             J.append(int(c))
             X.append(True)
-    return gb.Matrix.from_coo(I, J, X, nrows=len(rows), ncols=n_vertices, dtype=bool)
+    return gb.Matrix.from_coo(II, J, X, nrows=len(rows), ncols=n_vertices, dtype=bool)
 
 
 def _empty_topology(node_name: str, node_type: str) -> NodeTopology:
@@ -80,7 +80,7 @@ def _empty_topology(node_name: str, node_type: str) -> NodeTopology:
 
 def _coo_structure(m: gb.Matrix) -> set[tuple[int, int]]:
     r, c, _ = m.to_coo()
-    return set(zip(r.tolist(), c.tolist()))
+    return set(zip(r.tolist(), c.tolist(), strict=False))
 
 
 def _coo_indices(v: gb.Vector) -> set[int]:
@@ -157,7 +157,7 @@ def test_partitioning_post_init_validates_incidence_and_topology() -> None:
         )
 
     topo_mismatch = {"p0-A": _empty_topology("p0-A", "WRONG")}
-    with pytest.raises(ValueError, match="topology.node_type"):
+    with pytest.raises(ValueError, match=r"topology.node_type"):
         Partitioning(
             partitioning_id="pid",
             scenario_id="s",

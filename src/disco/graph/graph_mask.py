@@ -108,7 +108,7 @@ class GraphMask:
                 "vertex_index": int(idx),
                 "updated_at": now,
             }
-            for idx, val in zip(indices, values)
+            for idx, val in zip(indices, values, strict=False)
             if bool(val)
         ]
 

@@ -400,9 +400,8 @@ def test_ready_from_available_raises(worker_env):
     w, _cluster, _store, _ev_q, _pr_q = worker_env
 
     desired_ready = FakeDesired("r-ready", WorkerState.READY)
-    with w._lock:
-        with pytest.raises(worker_mod.WorkerError, match="Cannot transition to READY from AVAILABLE"):
-            w._apply_desired_locked(desired_ready)
+    with w._lock, pytest.raises(worker_mod.WorkerError, match="Cannot transition to READY from AVAILABLE"):
+        w._apply_desired_locked(desired_ready)
 
 
 def test_terminated_from_reserved_returns_to_available(worker_env):

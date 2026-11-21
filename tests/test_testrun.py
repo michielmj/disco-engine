@@ -321,7 +321,7 @@ def test_seeds_assigned_deterministically_by_node_specs_order(patch_testrun_deps
     expected = ss.spawn(len(part.node_specs))
 
     # Compare via generated state (stable within a process; you said it needn't be stable across envs).
-    for spec, exp_ss in zip(part.node_specs, expected):
+    for spec, exp_ss in zip(part.node_specs, expected, strict=False):
         rt = tr.nodes[spec.node_name]  # type: ignore[attr-defined]
         got_state = rt.seed_sequence.generate_state(8)
         exp_state = exp_ss.generate_state(8)

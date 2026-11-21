@@ -33,8 +33,8 @@ class FakeNodeController:
 def _safe_get(q: Queue, what: str):
     try:
         return q.get(timeout=GET_TIMEOUT)
-    except Empty:
-        raise AssertionError(f"Timed out waiting for {what} on Queue")
+    except Empty as exc:
+        raise AssertionError(f"Timed out waiting for {what} on Queue") from exc
 
 
 def test_ipc_handles_node_true_when_address_and_queues_present() -> None:

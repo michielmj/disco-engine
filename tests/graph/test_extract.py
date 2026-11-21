@@ -415,12 +415,12 @@ def test_outbound_and_inbound_map() -> None:
 
         # Check basic structure: non-zero entries in the right places
         rows, cols, vals = out_mat.to_coo()
-        entries = {(int(r), int(c)): float(v) for r, c, v in zip(rows, cols, vals)}
+        entries = {(int(r), int(c)): float(v) for r, c, v in zip(rows, cols, vals, strict=False)}
         assert entries.get((0, 1)) == 1.5
         assert entries.get((1, 2)) == 2.5
 
         rows_i, cols_i, vals_i = in_mat.to_coo()
-        entries_i = {(int(r), int(c)): float(v) for r, c, v in zip(rows_i, cols_i, vals_i)}
+        entries_i = {(int(r), int(c)): float(v) for r, c, v in zip(rows_i, cols_i, vals_i, strict=False)}
         assert entries_i.get((0, 1)) == 1.5
         assert entries_i.get((1, 2)) == 2.5
 

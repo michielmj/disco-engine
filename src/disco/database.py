@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Self, Union
+from typing import Self
 
 import pandas as pd
 from sqlalchemy import Connection, create_engine, delete, insert, literal
@@ -44,7 +44,7 @@ class SessionManager:
             sess.close()
 
 
-DbHandle = Union[Engine, Connection, SessionManager]
+DbHandle = Engine | Connection | SessionManager
 
 
 def normalize_db_handle(db: DbHandle) -> Engine:

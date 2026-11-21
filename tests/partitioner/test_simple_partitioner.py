@@ -56,23 +56,23 @@ def _make_graph_two_node_types_same_region() -> Graph:
 
     # label_matrix is (num_vertices x num_labels)
     # rows=vertices, cols=label ids
-    I: list[int] = []
+    II: list[int] = []
     J: list[int] = []
     X: list[bool] = []
 
     # v0,v1 are A + north
     for v in (0, 1):
-        I.extend([v, v])
+        II.extend([v, v])
         J.extend([0, 2])
         X.extend([True, True])
 
     # v2,v3 are B + north
     for v in (2, 3):
-        I.extend([v, v])
+        II.extend([v, v])
         J.extend([1, 2])
         X.extend([True, True])
 
-    label_matrix = gb.Matrix.from_coo(I, J, X, nrows=num_vertices, ncols=3, dtype=bool)
+    label_matrix = gb.Matrix.from_coo(II, J, X, nrows=num_vertices, ncols=3, dtype=bool)
     g.set_labels(label_matrix=label_matrix, label_meta=label_meta)
     return g
 

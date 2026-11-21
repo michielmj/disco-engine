@@ -239,7 +239,7 @@ def get_vertex_numeric_vector(
 
 
 # ---------------------------------------------------------------------------
-# 2. Edge data (outbound / inbound) – key-based tables, index→key mapping
+# 2. Edge data (outbound / inbound) - key-based tables, index→key mapping
 # ---------------------------------------------------------------------------
 
 

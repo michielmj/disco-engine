@@ -442,7 +442,6 @@ def test_reserve_workers_timeout_raises_and_cleans_up(
     RESERVED and raise RuntimeError.
     """
     # Disable auto-transition so we can control which workers reach RESERVED.
-    original_set = fake_cluster.set_desired_state.__func__  # type: ignore[attr-defined]
 
     def set_desired_no_auto(self, *, worker_address, state, expid=None, repid=None, partition=None):
         self.desired_calls.append(

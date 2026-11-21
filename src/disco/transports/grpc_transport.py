@@ -253,10 +253,10 @@ class GrpcTransport(Transport):
         """
         try:
             addr = self._cluster.address_book[(repid, node)]
-        except KeyError:
+        except KeyError as exc:
             msg = f"No address for (repid={repid!r}, node={node!r}) in Cluster.address_book"
             logger.error(msg)
-            raise KeyError(msg)
+            raise KeyError(msg) from exc
         return addr
 
     def _get_or_create_endpoint(self, addr: str) -> _RemoteEndpoint:

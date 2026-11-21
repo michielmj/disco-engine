@@ -190,7 +190,7 @@ def test_node_type_labels_assigned() -> None:
     md = MetaData()
     sp_nodes = _create_node_table(md, "sp_nodes")
     dc_nodes = _create_node_table(md, "dc_nodes")
-    edges = _create_edge_table(md, "edges")
+    _create_edge_table(md, "edges")
     md.create_all(engine)
 
     with engine.begin() as conn:
@@ -242,7 +242,7 @@ def test_distinct_node_labels() -> None:
     engine = sa.create_engine("sqlite+pysqlite:///:memory:")
     md = MetaData()
     nodes = _create_node_table(md, "sp_nodes", extra_cols=[Column("region", String)])
-    edges = _create_edge_table(md, "sp_edges")
+    _create_edge_table(md, "sp_edges")
     md.create_all(engine)
 
     with engine.begin() as conn:
@@ -283,7 +283,7 @@ def test_distinct_labels_union_across_node_types() -> None:
     md = MetaData()
     sp_nodes = _create_node_table(md, "sp_nodes", extra_cols=[Column("region", String)])
     dc_nodes = _create_node_table(md, "dc_nodes", extra_cols=[Column("region", String)])
-    edges = _create_edge_table(md, "edges")
+    _create_edge_table(md, "edges")
     md.create_all(engine)
 
     with engine.begin() as conn:

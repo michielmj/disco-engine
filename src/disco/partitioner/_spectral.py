@@ -17,7 +17,7 @@ Algorithm
    SuperGraph (one instance = all supervertices sharing the same node-type +
    distinct-label combination).
 3. Project supervertex-level affinity and weights to the node-instance level
-   using a scipy sparse projection matrix P of shape (n_instances × n_sv).
+   using a scipy sparse projection matrix P of shape (n_instances x n_sv).
 4. Recursively split connected components using
    ``sklearn.cluster.SpectralClustering`` until every cluster weight ≤
    ``target_weight = total_weight / n_partitions + 2 * max_weight``.

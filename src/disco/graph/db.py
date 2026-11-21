@@ -120,7 +120,7 @@ def _store_edges_for_scenario(session: Session, graph: Graph) -> None:
                 "target_idx": int(c),
                 "weight": float(v),
             }
-            for r, c, v in zip(rows, cols, vals)
+            for r, c, v in zip(rows, cols, vals, strict=False)
         ]
         session.execute(insert(edges), rows_to_insert)
 
@@ -172,7 +172,7 @@ def _store_labels_for_scenario(session: Session, graph: Graph) -> None:
         return
 
     assignments = []
-    for v_idx, lbl_idx, val in zip(rows, cols, vals):
+    for v_idx, lbl_idx, val in zip(rows, cols, vals, strict=False):
         if not bool(val):
             continue
         db_label_id = label_index_to_db_id[int(lbl_idx)]

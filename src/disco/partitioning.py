@@ -455,7 +455,7 @@ class Partitioning:
             R = gb.op.plus_times(Q @ incidence.T).select("!=", 0)
 
             r_rows, r_cols, _ = R.to_coo()
-            for rr, cc in zip(r_rows.tolist(), r_cols.tolist()):
+            for rr, cc in zip(r_rows.tolist(), r_cols.tolist(), strict=False):
                 src = node_names[rr]
                 dst = node_names[cc]
                 successors[src].setdefault(simproc_name, set()).add((dst, simproc_name))

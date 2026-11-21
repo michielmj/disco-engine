@@ -551,7 +551,7 @@ class Graph:
 
         A: (v x a) BOOL, B: (v x b) BOOL  ->  (v x (a*b)) BOOL
         """
-        v, a = A.nrows, A.ncols
+        a = A.ncols
         _, b = B.nrows, B.ncols
 
         true_b = gb.Matrix.from_scalar(True, 1, b, dtype=gb.dtypes.BOOL)
@@ -672,7 +672,7 @@ class Graph:
             augmented_matrices.append(aug_mat)
 
         # Row-wise AND Kronecker product across all (augmented) type matrices.
-        # S has shape (num_vertices × product_of_augmented_widths).
+        # S has shape (num_vertices x product_of_augmented_widths).
         S: Matrix = self._rowwise_and_kron_many(*augmented_matrices)
 
         # Determine which combination-columns have at least one supporting vertex.
@@ -688,7 +688,7 @@ class Graph:
         rows_per_type: list[np.ndarray] = []
         base = int(S.ncols)
         for label_indices, aug_mat, orig_width in zip(
-            label_indices_list, augmented_matrices, original_widths
+            label_indices_list, augmented_matrices, original_widths, strict=False
         ):
             local = combo_indices % base
             base //= int(aug_mat.ncols)
@@ -841,7 +841,7 @@ class Graph:
         """
         orig_indices = np.arange(self.num_vertices, dtype=np.int64)
 
-        # --- projection matrix P (FP64): shape (num_super × num_vertices) ---
+        # --- projection matrix P (FP64): shape (num_super x num_vertices) ---
         P = gb.Matrix.from_coo(
             vertex_map,
             orig_indices,

@@ -79,7 +79,8 @@ class Node(ABC):
 
     __runtime__: NodeRuntimeLike
 
-    def __init__(self, params: dict[str, Any]):
+    # Deliberately concrete and empty: subclasses that need no setup need not override it.
+    def __init__(self, params: dict[str, Any]):  # noqa: B027
         pass
 
     @abstractmethod

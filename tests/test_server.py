@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import pytest
 
@@ -27,11 +27,6 @@ class FakeGrpcSettings:
 class FakeZookeeperSettings:
     default_group: str = "default"
     loglevel: str = "INFO"
-
-
-@dataclass(slots=True)
-class FakeLoggingSettings:
-    loglevel: str = "DEBUG"
 
 
 @dataclass(slots=True)
@@ -187,7 +182,7 @@ class FakeCtx:
 class FakeWorker:
     """Captures constructor args and exits immediately in run_forever()."""
 
-    instances: list[FakeWorker] = []
+    instances: ClassVar[list[FakeWorker]] = []
 
     def __init__(
         self,
