@@ -8,7 +8,7 @@ This is where the work stands. Specs say *what* (`specs/`); this file says
 | Milestone | Branch | State | Requirement | Notes |
 |---|---|---|---|---|
 | Adopt the scaffolder template | `scaffold-adoption`, `scaffold-lint-layering` | landed in `staging` (#47, #48), 2026-11-21 | none (owner's direction, 2026-11-21) | `scaffold-lint-layering` fix round 1: no re-review: prescribed and mutation-verified |
-| Python 3.14–3.15, dependency upgrades | `py314-deps` | briefing | none (owner's direction, 2026-11-21) | stacked on `staging` |
+| Python 3.14–3.15, dependency upgrades | `py314-deps` | implementing (launched 2026-11-21, after the owner installed CPython 3.15.2) | none (owner's direction, 2026-11-21) | stacked on `staging` |
 
 ## Releases
 
