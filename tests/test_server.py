@@ -154,8 +154,8 @@ class FakeProcess:
 
     def terminate(self) -> None:
         self.terminate_called = True
-        # Simulate terminate not always working immediately; leave alive until killed or join logic changes
-        # it.
+        # Simulate terminate not always working immediately; leave alive until killed or join
+        # logic changes it.
 
     def kill(self) -> None:
         self.kill_called = True

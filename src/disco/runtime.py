@@ -322,8 +322,8 @@ class NodeRuntime(NodeRuntimeLike):
 
             else:
                 # The next epoch is the smallest of next_epochs among the processes. If any simproc has
-                # next_epoch equal
-                # to None, we de not know what level to simproc next and we must wait for further promises.
+                # next_epoch equal to None, we de not know what level to simproc next and we must wait
+                # for further promises.
                 next_epoch: float | None = float("inf")
                 for simproc in self._simprocs:
                     if simproc.next_epoch is None:
@@ -333,8 +333,7 @@ class NodeRuntime(NodeRuntimeLike):
                         break
 
                     # SimProcs are iterated in priority order (higher → lower). We select the SimProc with the
-                    # smallest
-                    # next_epoch; ties keep the first encountered, so higher-order SimProcs win ties.
+                    # smallest next_epoch; ties keep the first encountered, so higher-order SimProcs win ties.
                     elif simproc.next_epoch < next_epoch:
                         next_epoch = simproc.next_epoch
                         self._active_simproc = simproc

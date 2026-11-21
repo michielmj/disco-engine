@@ -162,8 +162,8 @@ class ModelSpec(BaseModel):
 
     Internally, this spec is normalized to:
       - simprocs: List[str] (ordered simproc names)
-      - simproc_edge_data_tables: Dict[str, str] (simproc name -> edge data table) for those simprocs that
-        define one
+      - simproc_edge_data_tables: Dict[str, str] (simproc name -> edge data table), for those simprocs
+        that define one
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
