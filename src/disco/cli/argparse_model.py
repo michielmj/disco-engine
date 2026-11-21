@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import types
 from typing import Any, Union, cast, get_args, get_origin
 
 from pydantic import BaseModel
@@ -8,20 +9,13 @@ from pydantic import BaseModel
 
 def _is_optional(tp: Any) -> tuple[bool, Any]:
     origin = get_origin(tp)
-    if origin is Union:
+    # `X | None` (types.UnionType) is the same optional as Optional[X]; the safe UP007/UP045
+    # fixes rewrote the models' annotations to that form.
+    if origin is Union or origin is types.UnionType:
         args = tuple(a for a in get_args(tp))
         if len(args) == 2 and type(None) in args:
             other = args[0] if args[1] is type(None) else args[1]
             return True, other
-    return False, tp
-
-
-def _is_list(tp: Any) -> tuple[bool, Any]:
-    origin = get_origin(tp)
-    if origin in (list, List):  # type: ignore[name-defined]
-        args = get_args(tp)
-        inner = args[0] if args else Any
-        return True, inner
     return False, tp
 
 
