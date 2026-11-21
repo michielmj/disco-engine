@@ -37,17 +37,13 @@ from .orm import (
 from .spec import ModelSpec, NodeTypeSpec
 
 __all__ = [
-    # runtime
     "Model",
-    # loading
     "ModelLoadError",
     "ModelOrmError",
     "ModelOrmLoadError",
     "ModelOrmValidationError",
-    # spec
     "ModelSpec",
     "NodeTypeSpec",
-    # orm
     "OrmBundle",
     "build_orm_bundle",
     "db_install",
