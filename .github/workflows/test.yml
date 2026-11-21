@@ -6,6 +6,39 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Static checks run once per run, not once per Python version.
+  static:
+    name: Static checks
+    runs-on: ubuntu-22.04
+    env:
+      CMAKE_GENERATOR: "Ninja"
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+      UV_PYTHON: "3.12"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # setuptools-scm needs tags for dynamic version
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install (locked), building the native core
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run --locked ruff check .
+
+      - name: Format check
+        run: uv run --locked ruff format --check .
+
+      - name: Layering contracts
+        run: uv run --locked lint-imports
+
+      - name: C++ format check
+        run: git ls-files "*.cpp" "*.hpp" "*.h" | xargs uv run --locked clang-format --dry-run --Werror
+
   test:
     runs-on: ubuntu-22.04
     strategy:
@@ -34,4 +67,4 @@ jobs:
         run: uv run --locked pytest -q
 
       - name: Type check
-        run: uv run --locked mypy src/disco
+        run: uv run --locked mypy
