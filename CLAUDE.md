@@ -82,7 +82,8 @@ A branch is done when:
 - `specs/requirements/`: the approved what: the owner's words and numbered rules.
 - `specs/briefs/<branch>.md`: the instruction for one branch. It is the
   branch's first commit, and fix rounds are appended to it.
-- `STATUS.md`: milestones in flight, releases, the backlog.
+- `STATUS.md`: milestones in flight, releases, what waits on the owner.
+- `docs/carry-overs.md`: the backlog, every open problem, numbered.
 - `REVIEW.md`: the review standard.
 - `docs/decisions/`: one decision per file, with its reason and the incident
   behind it. `scaffold-*.md` came with the template, outside this project's
