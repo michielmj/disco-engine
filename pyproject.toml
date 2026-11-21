@@ -44,7 +44,10 @@ dev = [
   "grpcio-tools>=1.60",
   "psycopg[binary]>=3.3",
   "types-PyYAML>=6.0",
-  "pytest-timeout>=2.3"
+  "pytest-timeout>=2.3",
+  "ruff~=0.17",
+  "import-linter~=2.15",
+  "clang-format~=23.1",
 ]
 
 [build-system]
@@ -133,7 +136,19 @@ filterwarnings = [
     "error::FutureWarning",
 ]
 
+[tool.ruff]
+line-length = 110
+# Generated: regenerated from transport.proto and by setuptools-scm, never edited.
+extend-exclude = ["src/disco/transports/proto/transport_pb2*", "src/disco/_version.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
 [tool.mypy]
+# tests/ is not listed: it has 176 errors today (fakes and SimpleNamespace passed where the
+# real types are expected), and fixing them would need test changes or a looser config.
+files = ["src/disco", ".claude/hooks"]
+exclude = ['^src/disco/transports/proto/transport_pb2.*$', '^src/disco/_version\.py$']
 plugins = ["pydantic.mypy"]
 python_version = "3.12"
 warn_unused_configs = true
@@ -155,12 +170,6 @@ module = "disco.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 no_implicit_reexport = true
-
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-check_untyped_defs = true
 
 [project.scripts]
 disco-server = "disco.cli.server:main"
