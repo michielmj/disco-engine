@@ -169,9 +169,8 @@ class Graph:
                 raise ValueError(f"Matrix layer {idx} has invalid number of rows.")
             if has_self_loop(layer):
                 raise ValueError(f"Matrix layer {idx} has self loops.")
-            if check_cycles:
-                if matrix_has_cycle(layer):
-                    raise ValueError(f"Matrix layer {idx} appears to have cycles.")
+            if check_cycles and matrix_has_cycle(layer):
+                raise ValueError(f"Matrix layer {idx} appears to have cycles.")
 
     # ------------------------------------------------------------------ #
     # Vertices
@@ -933,10 +932,7 @@ class Graph:
         Return a shallow view of this graph sharing structure and labels,
         but with an optional different GraphMask.
         """
-        if mask is None:
-            mask_vec = self._mask.vector if self._mask is not None else None
-        else:
-            mask_vec = mask
+        mask_vec = (self._mask.vector if self._mask is not None else None) if mask is None else mask
 
         return Graph(
             layers=self._layers,

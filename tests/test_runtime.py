@@ -190,7 +190,7 @@ def test_initialize_forwards_to_node_initialize() -> None:
 
 def test_node_graph_is_property_accessor() -> None:
     """Node.graph must be a @property, not a regular method."""
-    rt, _router, node = make_runtime(simprocs=["L0"])
+    _rt, _router, node = make_runtime(simprocs=["L0"])
     # Access graph as a property (no parentheses). If the @property decorator
     # is missing, this will return a bound method instead of the graph object.
     g = node.data.graph

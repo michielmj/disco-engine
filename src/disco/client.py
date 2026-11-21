@@ -126,7 +126,7 @@ class Client:
 
         submitted: list[tuple[str, str]] = []
         # Submit all replications.
-        for r in e.replications.keys():
+        for r in e.replications:
             self.store.submit(expid, r)
             submitted.append((expid, r))
 

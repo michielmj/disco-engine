@@ -233,7 +233,7 @@ def test_ctor_sets_status_loaded_and_picks_repid_from_experiment_replications(pa
     assert exp.status == ExperimentStatus.LOADED
     # Repid should be the first key by insertion order (dict preserves insertion order).
     # We verify via the created NodeRuntime repid.
-    assert list(tr.nodes.values())[0].repid == "repA"  # type: ignore[attr-defined]
+    assert next(iter(tr.nodes.values())).repid == "repA"  # type: ignore[attr-defined]
 
 
 def test_ctor_uses_provided_model_without_calling_load_model(

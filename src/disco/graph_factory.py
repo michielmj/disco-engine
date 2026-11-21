@@ -25,7 +25,7 @@ def graph_from_model(db: DbHandle, scenario_id: str, model: Model) -> Graph:
         for nt, ns in spec.node_types.items():
             table = orm.node_tables[nt]  # keyed by node-type name, not table name
 
-            column_names = ["key"] + list(ns.distinct_nodes)
+            column_names = ["key", *list(ns.distinct_nodes)]
 
             cursor = session.execute(
                 select(*[table.c[name] for name in column_names]).where(

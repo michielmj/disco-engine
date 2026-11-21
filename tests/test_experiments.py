@@ -41,7 +41,7 @@ class FakeKazooClient:
         if not prefix:
             prefix = "/"
         child_prefix = prefix + "/"
-        if any(p.startswith(child_prefix) for p in self.data.keys()):
+        if any(p.startswith(child_prefix) for p in self.data):
             return FakeStat(self.versions.get(prefix, 0))
         return None
 
@@ -84,7 +84,7 @@ class FakeKazooClient:
             prefix = "/"
         p_len = len(prefix)
         children = set()
-        for p in self.data.keys():
+        for p in self.data:
             if not p.startswith(prefix) or p == prefix:
                 continue
             sub = p[p_len:]

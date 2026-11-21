@@ -95,7 +95,7 @@ def _make_model_distinct_region_for_a_and_b() -> ModelStub:
 
 
 def _coo_indices(v: gb.Vector) -> set[int]:
-    idx, vals = v.select("==", True).to_coo()
+    idx, _vals = v.select("==", True).to_coo()
     return set(idx.tolist())
 
 

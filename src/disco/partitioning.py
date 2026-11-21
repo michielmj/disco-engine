@@ -156,7 +156,7 @@ class Partitioning:
                 raise ValueError(f"node_indices inconsistent for '{name}'")
 
         # Validate nodes + topology consistency
-        for i, ns in enumerate(self.node_specs):
+        for _i, ns in enumerate(self.node_specs):
             if ns.partition < 0 or ns.partition >= self.num_partitions:
                 raise ValueError(
                     f"node '{ns.node_name}' has partition {ns.partition}, outside [0,{self.num_partitions - 1}]"
@@ -171,7 +171,7 @@ class Partitioning:
                     f"topology.node_type '{topo.node_type}' does not match node_type '{ns.node_type}'"
                 )
 
-        for p in self.affinity_by_partition.keys():
+        for p in self.affinity_by_partition:
             if p < 0 or p >= self.num_partitions:
                 raise ValueError(f"affinity_by_partition has invalid partition key: {p}")
 
@@ -206,7 +206,7 @@ class Partitioning:
                 raise ValueError(f"duplicate node_name in node_specs: {ns.node_name}")
             node_indices[ns.node_name] = idx
 
-        for i, ns in enumerate(node_specs):
+        for _i, ns in enumerate(node_specs):
             if not ns.node_name or not ns.node_name.strip():
                 raise ValueError("node_name must be non-empty")
             if not ns.node_type or not ns.node_type.strip():

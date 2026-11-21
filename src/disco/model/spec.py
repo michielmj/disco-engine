@@ -302,7 +302,7 @@ class ModelSpec(BaseModel):
         order_by_name = {name: i for i, name in enumerate(self.simprocs)}
 
         # node-types keys must be non-empty/trimmed
-        for k in self.node_types.keys():
+        for k in self.node_types:
             if not (k or "").strip():
                 raise ValueError("node-types keys may not be empty/whitespace")
 

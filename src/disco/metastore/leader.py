@@ -1,6 +1,7 @@
 # src/disco/metastore/leader.py
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from threading import Event
@@ -62,10 +63,8 @@ class LeaderElection:
 
     def cancel(self) -> None:
         self._cancelled.set()
-        try:
+        with contextlib.suppress(Exception):
             self._election.cancel()
-        except Exception:
-            pass
 
         # Best-effort cleanup of leader key (ephemeral will disappear on session loss anyway).
         try:

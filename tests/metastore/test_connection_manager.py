@@ -98,7 +98,7 @@ def test_start_and_stop_lifecycle(fake_kazoo):
 
 # noinspection PyTypeChecker,PyUnresolvedReferences,PyArgumentList
 def test_watch_data_registers_and_reinstalls_on_session_loss(fake_kazoo):
-    fake_client, registrations, children_regs = fake_kazoo
+    fake_client, registrations, _children_regs = fake_kazoo
 
     mgr = ZkConnectionManager(DummySettings())
     mgr.start()
@@ -146,7 +146,7 @@ def test_watch_data_registers_and_reinstalls_on_session_loss(fake_kazoo):
 
 # noinspection PyTypeChecker,PyUnresolvedReferences,PyArgumentList
 def test_watch_children_registers_and_reinstalls_on_session_loss(fake_kazoo):
-    fake_client, data_regs, children_regs = fake_kazoo
+    fake_client, _data_regs, children_regs = fake_kazoo
 
     mgr = ZkConnectionManager(DummySettings())
     mgr.start()

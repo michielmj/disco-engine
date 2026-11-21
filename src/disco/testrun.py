@@ -102,10 +102,7 @@ class TestRun:
         else:
             self._model = model
 
-        if experiment.replications:
-            repid = next(iter(experiment.replications.keys()))
-        else:
-            repid = str(uuid.uuid4())
+        repid = next(iter(experiment.replications.keys())) if experiment.replications else str(uuid.uuid4())
 
         # build dlogger if needed
         if dlogger is None:

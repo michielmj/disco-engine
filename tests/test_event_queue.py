@@ -342,6 +342,6 @@ def test_2predecessors_fail_pop():
     assert queue.epoch == 10.0
     events = queue.pop()
     assert len(events) == 1
-    n, s, e, d, h = events[0]
+    n, _s, e, _d, _h = events[0]
     assert n == "pred2"
     assert e == 10.0

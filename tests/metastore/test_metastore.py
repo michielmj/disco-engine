@@ -124,7 +124,7 @@ class FakeKazooClient:
 
         # Any child under this node => parent "exists" for our tests
         child_prefix = prefix + "/"
-        if any(p.startswith(child_prefix) for p in self.data.keys()):
+        if any(p.startswith(child_prefix) for p in self.data):
             return FakeStat(self.versions.get(prefix, 0))
 
         return None
@@ -199,7 +199,7 @@ class FakeKazooClient:
         p_len = len(prefix)
 
         children = set()
-        for p in self.data.keys():
+        for p in self.data:
             if not p.startswith(prefix):
                 continue
             if p == prefix:

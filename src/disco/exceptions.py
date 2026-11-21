@@ -83,7 +83,7 @@ def _is_empty_exc(exc: dict[str, Any] | None) -> bool:
     """
     if not exc:
         return True
-    for k, v in exc.items():
+    for _k, v in exc.items():
         if v is None:
             continue
         if isinstance(v, str) and v.strip() == "":

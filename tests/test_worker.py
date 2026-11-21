@@ -242,7 +242,7 @@ def worker_env(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_on_desired_state_change_sets_pending_and_kicks(worker_env):
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, _ev_q, _pr_q = worker_env
 
     desired = FakeDesired(
         request_id="r1",
@@ -263,7 +263,7 @@ def test_on_desired_state_change_sets_pending_and_kicks(worker_env):
 def test_apply_desired_reserved_then_ready_transitions_and_calls_setup(
     monkeypatch: pytest.MonkeyPatch, worker_env
 ):
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, cluster, store, _ev_q, _pr_q = worker_env
 
     called = {"setup": 0}
 
@@ -326,7 +326,7 @@ def test_apply_desired_reserved_then_ready_transitions_and_calls_setup(
 
 
 def test_active_creates_runners_only_on_ready_to_active(monkeypatch: pytest.MonkeyPatch, worker_env):
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, _ev_q, _pr_q = worker_env
 
     # Prepare READY state with nodes (patch setup).
     def fake_setup_locked() -> bool:
@@ -379,7 +379,7 @@ def test_active_creates_runners_only_on_ready_to_active(monkeypatch: pytest.Monk
 
 def test_reserved_sets_assignment_and_publishes_info(worker_env):
     """RESERVED should bind the assignment and publish worker info, with no heavy I/O."""
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, cluster, store, _ev_q, _pr_q = worker_env
 
     desired = FakeDesired("r-reserved", WorkerState.RESERVED, "e1", "rep1", 0)
 
@@ -397,7 +397,7 @@ def test_reserved_sets_assignment_and_publishes_info(worker_env):
 
 def test_ready_from_available_raises(worker_env):
     """READY without a preceding RESERVED should be rejected."""
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, _ev_q, _pr_q = worker_env
 
     desired_ready = FakeDesired("r-ready", WorkerState.READY)
     with w._lock:
@@ -407,7 +407,7 @@ def test_ready_from_available_raises(worker_env):
 
 def test_terminated_from_reserved_returns_to_available(worker_env):
     """TERMINATED from RESERVED should clear assignment and return to AVAILABLE without setting CANCELED."""
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, store, _ev_q, _pr_q = worker_env
 
     # Enter RESERVED.
     desired_reserved = FakeDesired("r-reserved", WorkerState.RESERVED, "e1", "rep1", 0)
@@ -428,7 +428,7 @@ def test_terminated_from_reserved_returns_to_available(worker_env):
 
 
 def test_step_runners_once_removes_finished(worker_env):
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, _ev_q, _pr_q = worker_env
 
     # Two runners: first finishes immediately, second yields once then finishes.
     w._runners = (gen_yield_n_then_stop(0)(), gen_yield_n_then_stop(1)())
@@ -444,7 +444,7 @@ def test_step_runners_once_removes_finished(worker_env):
 
 
 def test_step_runners_once_exception_fails_partition(monkeypatch: pytest.MonkeyPatch, worker_env):
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, _ev_q, _pr_q = worker_env
 
     # Need an assignment for _fail_partition_locked to work.
     w._assignment = worker_mod.Assignment(expid="e1", repid="rep1", partition=0)
@@ -480,7 +480,7 @@ def test_runner_loop_finishes_partition_and_returns_available(monkeypatch: pytes
     - Worker calls _end_run_locked(FINISHED) -> AVAILABLE
     Then we stop the loop with request_stop.
     """
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, store, _ev_q, _pr_q = worker_env
 
     # Set up assignment and minimal experiment
     w._assignment = worker_mod.Assignment(expid="e1", repid="rep1", partition=0)
@@ -520,7 +520,7 @@ def test_no_kick_needed_for_ingress_in_ready_or_paused(worker_env):
     This test asserts that delivering a message does not implicitly set _kick.
     (Only desired-state changes and request_stop should set it.)
     """
-    w, cluster, store, ev_q, pr_q = worker_env
+    w, _cluster, _store, ev_q, _pr_q = worker_env
 
     # Put a dummy message in queue; _kick should remain unchanged until we process control plane.
     w._kick.clear()

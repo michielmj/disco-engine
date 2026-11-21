@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import sys
 from collections.abc import Callable, Mapping
 from multiprocessing import Queue
@@ -43,10 +44,8 @@ class IPCTransport(Transport):
 
     def __del__(self) -> None:
         for shm in self._open_shm.values():
-            try:
+            with contextlib.suppress(Exception):
                 shm.close()
-            except Exception:
-                pass
         self._open_shm.clear()
 
     def handles_node(self, repid: str, node: str) -> bool:

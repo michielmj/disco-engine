@@ -159,7 +159,7 @@ class SpectralClusteringPartitioner:
                 idxs, _ = assignment_vector.to_coo()
                 assert np.setdiff1d(idxs, sv_mask).shape[0] == 0
 
-                node_name = "-".join([f"p{partition}", node_type] + label_values)
+                node_name = "-".join([f"p{partition}", node_type, *label_values])
                 node_specs.append(
                     NodeInstanceSpec(partition=partition, node_name=node_name, node_type=node_type)
                 )

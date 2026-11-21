@@ -386,10 +386,7 @@ def get_settings(*, config_file: str | Path | None = None, **overrides: Any) -> 
     If none found, config-file source is disabled and defaults apply.
     """
     resolved: Path | None
-    if config_file is None:
-        resolved = _find_default_config_file()
-    else:
-        resolved = Path(config_file)
+    resolved = _find_default_config_file() if config_file is None else Path(config_file)
 
     # Cache key includes config file and overrides.
     overrides_blob = pickle.dumps(overrides, protocol=pickle.HIGHEST_PROTOCOL)

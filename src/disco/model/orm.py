@@ -328,9 +328,8 @@ def _has_unique_on(table: Table, col_names: Sequence[str]) -> bool:
         return True
 
     for c in table.constraints:
-        if isinstance(c, sa.UniqueConstraint):
-            if _colset_equals(list(c.columns), col_names):
-                return True
+        if isinstance(c, sa.UniqueConstraint) and _colset_equals(list(c.columns), col_names):
+            return True
 
     for idx in table.indexes:
         try:

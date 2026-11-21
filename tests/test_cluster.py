@@ -133,7 +133,7 @@ class FakeMetastore:
             return True
 
         prefix = item.rstrip("/") + "/"
-        return any(key.startswith(prefix) for key in self.data.keys())
+        return any(key.startswith(prefix) for key in self.data)
 
     # listing ---------------------------------------------------------------
 
@@ -142,7 +142,7 @@ class FakeMetastore:
         plen = len(prefix) + 1
         children: set[str] = set()
 
-        for p in self.data.keys():
+        for p in self.data:
             if not p.startswith(prefix + "/"):
                 continue
             tail = p[plen:]

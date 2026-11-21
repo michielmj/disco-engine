@@ -51,7 +51,7 @@ def _iter_node_instances(
 
     spec = model.spec
     for node_type, nts in spec.node_types.items():
-        distinct = [NODE_TYPE] + list(nts.distinct_nodes)
+        distinct = [NODE_TYPE, *list(nts.distinct_nodes)]
 
         combos: list[np.ndarray] = graph.by_distinct_labels(distinct=distinct)
 

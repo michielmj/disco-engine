@@ -52,7 +52,7 @@ class SimplePartitioner:
         row_vectors: list[gb.Vector] = []
 
         for node_type, label_values, assignment_vector, _ in _iter_node_instances(self._graph, self._model):
-            node_name = "-".join(["p0", node_type] + label_values)
+            node_name = "-".join(["p0", node_type, *label_values])
             node_specs.append(NodeInstanceSpec(partition=0, node_name=node_name, node_type=node_type))
             row_vectors.append(assignment_vector)
 

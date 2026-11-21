@@ -248,7 +248,7 @@ def test_get_vertex_numeric_vector() -> None:
 
 
 def test_get_outbound_and_inbound_edge_data_indices_and_keys() -> None:
-    for _, SessionLocal, node_data, edge_data in engine_session_and_model_tables():
+    for _, SessionLocal, _node_data, edge_data in engine_session_and_model_tables():
         session: Session = SessionLocal()
         scenario_id = "S1"
 
@@ -325,7 +325,7 @@ def test_get_outbound_and_inbound_edge_data_indices_and_keys() -> None:
 
 
 def test_edge_data_with_mask() -> None:
-    for _, SessionLocal, node_data, edge_data in engine_session_and_model_tables():
+    for _, SessionLocal, _node_data, edge_data in engine_session_and_model_tables():
         session: Session = SessionLocal()
         scenario_id = "S1"
 
@@ -396,7 +396,7 @@ def test_edge_data_with_mask() -> None:
 
 
 def test_outbound_and_inbound_map() -> None:
-    for _, SessionLocal, node_data, _ in engine_session_and_model_tables():
+    for _, SessionLocal, _node_data, _ in engine_session_and_model_tables():
         session: Session = SessionLocal()
         scenario_id = "S1"
 

@@ -12,6 +12,7 @@ Design goals:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import signal
@@ -89,9 +90,7 @@ def _is_loopback_host(host: str) -> bool:
         return True
     if h.startswith("127."):
         return True
-    if h == "::1":
-        return True
-    return False
+    return h == "::1"
 
 
 def _infer_non_loopback_ipv4() -> str | None:
@@ -169,10 +168,8 @@ def _pick_free_ports(bind_host: str, n: int) -> list[int]:
             ports.append(int(s.getsockname()[1]))
     finally:
         for s in sockets:
-            try:
+            with contextlib.suppress(OSError):
                 s.close()
-            except OSError:
-                pass
     return ports
 
 
@@ -184,10 +181,7 @@ def _determine_worker_ports(
 ) -> list[int]:
     if ports is not None:
         return [int(p) for p in ports]
-    if workers is not None:
-        count = int(workers)
-    else:
-        count = max(1, int(cpu_count()) - 1)
+    count = int(workers) if workers is not None else max(1, int(cpu_count()) - 1)
     return _pick_free_ports(bind_host, count)
 
 
@@ -270,10 +264,8 @@ def _force_kill(proc: BaseProcess) -> None:
     pid = proc.pid
     if pid is None:
         return
-    try:
+    with contextlib.suppress(Exception):
         os.kill(pid, signal.SIGKILL)
-    except Exception:
-        pass
 
 
 class Server:
@@ -454,10 +446,8 @@ class Server:
         # Escalation: terminate then kill
         for proc in self._worker_procs.values():
             if proc.is_alive():
-                try:
+                with contextlib.suppress(Exception):
                     proc.terminate()
-                except Exception:
-                    pass
 
         kill_deadline = time.monotonic() + 2.0
         while time.monotonic() < kill_deadline:
@@ -470,7 +460,5 @@ class Server:
                 _force_kill(proc)
 
         for proc in self._worker_procs.values():
-            try:
+            with contextlib.suppress(Exception):
                 proc.join(timeout=1.0)
-            except Exception:
-                pass
