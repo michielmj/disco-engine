@@ -1,7 +1,3 @@
-# src/disco/model/orm.py
-
-from __future__ import annotations
-
 """
 SQLAlchemy ORM integration for Model loading.
 
@@ -39,6 +35,10 @@ Edges:
   - source_key  (str-like, NOT NULL)
   - target_key  (str-like, NOT NULL)
 """
+
+# src/disco/model/orm.py
+
+from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass

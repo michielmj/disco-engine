@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """IPC transport for sending envelopes to peer processes."""
+
+from __future__ import annotations
 
 import sys
 from collections.abc import Callable, Mapping

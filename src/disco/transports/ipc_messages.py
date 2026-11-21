@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """IPC message containers for queue-based transports."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 

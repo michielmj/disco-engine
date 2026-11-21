@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 gRPC ingress service for receiving envelopes from remote workers.
 
@@ -14,6 +12,8 @@ The Worker is responsible for:
   event/promise queues and deliver to NodeControllers.
 - Prioritising promise delivery over events in the runner loop.
 """
+
+from __future__ import annotations
 
 from concurrent import futures
 from multiprocessing import Queue

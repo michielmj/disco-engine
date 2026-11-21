@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-from disco.orchestrator import Orchestrator
-
 """Kubernetes-friendly Disco server supervisor.
 
 Spawns multiple Worker processes (optionally an orchestrator placeholder) and
@@ -13,6 +9,8 @@ Design goals:
 - PID 1 friendliness: handle SIGTERM/SIGINT, reap children, enforce shutdown.
 - Workers are identified by their Cluster address string "host:port".
 """
+
+from __future__ import annotations
 
 import logging
 import os
@@ -31,6 +29,7 @@ from tools import mp_logging
 
 from disco.cluster import Cluster
 from disco.config import AppSettings, ConfigError
+from disco.orchestrator import Orchestrator
 from disco.worker import Worker
 
 logger = logging.getLogger(__name__)  # optional, but handy

@@ -1,14 +1,3 @@
-from __future__ import annotations
-
-from data_logger import DataLogger
-from numpy.random import Generator as NpGenerator
-from numpy.random import SeedSequence, default_rng
-
-from .exceptions import DiscoRuntimeError
-from .graph_data import GraphData
-from .partitioning import NodeInstanceSpec, Partitioning
-from .simproc import SimProc
-
 """
 NodeRuntime placeholder implementation.
 
@@ -31,15 +20,24 @@ Those will be added later; for now, NodeRuntime stores incoming
 envelopes in simple lists to keep the system testable.
 """
 
+from __future__ import annotations
+
 from collections.abc import Generator
 from typing import Any
 
+from data_logger import DataLogger
+from numpy.random import Generator as NpGenerator
+from numpy.random import SeedSequence, default_rng
 from tools.mp_logging import getLogger
 
 from .envelopes import EventEnvelope, PromiseEnvelope
+from .exceptions import DiscoRuntimeError
+from .graph_data import GraphData
 from .model import Model
 from .node import Node, NodeRuntimeLike, NodeStatus
+from .partitioning import NodeInstanceSpec, Partitioning
 from .router import Router
+from .simproc import SimProc
 
 logger = getLogger(__name__)
 

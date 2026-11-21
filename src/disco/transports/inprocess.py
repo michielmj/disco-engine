@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """In-process transport that routes to local NodeRuntimes."""
+
+from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass

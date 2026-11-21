@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 gRPC transport for delivering envelopes to remote workers.
 
@@ -28,6 +26,8 @@ The transport is purely outbound. The corresponding gRPC server
 ("ingress") lives in a separate module and delivers envelopes into
 NodeController queues on the receiving Worker.
 """
+
+from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterable

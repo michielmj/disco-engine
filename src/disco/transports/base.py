@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Transport protocol for routing envelopes."""
+
+from __future__ import annotations
 
 from typing import Protocol
 

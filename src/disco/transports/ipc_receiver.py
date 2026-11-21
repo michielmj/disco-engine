@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Receiver loops for IPC queues."""
+
+from __future__ import annotations
 
 import pickle
 from collections.abc import Mapping
