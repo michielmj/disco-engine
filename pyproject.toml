@@ -141,6 +141,11 @@ line-length = 110
 # Generated: regenerated from transport.proto and by setuptools-scm, never edited.
 extend-exclude = ["src/disco/transports/proto/transport_pb2*", "src/disco/_version.py"]
 
+[tool.ruff.format]
+# ruff formats the Python blocks inside Markdown; the spec's snippets are contract-level
+# illustrations edited through the sync-spec skill, not code to gate.
+exclude = ["*.md"]
+
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
