@@ -141,3 +141,71 @@ locally and in CI, and the codebase behaves exactly as it does at the base.
 
 <!-- Each fix round is appended here as "## Round N (date): <title>", and
 committed before the session resumes. -->
+
+## Round 1 (2026-11-21): Markdown kept out of ruff format; readable wrapping
+
+The review of 01949f4 found one FAIL and several observations. Fix the items
+below; the other observations went to the backlog. No re-review follows:
+items 1, 3 and 4 are prescribed, and item 2 changes only comments and
+docstrings, so the architect checks this round's diff instead.
+
+1. **ruff format changed the spec.** FAIL (c).
+   <finding>
+   ENGINEERING.md (71 lines changed, all in b7fc6b5 "Apply ruff format (output
+   only)"). The brief says: "No change to ... the spec ... if you find it must
+   change, that is an escalation." ruff 0.17.6 formats the Python code blocks
+   inside Markdown files, so the format commit reformatted the spec's code
+   snippets. `git diff -w` shows only layout changes. ... `ruff format --check .`
+   now also gates the Python blocks in README.md, CLAUDE.md, STATUS.md,
+   REVIEW.md, specs/** and .claude/skills/**.
+   </finding>
+   Remedy (prescribed): exclude Markdown from ruff format, in
+   `[tool.ruff.format]` (`exclude = ["*.md"]`), so `ruff check` is unchanged;
+   and restore `ENGINEERING.md` to its state on `origin/scaffold-adoption`
+   (`git checkout origin/scaffold-adoption -- ENGINEERING.md`), in one commit.
+   Acceptance: `git diff origin/scaffold-adoption -- '*.md'` shows only this
+   brief, and `uv run ruff format --check . -v` no longer lists any `.md`
+   file. Reason for excluding rather than accepting: the spec's snippets are
+   illustrations at contract level, edited through the sync-spec skill; a
+   formatter gate over every document is a workflow change the owner has not
+   decided.
+
+2. **The E501 wrapping left orphaned words.** Observation.
+   <finding>
+   E501 commit 8a74438: about 35 added lines are lone leftover words from
+   hard-splitting at column 110 — e.g. the simproc.py module docstring
+   ("can be\nthought\nof as…", "may\n  be\n  adjusted…") and worker.py comments
+   split mid-code (`("",` / `# logging.INFO)])`).
+   </finding>
+   Remedy (described): re-wrap every comment and docstring that 8a74438
+   split, as normal prose within 110 columns; a commented-out code line goes
+   on its own line(s) where it still reads as code, or is removed if it is
+   dead. Only comments and docstrings change. Acceptance: no line added by
+   8a74438 or this round consists of one or two words left over from a
+   split (the reviewer's examples included), and ruff check still passes.
+
+3. **The `Optional[X]` branch of the CLI parser has no test.** Observation;
+   this guards the regression the branch itself caused.
+   <finding>
+   src/disco/cli/argparse_model.py:14: the `origin is Union` branch
+   (`Optional[X]`) is no longer exercised. tests/cli DemoModel was rewritten
+   to `X | None`, so only the `types.UnionType` branch has a test.
+   </finding>
+   Remedy (prescribed): one test in `tests/cli/` with a model field written
+   `typing.Optional[X]` (keep a `# noqa: UP045` with the reason: the test
+   needs the old spelling). Prove it: remove `origin is Union` from the
+   condition and show the new test fails, then restore.
+
+4. **`__all__` section comments in `disco/model/__init__.py`.** Observation.
+   <finding>
+   The RUF022 sort left the `__all__` section comments wrong: the "# orm"
+   heading now also covers the loading functions, and "# loading" now covers
+   the ORM errors.
+   </finding>
+   Remedy (prescribed): drop the section comments inside `__all__` (a sorted
+   list has no sections).
+
+5. **Surfaced decisions to correct.** The block in 01949f4 says "12 sites"
+   for B905; the branch has 10. It says "prose re-wrapped" for 8a74438,
+   which item 2 shows was not so. Correct both in the new Surfaced decisions
+   commit, naming 01949f4.
