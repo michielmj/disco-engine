@@ -8,7 +8,7 @@ This is where the work stands. Specs say *what* (`specs/`); this file says
 | Milestone | Branch | State | Requirement | Notes |
 |---|---|---|---|---|
 | Adopt the scaffolder template | `scaffold-adoption`, `scaffold-lint-layering` | landed in `staging` (#47, #48), 2026-11-21 | none (owner's direction, 2026-11-21) | `scaffold-lint-layering` fix round 1: no re-review: prescribed and mutation-verified |
-| Python 3.14–3.15, dependency upgrades | `py314-deps` | implementing (launched 2026-11-21, after the owner installed CPython 3.15.2) | none (owner's direction, 2026-11-21) | stacked on `staging` |
+| Python 3.14–3.15, dependency upgrades | `py314-deps` | reviewed (round 1: 0 FAIL); round 2 waits on the owner's disco-toolbox release | none (owner's direction, 2026-11-21) | stacked on `staging`; Linux suite 522 passed, 1 skipped (3.15.2) |
 
 ## Releases
 
@@ -28,6 +28,13 @@ This is where the work stands. Specs say *what* (`specs/`); this file says
   `build.yml` runs the cibuildwheel tests on all three, but only on PRs to
   `main` and on dispatch. Decide: run the platform matrix on every push or
   PR, or change the sentence.
+- Release a disco-toolbox that allows python-graphblas 2026.x (0.0.5 pins
+  `~=2025.2`), then say so: `py314-deps` round 2 (the example model) starts
+  then.
+- Decide: correct `.claude/rules/graph.md`'s BOOL wording (the `monoid.plus`
+  object raises on BOOL, and only `"plus"`/`op.plus` OR; `.new(dtype=)` and
+  `.dup(dtype=)` behave the same) on the next graph branch. The same holds on
+  graphblas 2025.2 and 2026.11 (py314-deps review).
 - Upstream bug in the scaffolder template: see backlog item 4; the same fix
   belongs in `michielmj/scaffolder`.
 
