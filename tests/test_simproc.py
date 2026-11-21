@@ -22,7 +22,6 @@ class HandleOnEvents:
         self.count += 1
 
         if self.simproc is not None:
-
             while self.events is not None and len(self.events) > 0:
                 n, s, e, d, h = self.events.pop()
                 self.simproc.send_event(target_node=n, target_simproc=s, epoch=e, data=d, headers=h)
@@ -74,7 +73,7 @@ def test_wakeup():
     handle_on_events.wakeup = 1.0
 
     assert sp.try_next_epoch()
-    assert sp.next_epoch == 1.
+    assert sp.next_epoch == 1.0
     assert handle_on_events.count == 1
 
 
@@ -132,8 +131,8 @@ def test_hard_wakeup():
     sp.receive_promise(sender_node="predecessor", sender_simproc="1", epoch=1.0, seqnr=1, num_events=1)
     sp.receive_promise(sender_node="predecessor", sender_simproc="1", epoch=2.0, seqnr=2, num_events=1)
 
-    assert sp.try_next_epoch()   # epoch 0.
-    assert sp.epoch == 0         # waiting for event at t=1 (and t=2)
+    assert sp.try_next_epoch()  # epoch 0.
+    assert sp.epoch == 0  # waiting for event at t=1 (and t=2)
     assert sp.next_epoch == 2.0  # due to hard wakeup
 
     sp.receive_event(sender_node="predecessor", sender_simproc="1", epoch=1.0, data=b"")
@@ -169,7 +168,7 @@ def test_send_event():
 
     handle_on_events.simproc = sp
     handle_on_events.wakeup = 1.0
-    handle_on_events.events = [("successor", "1", 1.0, b'', None)]
+    handle_on_events.events = [("successor", "1", 1.0, b"", None)]
 
     assert sp.try_next_epoch()
     assert sp.next_epoch == 1.0
@@ -285,12 +284,14 @@ def test_first_promise_in_future_with_predecessor():
     )
 
     assert not sp.try_next_epoch()
-    assert sp.epoch == -1.
-    assert sp.next_epoch == 0.
+    assert sp.epoch == -1.0
+    assert sp.next_epoch == 0.0
 
     # even thought the queue updates with the first promise, the simproc does not as
     # the first epoch has not been processed yet
-    assert not sp.receive_promise(sender_node="predecessor", sender_simproc="1", seqnr=1, epoch=1.0, num_events=1)
+    assert not sp.receive_promise(
+        sender_node="predecessor", sender_simproc="1", seqnr=1, epoch=1.0, num_events=1
+    )
     assert sp._queue.epoch == 0.0
     assert sp._queue.next_epoch == 1.0
     assert sp.epoch == -1.0
@@ -349,7 +350,9 @@ def test_first_promise_at_time_zero():
         successors=[],
     )
 
-    assert not sp.receive_promise(sender_node="predecessor", sender_simproc="1", seqnr=1, epoch=0.0, num_events=1)
+    assert not sp.receive_promise(
+        sender_node="predecessor", sender_simproc="1", seqnr=1, epoch=0.0, num_events=1
+    )
     assert sp._queue.epoch == -1.0
     assert sp._queue.next_epoch == 0.0
     assert sp.epoch == -1.0

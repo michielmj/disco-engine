@@ -128,15 +128,16 @@ The precise mapping between graph layers, nodes, and simprocs is described in a 
   ```python
   def send_event(
       self,
-      target: str,                # "<node>/<simproc>" or "self/<simproc>"
+      target: str,  # "<node>/<simproc>" or "self/<simproc>"
       epoch: float,
       data: Any,
       headers: dict[str, str] | None = None,
   ) -> None: ...
 
+
   def send_promise(
       self,
-      target: str,                # "<node>/<simproc>" or "self/<simproc>"
+      target: str,  # "<node>/<simproc>" or "self/<simproc>"
       seqnr: int,
       epoch: float,
       num_events: int,
@@ -1050,9 +1051,9 @@ instance and updates its `nodes` mapping as it creates and tears down
 
 ```python
 def handles_node(self, repid: str, node: str) -> bool:
-  if node not in self.nodes:
-    return False
-  return True
+    if node not in self.nodes:
+        return False
+    return True
 ```
 
 A node is considered in-process if the worker hosts a `NodeRuntime` for that
@@ -1065,16 +1066,16 @@ Events:
 
 ```python
 def send_event(self, envelope: EventEnvelope) -> None:
-  node = self.nodes[envelope.target_node]
-  node.receive_event(envelope)
+    node = self.nodes[envelope.target_node]
+    node.receive_event(envelope)
 ```
 
 Promises:
 
 ```python
 def send_promise(self, envelope: PromiseEnvelope) -> None:
-  node = self.nodes[envelope.target_node]
-  node.receive_promise(envelope)
+    node = self.nodes[envelope.target_node]
+    node.receive_promise(envelope)
 ```
 
 `NodeRuntime.receive_event` and `receive_promise` are responsible for
@@ -1098,8 +1099,7 @@ class IPCTransport(Transport):
         event_queues: Mapping[str, Queue[IPCEventMsg]],
         promise_queues: Mapping[str, Queue[IPCPromiseMsg]],
         large_payload_threshold: int = 64 * 1024,
-    ) -> None:
-        ...
+    ) -> None: ...
 ```
 
 - `cluster` provides the address book mapping `(repid, node)` to a worker address.
@@ -1163,6 +1163,7 @@ class IPCEventMsg:
     shm_name: Optional[str]
     size: int
 
+
 @dataclass(slots=True)
 class IPCPromiseMsg:
     repid: str
@@ -1191,8 +1192,7 @@ class IPCReceiver:
         nodes: Mapping[str, NodeRuntime],
         event_queue: Queue[IPCEventMsg],
         promise_queue: Queue[IPCPromiseMsg],
-    ) -> None:
-        ...
+    ) -> None: ...
 ```
 Responsibilities:
 
@@ -1263,8 +1263,7 @@ class GrpcTransport(Transport):
         settings: GrpcSettings,
         channel_factory: Callable[[str, GrpcSettings], grpc.Channel] | None = None,
         stub_factory: Callable[[grpc.Channel], DiscoTransportStub] | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 ```
 
 - `cluster` provides the address book.
@@ -1281,9 +1280,7 @@ def _resolve_address(self, repid: str, node: str) -> str:
     try:
         return self._cluster.address_book[(repid, node)]
     except KeyError as exc:
-        raise RuntimeError(
-            f"No address for (repid={repid!r}, node={node!r})"
-        ) from exc
+        raise RuntimeError(f"No address for (repid={repid!r}, node={node!r})") from exc
 ```
 
 `handles_node` checks whether `(repid, node)` exists in the address book. The
@@ -1658,8 +1655,7 @@ class Graph:
         mask: Vector | None = None,
         label_matrix: Matrix | None = None,
         label_meta: dict[int, tuple[str, str]] | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 ```
 
 Key fields (via `__slots__`):
@@ -1805,8 +1801,7 @@ def add_labels(
     self,
     label_type: str,
     labels: Mapping[str, np.ndarray | Sequence[int]],
-) -> None:
-    ...
+) -> None: ...
 ```
 
 - `labels` maps `label_value → sequence of vertex indices`.
@@ -1841,8 +1836,7 @@ multiple calls without re‑allocating the entire matrix from scratch in user co
 The method:
 
 ```python
-def by_distinct_labels(self, distinct: Sequence[str]) -> list[np.ndarray]:
-    ...
+def by_distinct_labels(self, distinct: Sequence[str]) -> list[np.ndarray]: ...
 ```
 
 computes distinct combinations of labels across one or more label types.
@@ -1998,8 +1992,7 @@ def store_graph(
     description: str | None = None,
     replace: bool = False,
     chunk_size: int = 10_000,
-) -> None:
-    ...
+) -> None: ...
 ```
 
 Responsibilities (in order):
@@ -2048,8 +2041,7 @@ responsibility.
 #### 7.4.2 Scenario Deletion
 
 ```python
-def delete_scenario(session: Session, scenario_id: str) -> None:
-    ...
+def delete_scenario(session: Session, scenario_id: str) -> None: ...
 ```
 
 Removes everything for a scenario in the correct dependency order:
@@ -2066,8 +2058,7 @@ Does not commit; transaction boundaries are the caller’s responsibility.
 #### 7.4.3 Loading a Graph from the Database
 
 ```python
-def load_graph_for_scenario(session: Session, scenario_id: str) -> Graph:
-    ...
+def load_graph_for_scenario(session: Session, scenario_id: str) -> Graph: ...
 ```
 
 Steps:
@@ -2101,7 +2092,7 @@ Steps:
        layers=edge_layers,
        num_vertices=num_vertices,
        scenario_id=scenario_id,
-       vertices=vertex_keys,   # attached from graph_vertices
+       vertices=vertex_keys,  # attached from graph_vertices
        label_matrix=label_matrix,
        label_meta=label_meta,
    )
@@ -2140,8 +2131,7 @@ def get_vertex_data(
     mask: GraphMask | None = None,
     index_by: Literal["index", "key"] = "index",
     default_fill: Any | None = None,
-) -> pd.DataFrame:
-    ...
+) -> pd.DataFrame: ...
 ```
 
 - `vertex_table` is a *model node table* keyed by `(scenario_id, key)`.
@@ -2172,8 +2162,7 @@ def get_vertex_numeric_vector(
     *,
     mask: GraphMask | None = None,
     default_value: float = 0.0,
-) -> gb.Vector:
-    ...
+) -> gb.Vector: ...
 ```
 
 - Similar join pattern but returns a `Vector[FP64]` of size `graph.num_vertices`.
@@ -2211,8 +2200,7 @@ def get_outbound_edge_data(
     mask: GraphMask | None = None,
     index_by: Literal["indices", "keys"] = "indices",
     default_fill: Any | None = None,
-) -> pd.DataFrame:
-    ...
+) -> pd.DataFrame: ...
 ```
 
 - Starts from `graph_edges` for the given `layer_idx`.
@@ -2238,8 +2226,7 @@ def get_inbound_edge_data(
     mask: GraphMask | None = None,
     index_by: Literal["indices", "keys"] = "indices",
     default_fill: Any | None = None,
-) -> pd.DataFrame:
-    ...
+) -> pd.DataFrame: ...
 ```
 
 - Same pattern as outbound, but mask (if any) is applied on the *target* index.
@@ -2257,8 +2244,7 @@ def get_outbound_map(
     layer_idx: int,
     mask: GraphMask | None = None,
     value_source: Literal["weight"] = "weight",
-) -> gb.Matrix:
-    ...
+) -> gb.Matrix: ...
 ```
 
 - Queries `graph_edges` for the scenario and `layer_idx`.
@@ -2277,8 +2263,7 @@ def get_inbound_map(
     layer_idx: int,
     mask: GraphMask | None = None,
     value_source: Literal["weight"] = "weight",
-) -> gb.Matrix:
-    ...
+) -> gb.Matrix: ...
 ```
 
 - Same semantics but filters by the *target* vertex in the mask.

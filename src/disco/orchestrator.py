@@ -55,11 +55,11 @@ class Orchestrator:
     """
 
     def __init__(
-            self,
-            *,
-            address: str,
-            cluster: Cluster,
-            settings: OrchestratorSettings,
+        self,
+        *,
+        address: str,
+        cluster: Cluster,
+        settings: OrchestratorSettings,
     ) -> None:
         self._address = address
         self._cluster = cluster
@@ -92,7 +92,7 @@ class Orchestrator:
         while not self._stop.is_set():
             entity = self._store.dequeue(
                 timeout=DEQUEUE_TIMEOUT_S,
-                force_mode='raise',
+                force_mode="raise",
             )
 
             if entity is None:
@@ -160,7 +160,9 @@ class Orchestrator:
             # Keep local variable; no reload required in the single-orchestrator paradigm.
 
         # Number of partitions for the selected scheme.
-        num_partitions = int(Partitioning.load_metadata(self._cluster.meta, partitioning_id)["num_partitions"])
+        num_partitions = int(
+            Partitioning.load_metadata(self._cluster.meta, partitioning_id)["num_partitions"]
+        )
 
         # Decide which workers will run which partitions (all-at-once).
         assignments = self._await_full_assignment_plan(expid=expid, num_partitions=num_partitions)
@@ -219,9 +221,13 @@ class Orchestrator:
                 for worker in assignments:
                     if states.get(worker) == WorkerState.RESERVED:
                         try:
-                            self._cluster.set_desired_state(worker_address=worker, state=WorkerState.TERMINATED)
+                            self._cluster.set_desired_state(
+                                worker_address=worker, state=WorkerState.TERMINATED
+                            )
                         except Exception:
-                            logger.warning("Failed to send TERMINATED to worker %s after reservation timeout.", worker)
+                            logger.warning(
+                                "Failed to send TERMINATED to worker %s after reservation timeout.", worker
+                            )
                 raise RuntimeError(
                     f"Timed out waiting for workers to reach RESERVED for "
                     f"expid={expid!r} repid={repid!r}: {assignments}"
@@ -413,20 +419,25 @@ class Orchestrator:
             self._mark_replication_failed(
                 expid=exp.expid,
                 repid=repid,
-                exc={"description": "Orchestrator stopped during initialization."}
+                exc={"description": "Orchestrator stopped during initialization."},
             )
-            logger.warning("Replication expid=%s repid=%s launch failed during initialization "
-                           "due to orchestrator shutdown.", exp.expid, repid)
+            logger.warning(
+                "Replication expid=%s repid=%s launch failed during initialization "
+                "due to orchestrator shutdown.",
+                exp.expid,
+                repid,
+            )
             return
 
         if timeout:
             self._mark_replication_failed(
-                expid=exp.expid,
-                repid=repid,
-                exc={"description": "Launch timeout during initialization."}
+                expid=exp.expid, repid=repid, exc={"description": "Launch timeout during initialization."}
             )
-            logger.warning("Replication expid=%s repid=%s launch failed during initialization "
-                           "due to timeout.", exp.expid, repid)
+            logger.warning(
+                "Replication expid=%s repid=%s launch failed during initialization due to timeout.",
+                exp.expid,
+                repid,
+            )
             return
 
         # Step 3: request ACTIVE for all workers.
@@ -447,23 +458,27 @@ class Orchestrator:
             self._mark_replication_failed(
                 expid=exp.expid,
                 repid=repid,
-                exc={"description": "Orchestrator stopped during simulation start."}
+                exc={"description": "Orchestrator stopped during simulation start."},
             )
-            logger.warning("Replication expid=%s repid=%s launch failed during start "
-                           "due to orchestrator shutdown.", exp.expid, repid)
+            logger.warning(
+                "Replication expid=%s repid=%s launch failed during start due to orchestrator shutdown.",
+                exp.expid,
+                repid,
+            )
             return
 
         if timeout:
             self._mark_replication_failed(
-                expid=exp.expid,
-                repid=repid,
-                exc={"description": "Launch timeout during simulation start."}
+                expid=exp.expid, repid=repid, exc={"description": "Launch timeout during simulation start."}
             )
-            logger.warning("Replication expid=%s repid=%s launch failed during start "
-                           "due to timeout.", exp.expid, repid)
+            logger.warning(
+                "Replication expid=%s repid=%s launch failed during start due to timeout.", exp.expid, repid
+            )
             return
 
-    def _mark_replication_failed(self, *, expid: str, repid: str, exc: Optional[dict[str, Any]] = None) -> None:
+    def _mark_replication_failed(
+        self, *, expid: str, repid: str, exc: Optional[dict[str, Any]] = None
+    ) -> None:
         try:
             if exc:
                 self._store.set_replication_exc(

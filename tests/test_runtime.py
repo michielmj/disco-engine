@@ -15,6 +15,7 @@ from disco.runtime import NodeRuntime
 # Test doubles
 # ---------------------------------------------------------------------------
 
+
 class DummyDataLogger:
     pass
 
@@ -122,6 +123,7 @@ class RecordingNode(Node):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_runtime(
     *,
     simprocs: List[str],
@@ -156,7 +158,7 @@ def make_runtime(
         router=router,  # type: ignore[arg-type]
         dlogger=DummyDataLogger(),  # type: ignore[arg-type]
         seed_sequence=123,  # type: ignore[arg-type]
-        data=data,    # type: ignore[arg-type]
+        data=data,  # type: ignore[arg-type]
     )
 
     node = rt.node  # type: ignore[attr-defined]
@@ -178,9 +180,10 @@ def drain_runner(rt: NodeRuntime, duration: float, max_steps: int = 10_000) -> N
 # Tests: lifecycle and API guards
 # ---------------------------------------------------------------------------
 
+
 def test_initialize_forwards_to_node_initialize() -> None:
     rt, _router, node = make_runtime(simprocs=["L0"])
-    rt.initialize({'foo': 1, 'bar': "x"})
+    rt.initialize({"foo": 1, "bar": "x"})
     assert node.init_kwargs == {"foo": 1, "bar": "x"}
     assert rt._status == NodeStatus.INITIALIZED  # private, OK for tests
 
@@ -206,6 +209,7 @@ def test_send_event_requires_active_status() -> None:
 # Tests: runner semantics and active context
 # ---------------------------------------------------------------------------
 
+
 def test_epoch0_invoked_for_all_simprocs_and_context_is_set() -> None:
     # No predecessors; Node schedules a wakeup to avoid "no more events" errors in SimProc.
     rt, _router, node = make_runtime(simprocs=["H", "L"])
@@ -226,6 +230,7 @@ def test_epoch0_invoked_for_all_simprocs_and_context_is_set() -> None:
 # ---------------------------------------------------------------------------
 # Integration: NodeRuntime ↔ SimProc ↔ Router, promises-first discipline
 # ---------------------------------------------------------------------------
+
 
 def test_node_outputs_forwarded_to_active_simproc_and_promises_sent_before_events() -> None:
     # One simproc with a successor so that promises/events are emitted.
@@ -266,6 +271,7 @@ def test_node_outputs_forwarded_to_active_simproc_and_promises_sent_before_event
 # Tests: ingress dispatch (target_simproc) and seqnr forwarding
 # ---------------------------------------------------------------------------
 
+
 class FakeSimProc:
     def __init__(self, name: str, number: int, next_epoch: float | None) -> None:
         self._name = name
@@ -291,7 +297,9 @@ class FakeSimProc:
     def try_next_epoch(self) -> bool:
         return False
 
-    def receive_event(self, sender_node: str, sender_simproc: str, epoch: float, data: Any, headers=None) -> bool:
+    def receive_event(
+        self, sender_node: str, sender_simproc: str, epoch: float, data: Any, headers=None
+    ) -> bool:
         self.received_events.append(
             EventEnvelope(
                 repid="abc",
@@ -306,7 +314,9 @@ class FakeSimProc:
         )
         return True
 
-    def receive_promise(self, sender_node: str, sender_simproc: str, seqnr: int, epoch: float, num_events: int) -> bool:
+    def receive_promise(
+        self, sender_node: str, sender_simproc: str, seqnr: int, epoch: float, num_events: int
+    ) -> bool:
         self.received_promises.append(
             PromiseEnvelope(
                 repid="abc",

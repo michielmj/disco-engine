@@ -119,9 +119,7 @@ def _populate_vertices_and_edges(
     )
 
 
-def engine_session_and_model_tables() -> Iterator[
-    tuple[object, sessionmaker, Table, Table]
-]:
+def engine_session_and_model_tables() -> Iterator[tuple[object, sessionmaker, Table, Table]]:
     """
     Helper generator for tests.
 
@@ -140,6 +138,7 @@ def engine_session_and_model_tables() -> Iterator[
         yield engine, SessionLocal, node_data, edge_data
     finally:
         engine.dispose()
+
 
 # ---------------------------------------------------------------------------
 # Tests: vertex data

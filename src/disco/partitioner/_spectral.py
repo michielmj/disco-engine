@@ -27,6 +27,7 @@ Algorithm
 6. Build ``NodeInstanceSpec`` objects and the incidence matrix, then return
    a ``Partitioning``.
 """
+
 from __future__ import annotations
 
 import heapq
@@ -71,9 +72,7 @@ class SpectralClusteringPartitioner:
             raise ValueError("Graph has no labels attached (graph.label_matrix is None)")
 
         if NODE_TYPE not in self._graph.label_indices_by_type:
-            raise KeyError(
-                f"Label type {NODE_TYPE!r} not found in graph.label_type_vectors"
-            )
+            raise KeyError(f"Label type {NODE_TYPE!r} not found in graph.label_type_vectors")
 
         distinct_lt = set()
         same_lt = set()
@@ -139,7 +138,6 @@ class SpectralClusteringPartitioner:
         # ---- Step 4: combine components to number of partitions ----
         final_components = self._combine_components(components, target_partition_count, target_weight)
 
-
         # ---- Step 5: build Partitioning ----
         node_specs: List[NodeInstanceSpec] = []
         row_vectors = []
@@ -149,14 +147,14 @@ class SpectralClusteringPartitioner:
         for c in final_components:
             idxs = sg.decompress(c)
             if np.intersect1d(all_idxs, idxs).shape[0] != 0:
-                raise RuntimeError('Components not distinct.')
+                raise RuntimeError("Components not distinct.")
             all_idxs = np.union1d(all_idxs, idxs)
 
         for partition, sv_mask in enumerate(final_components):
             graph_view = sg.get_view(gb.Vector.from_coo(sv_mask, True, size=n_sv))
 
             for node_type, label_values, assignment_vector, _ in _iter_node_instances(
-                    graph_view, self._model
+                graph_view, self._model
             ):
                 # DEBUG
                 idxs, _ = assignment_vector.to_coo()
@@ -184,7 +182,7 @@ class SpectralClusteringPartitioner:
         """
 
         # each disconnected supervertex is its own component
-        nz, _ = E.reduce_rowwise(gb.op.plus).select('!=', 0).new().to_coo()
+        nz, _ = E.reduce_rowwise(gb.op.plus).select("!=", 0).new().to_coo()
         zeros = np.setdiff1d(np.arange(E.nrows, dtype=np.int64), nz)
         components = [(weights[v], np.array([v], dtype=int)) for v in zeros]
 
@@ -198,11 +196,11 @@ class SpectralClusteringPartitioner:
         return components
 
     @staticmethod
-    def _split_component(E: gb.Matrix, component: np.ndarray, vertex_weights: np.ndarray, target_weight: float) -> List[Tuple[float, np.ndarray]]:
+    def _split_component(
+        E: gb.Matrix, component: np.ndarray, vertex_weights: np.ndarray, target_weight: float
+    ) -> List[Tuple[float, np.ndarray]]:
         weight = vertex_weights[component].sum()
-        n_clusters = min(
-            component.shape[0], max(2, int(np.round(weight / target_weight)))
-        )
+        n_clusters = min(component.shape[0], max(2, int(np.round(weight / target_weight))))
         Es = gb.io.to_scipy_sparse(E[component, component], format="csr")
         Es.indices = Es.indices.astype(np.dtypes.Int32DType)  # SciPy needs 32 bit indices
         Es.indptr = Es.indptr.astype(np.dtypes.Int32DType)
@@ -228,9 +226,9 @@ class SpectralClusteringPartitioner:
 
     @staticmethod
     def _combine_components(
-            components: list[tuple[float, np.ndarray]],
-            target_partition_count: int,
-            target_weight: float,
+        components: list[tuple[float, np.ndarray]],
+        target_partition_count: int,
+        target_weight: float,
     ) -> list[np.ndarray]:
         """Combine components into partitions via LPT greedy + local refinement.
 
@@ -333,8 +331,6 @@ class SpectralClusteringPartitioner:
         # --- Assemble output: concatenate vertex index arrays ----------------
         dtype = components[0][1].dtype if components else np.intp
         return [
-            np.concatenate([components[ci][1] for ci in members])
-            if members
-            else np.empty(0, dtype=dtype)
+            np.concatenate([components[ci][1] for ci in members]) if members else np.empty(0, dtype=dtype)
             for members in part_members
         ]

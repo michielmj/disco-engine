@@ -52,6 +52,7 @@ class _RemoteEndpoint:
     """
     Holds channel and stubs for a single remote worker address.
     """
+
     address: str
     channel: grpc.Channel
     stub: transport_pb2_grpc.DiscoTransportStub
@@ -82,9 +83,7 @@ class GrpcTransport(Transport):
         serializer: Callable[[Any], tuple[bytes, str]] | None = None,  # data -> packed_data, protocol
         # Optional injection points to ease testing or customization:
         channel_factory: Optional[Callable[[str, GrpcSettings], grpc.Channel]] = None,
-        stub_factory: Optional[
-            Callable[[grpc.Channel], transport_pb2_grpc.DiscoTransportStub]
-        ] = None,
+        stub_factory: Optional[Callable[[grpc.Channel], transport_pb2_grpc.DiscoTransportStub]] = None,
     ) -> None:
         self._cluster = cluster
         self._settings = settings
@@ -132,7 +131,7 @@ class GrpcTransport(Transport):
             data = envelope.data
         else:
             data, serialization_protocol = self._serializer(envelope.data)
-            headers = headers | {'serialization_protocol': serialization_protocol}
+            headers = headers | {"serialization_protocol": serialization_protocol}
 
         msg = transport_pb2.EventEnvelopeMsg(
             repid=envelope.repid,
@@ -310,6 +309,7 @@ class GrpcTransport(Transport):
 # Default factories
 # ---------------------------------------------------------------------- #
 
+
 def _default_channel_factory(address: str, settings: GrpcSettings) -> grpc.Channel:
     """
     Create a gRPC channel with basic options derived from GrpcSettings.
@@ -341,4 +341,4 @@ def _default_serializer(value: Any) -> tuple[bytes, str]:
     """
     import pickle
 
-    return pickle.dumps(value), f'PICKLE{pickle.DEFAULT_PROTOCOL}'
+    return pickle.dumps(value), f"PICKLE{pickle.DEFAULT_PROTOCOL}"

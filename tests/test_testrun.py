@@ -15,6 +15,7 @@ from disco.experiments import ExperimentStatus
 # Minimal fakes / test doubles
 # -----------------------------
 
+
 @dataclass(frozen=True, slots=True)
 class FakeNodeInstanceSpec:
     partition: int
@@ -102,12 +103,9 @@ class FakeGraphData:
 
 class FakeGraphDataFactory:
     @staticmethod
-    def for_node(*,
-                 session_manager: object,
-                 graph: object,
-                 model: object,
-                 partitioning: object,
-                 node_name: object) -> FakeGraphData:
+    def for_node(
+        *, session_manager: object, graph: object, model: object, partitioning: object, node_name: object
+    ) -> FakeGraphData:
         # Explicit signature; no getattr.
         return FakeGraphData()
 
@@ -196,6 +194,7 @@ class FakePartitioner:
 # Fixtures
 # -----------------------------
 
+
 @pytest.fixture()
 def patch_testrun_deps(monkeypatch: pytest.MonkeyPatch):
     # Patch external dependencies used by disco.testrun
@@ -224,6 +223,7 @@ def patch_testrun_deps(monkeypatch: pytest.MonkeyPatch):
 # Tests
 # -----------------------------
 
+
 def test_ctor_sets_status_loaded_and_picks_repid_from_experiment_replications(patch_testrun_deps):
     exp = FakeExperiment(expid="exp1", replications={"repA": object(), "repB": object()})
     g = FakeGraph(scenario_id="sid")
@@ -237,7 +237,9 @@ def test_ctor_sets_status_loaded_and_picks_repid_from_experiment_replications(pa
     assert list(tr.nodes.values())[0].repid == "repA"  # type: ignore[attr-defined]
 
 
-def test_ctor_uses_provided_model_without_calling_load_model(monkeypatch: pytest.MonkeyPatch, patch_testrun_deps):
+def test_ctor_uses_provided_model_without_calling_load_model(
+    monkeypatch: pytest.MonkeyPatch, patch_testrun_deps
+):
     called = {"n": 0}
 
     def _load_model(**kwargs: Any) -> FakeModel:
@@ -390,7 +392,9 @@ def test_run_initializes_if_needed_sets_status_active_and_steps_until_all_stop(p
     assert tr.nodes["n2"].runner_calls == [10.0]  # type: ignore[attr-defined]
 
 
-def test_run_can_be_called_multiple_times_earlier_duration_is_noop_later_duration_progresses(patch_testrun_deps):
+def test_run_can_be_called_multiple_times_earlier_duration_is_noop_later_duration_progresses(
+    patch_testrun_deps,
+):
     exp = FakeExperiment(expid="exp1", replications={"repA": object()}, params={})
     g = FakeGraph()
     settings = FakeSettings()

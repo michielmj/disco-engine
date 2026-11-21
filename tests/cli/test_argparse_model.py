@@ -33,7 +33,9 @@ def test_add_model_to_parser_parses_scalars_and_lists_and_choices() -> None:
     parser = argparse.ArgumentParser(prog="x")
     add_model_to_parser(parser, DemoModel)
 
-    ns = parser.parse_args(["--group", "g1", "--workers", "3", "--ports", "5001", "5002", "--loglevel", "DEBUG"])
+    ns = parser.parse_args(
+        ["--group", "g1", "--workers", "3", "--ports", "5001", "5002", "--loglevel", "DEBUG"]
+    )
     assert ns.group == "g1"
     assert ns.workers == 3
     assert ns.ports == [5001, 5002]

@@ -91,9 +91,7 @@ class FakeStub:
         **_kwargs,
     ) -> transport_pb2.TransportAck:  # type: ignore[override]
         messages = list(request_iterator)
-        self._events_sink.append(
-            RecordedEventCall(target=self._target, messages=messages)
-        )
+        self._events_sink.append(RecordedEventCall(target=self._target, messages=messages))
         return transport_pb2.TransportAck(message=f"received {len(messages)}")
 
     # Client-streaming RPC: accept timeout kwarg like real stubs do.
@@ -108,9 +106,7 @@ class FakeStub:
             # Simulate transient failure to trigger retry.
             raise FakeRpcError("transient promise failure")
         messages = list(request_iterator)
-        self._promises_sink.append(
-            RecordedPromiseCall(target=self._target, messages=messages)
-        )
+        self._promises_sink.append(RecordedPromiseCall(target=self._target, messages=messages))
         return transport_pb2.TransportAck(message=f"received {len(messages)}")
 
 
@@ -139,7 +135,7 @@ def test_handles_node_based_on_address_book() -> None:
         cluster=cluster,
         settings=settings,
         channel_factory=channel_factory,  # type: ignore[arg-type]
-        stub_factory=stub_factory,        # type: ignore[arg-type]
+        stub_factory=stub_factory,  # type: ignore[arg-type]
     )
 
     assert transport.handles_node("exp1", "nodeA")
@@ -170,7 +166,7 @@ def test_send_event_creates_correct_proto_and_uses_target_address() -> None:
         cluster=cluster,
         settings=settings,
         channel_factory=channel_factory,  # type: ignore[arg-type]
-        stub_factory=stub_factory,        # type: ignore[arg-type]
+        stub_factory=stub_factory,  # type: ignore[arg-type]
     )
 
     envelope = EventEnvelope(
@@ -225,7 +221,7 @@ def test_send_promise_success_without_retry() -> None:
         cluster=cluster,
         settings=settings,
         channel_factory=channel_factory,  # type: ignore[arg-type]
-        stub_factory=stub_factory,        # type: ignore[arg-type]
+        stub_factory=stub_factory,  # type: ignore[arg-type]
     )
 
     envelope = PromiseEnvelope(

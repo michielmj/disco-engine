@@ -1,7 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence, Iterable, Tuple, Generator, Self, cast, TypeVar, overload, Union
+from typing import (
+    Any,
+    Mapping,
+    Optional,
+    Sequence,
+    Iterable,
+    Tuple,
+    Generator,
+    Self,
+    cast,
+    TypeVar,
+    overload,
+    Union,
+)
 
 import numpy as np
 from graphblas import Matrix, Vector
@@ -21,14 +34,11 @@ from disco.graph import (
     get_inbound_edge_data,
     get_outbound_map,
     get_inbound_map,
-    get_vertex_data
+    get_vertex_data,
 )
 
 
-def _normalize_column_element(
-        column: ColumnElement[Any] | str,
-        orm_table: Table
-) -> ColumnElement:
+def _normalize_column_element(column: ColumnElement[Any] | str, orm_table: Table) -> ColumnElement:
     if isinstance(column, str):
         return orm_table.columns[column]
     else:
@@ -36,8 +46,7 @@ def _normalize_column_element(
 
 
 def _normalize_column_elements(
-        columns: Sequence[ColumnElement[Any]] | Sequence[str],
-        orm_table: Table
+    columns: Sequence[ColumnElement[Any]] | Sequence[str], orm_table: Table
 ) -> Iterable[ColumnElement]:
     for c in columns:
         yield _normalize_column_element(c, orm_table)
@@ -88,7 +97,9 @@ class SimProcGraphData:
                 mask=mask if mask is not None else self.node_mask,
             )
 
-    def outbound_map(self, *, mask: Optional[GraphMask] = None, values: Optional[ColumnElement | str] = None) -> Matrix:
+    def outbound_map(
+        self, *, mask: Optional[GraphMask] = None, values: Optional[ColumnElement | str] = None
+    ) -> Matrix:
         if values is not None:
             values = _normalize_column_element(values, self.edge_table)
 
@@ -98,10 +109,12 @@ class SimProcGraphData:
                 session=session,
                 layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
-                values=values
+                values=values,
             )
 
-    def inbound_map(self, *, mask: Optional[GraphMask] = None, values: Optional[ColumnElement | str] = None) -> Matrix:
+    def inbound_map(
+        self, *, mask: Optional[GraphMask] = None, values: Optional[ColumnElement | str] = None
+    ) -> Matrix:
         if values is not None:
             values = _normalize_column_element(values, self.edge_table)
 
@@ -111,7 +124,7 @@ class SimProcGraphData:
                 session=session,
                 layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
-                values=values
+                values=values,
             )
 
 
@@ -127,6 +140,7 @@ class GraphData:
       - simproc_name -> layer_idx mapping (from Model.spec.simprocs)
       - node assignment mask (from partitioning.incidence)
     """
+
     session_manager: SessionManager
     graph: Graph
     partitioning: Partitioning
@@ -150,18 +164,20 @@ class GraphData:
         partitioning: Partitioning,
         node_name: str,
     ) -> Self:
-        
+
         try:
-            node_index = partitioning.node_indices[node_name]    
+            node_index = partitioning.node_indices[node_name]
         except KeyError as exc:
             raise KeyError(f"Partitioning.node_indices has no entry for node_name={node_name!r}") from exc
         spec = partitioning.node_specs[node_index]
-        
-        if graph.scenario_id == '':
+
+        if graph.scenario_id == "":
             raise ValueError(f"Graph.scenario_id must be defined.")
-        
-        node_mask = GraphMask(vector=partitioning.incidence[node_index, :].new(), scenario_id=graph.scenario_id)
-        
+
+        node_mask = GraphMask(
+            vector=partitioning.incidence[node_index, :].new(), scenario_id=graph.scenario_id
+        )
+
         try:
             node_table = model.orm.node_tables[spec.node_type]
         except KeyError as exc:
@@ -219,9 +235,7 @@ class GraphData:
             return t
         if self.orm.default_edge_table is not None:
             return self.orm.default_edge_table
-        raise KeyError(
-            f"No edge table for simproc {simproc_name!r} and OrmBundle.default_edge_table is None"
-        )
+        raise KeyError(f"No edge table for simproc {simproc_name!r} and OrmBundle.default_edge_table is None")
 
     def simproc(self, simproc_name: str) -> SimProcGraphData:
         try:
@@ -248,8 +262,8 @@ class GraphData:
     def by_node(self, idxs: Vector) -> Generator[Tuple[str, Vector], None, None]: ...
 
     def by_node(
-            self,
-            idxs: Union[Vector, np.ndarray, list, int],
+        self,
+        idxs: Union[Vector, np.ndarray, list, int],
     ) -> Generator[Tuple[str, Union[Vector, np.ndarray, list, int]], None, None]:
         if isinstance(idxs, (Vector, VectorExpression)):
             yield from self._by_node_vector(idxs)
@@ -272,18 +286,14 @@ class GraphData:
 
     def _by_node_vector(self, vector: Vector):
         if vector.size != self.incidence_matrix.ncols:
-            raise ValueError('vector.size must equal incidence_matrix.ncols')
+            raise ValueError("vector.size must equal incidence_matrix.ncols")
 
-        A = (self.incidence_matrix * vector).select('!=', 0).new()
+        A = (self.incidence_matrix * vector).select("!=", 0).new()
         indptr, col_indices, values = A.to_csr()
 
         nonempty_rows = np.flatnonzero(np.diff(indptr))
 
         for i in nonempty_rows:
             start, end = indptr[i], indptr[i + 1]
-            row_vec = Vector.from_coo(
-                col_indices[start:end],
-                values[start:end],
-                size=A.ncols
-            )
+            row_vec = Vector.from_coo(col_indices[start:end], values[start:end], size=A.ncols)
             yield self.node_specs[i].node_name, row_vec

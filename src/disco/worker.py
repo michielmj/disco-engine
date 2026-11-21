@@ -47,6 +47,7 @@ class WorkerError(DiscoError):
       (via ExperimentStore.set_partition_exc), not turned into BROKEN unless they prevent
       *any* experiment from being started.
     """
+
     pass
 
 
@@ -63,6 +64,7 @@ class Assignment:
         * reporting partition status/exceptions via ExperimentStore
         * reporting WorkerInfo to Cluster
     """
+
     expid: str
     repid: str
     partition: int
@@ -143,13 +145,13 @@ class Worker:
     """
 
     def __init__(
-            self,
-            address: str,
-            cluster: Cluster,
-            event_queues: Mapping[str, Queue[IPCEventMsg]],
-            promise_queues: Mapping[str, Queue[IPCPromiseMsg]],
-            settings: AppSettings,
-            name: Optional[str] = None,
+        self,
+        address: str,
+        cluster: Cluster,
+        event_queues: Mapping[str, Queue[IPCEventMsg]],
+        promise_queues: Mapping[str, Queue[IPCPromiseMsg]],
+        settings: AppSettings,
+        name: Optional[str] = None,
     ) -> None:
         # Identity
         self.address = address
@@ -569,7 +571,9 @@ class Worker:
         node = self._nodes.get(msg.target_node)
         if node is None:
             with self._lock:
-                self._transition_to_broken_locked(reason=f"Received event for unknown node {msg.target_node!r}")
+                self._transition_to_broken_locked(
+                    reason=f"Received event for unknown node {msg.target_node!r}"
+                )
             return
 
         if msg.shm_name is not None:
@@ -581,7 +585,9 @@ class Worker:
 
         if msg.data is None:
             with self._lock:
-                self._transition_to_broken_locked(reason=f"IPCEventMsg missing payload for node {msg.target_node!r}")
+                self._transition_to_broken_locked(
+                    reason=f"IPCEventMsg missing payload for node {msg.target_node!r}"
+                )
             return
 
         envelope = EventEnvelope(
@@ -612,7 +618,9 @@ class Worker:
         node = self._nodes.get(msg.target_node)
         if node is None:
             with self._lock:
-                self._transition_to_broken_locked(reason=f"Received promise for unknown node {msg.target_node!r}")
+                self._transition_to_broken_locked(
+                    reason=f"Received promise for unknown node {msg.target_node!r}"
+                )
                 return
 
         envelope = PromiseEnvelope(
@@ -684,7 +692,9 @@ class Worker:
                 desired.request_id,
                 exc,
             )
-            self._transition_to_broken_locked(reason=f"failed to apply desired-state {desired.request_id}: {exc!r}")
+            self._transition_to_broken_locked(
+                reason=f"failed to apply desired-state {desired.request_id}: {exc!r}"
+            )
 
     def _apply_desired_locked(self, desired: DesiredWorkerState) -> None:
         """
@@ -704,8 +714,10 @@ class Worker:
         - ACTIVE hot path does not call control-plane helpers.
         """
         if not desired.validate_assignment():
-            raise ValueError(f"Invalid or incomplete assignment expid={desired.expid} repid={desired.repid} "
-                             f"partition={desired.partition}.")
+            raise ValueError(
+                f"Invalid or incomplete assignment expid={desired.expid} repid={desired.repid} "
+                f"partition={desired.partition}."
+            )
         if not desired.validate_state():
             raise ValueError(f"Invalid desired state {desired.state.name}")
 
@@ -799,8 +811,12 @@ class Worker:
 
         # TERMINATED: cancel and teardown the current run (if any), return to AVAILABLE.
         if target == WorkerState.TERMINATED:
-            if self._state not in (WorkerState.ACTIVE, WorkerState.PAUSED, WorkerState.READY,
-                                   WorkerState.RESERVED):
+            if self._state not in (
+                WorkerState.ACTIVE,
+                WorkerState.PAUSED,
+                WorkerState.READY,
+                WorkerState.RESERVED,
+            ):
                 raise WorkerError(f"Cannot terminate from {self._state.name}")
 
             # Only set CANCELED if we were past RESERVED (i.e. the run was actually started).
@@ -848,9 +864,11 @@ class Worker:
 
         # --- Experiment ---
         try:
-            if (self._experiment is None
-                    or self._experiment_expid != assignment.expid
-                    or self._experiment_partition != assignment.partition):
+            if (
+                self._experiment is None
+                or self._experiment_expid != assignment.expid
+                or self._experiment_partition != assignment.partition
+            ):
                 self._experiment = self._exp_store.load(assignment.expid)
                 self._experiment_expid = assignment.expid
                 self._experiment_partition = assignment.partition
@@ -888,10 +906,7 @@ class Worker:
             return False
 
         try:
-            if (
-                    self._partitioning is None
-                    or self._partitioning_id != experiment.selected_partitioning
-            ):
+            if self._partitioning is None or self._partitioning_id != experiment.selected_partitioning:
                 self._partitioning = Partitioning.load(
                     metastore=self._cluster.meta,
                     partitioning_id=experiment.selected_partitioning,
@@ -900,8 +915,13 @@ class Worker:
                 self._node_specs = {ns.node_name: ns for ns in self._partitioning.node_specs}
                 self._partitioning_id = experiment.selected_partitioning
         except (
-                PartitioningNotFoundError, PartitioningCorruptError, KeyError, TypeError, ValueError,
-                DiscoRuntimeError) as exc:
+            PartitioningNotFoundError,
+            PartitioningCorruptError,
+            KeyError,
+            TypeError,
+            ValueError,
+            DiscoRuntimeError,
+        ) as exc:
             self._fail_partition_locked(exc, where="load partitioning")
             return False
 
@@ -918,7 +938,7 @@ class Worker:
                 path=ms.path,
                 db=self._session_manager,
                 dev_import_root=ms.dev_import_root,
-                model_yml=ms.model_yml
+                model_yml=ms.model_yml,
             )
         model = self._model
 
@@ -1121,7 +1141,9 @@ class Worker:
         try:
             self._cluster.set_worker_state(self.address, new_state)
         except Exception as exc:
-            logger.exception("Worker %s failed to publish state %s to Cluster: %r", self._name, new_state.name, exc)
+            logger.exception(
+                "Worker %s failed to publish state %s to Cluster: %r", self._name, new_state.name, exc
+            )
             self._state = WorkerState.BROKEN
 
     def _set_partition_status_locked(self, status: ExperimentStatus) -> None:

@@ -89,16 +89,15 @@ class ExperimentStore:
         self.set_replication_status(expid=expid, repid=repid, status=ExperimentStatus.SUBMITTED)
         self.metastore.enqueue(SUBMISSIONS_QUEUE, (expid, repid))
 
-    def dequeue(self,
-                timeout: Optional[float] = None,
-                *,
-                force_mode: Literal["raise", "release", "consume"] = "raise",
-                ) -> Submission:
-        return cast(Submission, self.metastore.dequeue(
-            SUBMISSIONS_QUEUE,
-            timeout=timeout,
-            force_mode=force_mode
-        ))
+    def dequeue(
+        self,
+        timeout: Optional[float] = None,
+        *,
+        force_mode: Literal["raise", "release", "consume"] = "raise",
+    ) -> Submission:
+        return cast(
+            Submission, self.metastore.dequeue(SUBMISSIONS_QUEUE, timeout=timeout, force_mode=force_mode)
+        )
 
     # -----------------------------
     # Atomic updates (worker-safe)
@@ -132,7 +131,8 @@ class ExperimentStore:
     # -----------------------------
 
     def generate_replications(
-            self, expid: str, n_replications: int, *, seeds: Optional[list[int]] = None) -> Experiment:
+        self, expid: str, n_replications: int, *, seeds: Optional[list[int]] = None
+    ) -> Experiment:
         def mut(e: Experiment) -> None:
             e.generate_replications(n_replications)
 
@@ -162,10 +162,10 @@ class ExperimentStore:
         return self.assign_partition(expid, repid, 0, worker)
 
     def set_replication_status(
-            self,
-            expid: str,
-            repid: str,
-            status: ExperimentStatus,
+        self,
+        expid: str,
+        repid: str,
+        status: ExperimentStatus,
     ) -> Experiment:
         def mut(e: Experiment) -> None:
             e.set_replication_status(repid=repid, status=status)
@@ -173,12 +173,12 @@ class ExperimentStore:
         return self.atomic_update(expid, mut)
 
     def set_replication_exc(
-            self,
-            expid: str,
-            repid: str,
-            exc: dict[str, Any],
-            *,
-            fail_replication: bool = False,
+        self,
+        expid: str,
+        repid: str,
+        exc: dict[str, Any],
+        *,
+        fail_replication: bool = False,
     ) -> Experiment:
         """
         Update assignment exception message and propagate upward.
@@ -193,11 +193,11 @@ class ExperimentStore:
         return self.atomic_update(expid, mut)
 
     def set_partition_status(
-            self,
-            expid: str,
-            repid: str,
-            partition: int,
-            status: ExperimentStatus,
+        self,
+        expid: str,
+        repid: str,
+        partition: int,
+        status: ExperimentStatus,
     ) -> Experiment:
         def mut(e: Experiment) -> None:
             e.set_partition_status(repid=repid, partition=partition, status=status)
@@ -205,13 +205,13 @@ class ExperimentStore:
         return self.atomic_update(expid, mut)
 
     def set_partition_exc(
-            self,
-            expid: str,
-            repid: str,
-            partition: int,
-            exc: dict[str, Any],
-            *,
-            fail_partition: bool = False,
+        self,
+        expid: str,
+        repid: str,
+        partition: int,
+        exc: dict[str, Any],
+        *,
+        fail_partition: bool = False,
     ) -> Experiment:
         """
         Update assignment exception message and propagate upward.

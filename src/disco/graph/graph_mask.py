@@ -79,9 +79,7 @@ class GraphMask:
         Remove all masks whose updated_at is older than the configured age.
         """
         cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
-        session.execute(
-            delete(vertex_masks).where(vertex_masks.c.updated_at < cutoff)
-        )
+        session.execute(delete(vertex_masks).where(vertex_masks.c.updated_at < cutoff))
 
     # ------------------------------------------------------------------ #
     # Internals

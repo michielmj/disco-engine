@@ -18,6 +18,7 @@ from disco.experiments import ExperimentStatus
 # Fakes / test helpers
 # -----------------------------
 
+
 class FakeCluster:
     def __init__(self) -> None:
         self.meta = object()
@@ -66,6 +67,7 @@ class FakeExperimentStore:
     - set_partition_status()
     - set_partition_exc()
     """
+
     def __init__(self, meta: Any) -> None:
         self.meta = meta
         self.load_calls: list[str] = []
@@ -130,6 +132,7 @@ class FakeNodeRuntime:
     - runner(duration=...) returns a generator (provided at construction time)
     - receive_event / receive_promise record calls
     """
+
     def __init__(self, gen_factory: Callable[[], Any]) -> None:
         self._gen_factory = gen_factory
         self.events: list[Any] = []
@@ -151,6 +154,7 @@ def gen_yield_n_then_stop(n: int):
             yield object()
         return
         yield  # pragma: no cover
+
     return _g
 
 
@@ -158,12 +162,14 @@ def gen_raise(exc: BaseException):
     def _g():
         raise exc
         yield  # pragma: no cover
+
     return _g
 
 
 # -----------------------------
 # Fixtures
 # -----------------------------
+
 
 @pytest.fixture()
 def worker_env(monkeypatch: pytest.MonkeyPatch):
@@ -234,6 +240,7 @@ def worker_env(monkeypatch: pytest.MonkeyPatch):
 # Tests
 # -----------------------------
 
+
 def test_on_desired_state_change_sets_pending_and_kicks(worker_env):
     w, cluster, store, ev_q, pr_q = worker_env
 
@@ -253,7 +260,9 @@ def test_on_desired_state_change_sets_pending_and_kicks(worker_env):
     assert w._kick.is_set()
 
 
-def test_apply_desired_reserved_then_ready_transitions_and_calls_setup(monkeypatch: pytest.MonkeyPatch, worker_env):
+def test_apply_desired_reserved_then_ready_transitions_and_calls_setup(
+    monkeypatch: pytest.MonkeyPatch, worker_env
+):
     w, cluster, store, ev_q, pr_q = worker_env
 
     called = {"setup": 0}
@@ -291,9 +300,7 @@ def test_apply_desired_reserved_then_ready_transitions_and_calls_setup(monkeypat
     assert w._assignment.partition == 0
     assert (w.address, WorkerState.RESERVED) in cluster.worker_state_calls
     # Should have published worker info with assignment.
-    assert any(
-        (w.address, 0, "e1", "rep1") == call for call in cluster.worker_info_calls
-    )
+    assert any((w.address, 0, "e1", "rep1") == call for call in cluster.worker_info_calls)
     # No setup should have happened yet.
     assert called["setup"] == 0
 
@@ -517,16 +524,18 @@ def test_no_kick_needed_for_ingress_in_ready_or_paused(worker_env):
 
     # Put a dummy message in queue; _kick should remain unchanged until we process control plane.
     w._kick.clear()
-    ev_q.put_nowait(worker_mod.IPCEventMsg(  # type: ignore[attr-defined]
-        repid="rep1",
-        sender_node="a",
-        sender_simproc="s",
-        target_node="missing",   # will break if delivered, but we won't drain here
-        target_simproc="t",
-        epoch=0.0,
-        data={"x": 1},
-        headers={},
-        shm_name=None,
-        size=0,
-    ))
+    ev_q.put_nowait(
+        worker_mod.IPCEventMsg(  # type: ignore[attr-defined]
+            repid="rep1",
+            sender_node="a",
+            sender_simproc="s",
+            target_node="missing",  # will break if delivered, but we won't drain here
+            target_simproc="t",
+            epoch=0.0,
+            data={"x": 1},
+            headers={},
+            shm_name=None,
+            size=0,
+        )
+    )
     assert not w._kick.is_set()

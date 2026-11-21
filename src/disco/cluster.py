@@ -21,7 +21,7 @@ logger = getLogger(__name__)
 class WorkerState(IntEnum):
     CREATED = 0
     AVAILABLE = 1
-    RESERVED = 2        # claimed by orchestrator; assignment set, no heavy init yet
+    RESERVED = 2  # claimed by orchestrator; assignment set, no heavy init yet
     INITIALIZING = 3
     READY = 4
     ACTIVE = 5
@@ -48,12 +48,18 @@ class DesiredWorkerState:
     state: WorkerState
 
     def validate_assignment(self):
-        return (self.expid is None) == (self.repid is None) and (self.repid is None) == (self.partition is None)
+        return (self.expid is None) == (self.repid is None) and (self.repid is None) == (
+            self.partition is None
+        )
 
     def validate_state(self):
         return self.state in (
-            WorkerState.RESERVED, WorkerState.READY, WorkerState.ACTIVE,
-            WorkerState.PAUSED, WorkerState.TERMINATED, WorkerState.EXITED,
+            WorkerState.RESERVED,
+            WorkerState.READY,
+            WorkerState.ACTIVE,
+            WorkerState.PAUSED,
+            WorkerState.TERMINATED,
+            WorkerState.EXITED,
         )
 
 
@@ -69,14 +75,16 @@ class Cluster:
     def __init__(self, meta: Metastore):
         self.meta = meta
         # Ensure base structure is present
-        self.meta.ensure_structure([
-            REGISTERED_WORKERS,
-            WORKERS,
-            DESIRED_STATE,
-            ADDRESS_BOOK,
-            ORCHESTRATOR,
-            ORCHESTRATOR_ELECTION_ROOT
-        ])
+        self.meta.ensure_structure(
+            [
+                REGISTERED_WORKERS,
+                WORKERS,
+                DESIRED_STATE,
+                ADDRESS_BOOK,
+                ORCHESTRATOR,
+                ORCHESTRATOR_ELECTION_ROOT,
+            ]
+        )
 
         self._lock = RLock()
         # Condition uses the same lock as worker_state for consistency
@@ -91,9 +99,7 @@ class Cluster:
         self._address_book_uptodate = False
 
         # Watch registered workers list
-        self.meta.watch_members_with_callback(
-            REGISTERED_WORKERS, self._watch_children
-        )
+        self.meta.watch_members_with_callback(REGISTERED_WORKERS, self._watch_children)
 
     # ------------------------------------------------------------------ #
     # ZooKeeper watch callbacks
@@ -335,9 +341,9 @@ class Cluster:
     # ------------------------------------------------------------------ #
 
     def on_desired_state_change(
-            self,
-            worker_address: str,
-            handler: Callable[[DesiredWorkerState], str | None],
+        self,
+        worker_address: str,
+        handler: Callable[[DesiredWorkerState], str | None],
     ) -> uuid.UUID:
         """
         Register a callback that receives desired-state changes for `worker_address`.
@@ -375,12 +381,12 @@ class Cluster:
         return self.meta.watch_with_callback(desired_path, _callback)
 
     def set_desired_state(
-            self,
-            worker_address: str,
-            state: WorkerState,
-            expid: str | None = None,
-            repid: str | None = None,
-            partition: int | None = None,
+        self,
+        worker_address: str,
+        state: WorkerState,
+        expid: str | None = None,
+        repid: str | None = None,
+        partition: int | None = None,
     ) -> str:
         desired_path = f"{DESIRED_STATE}/{worker_address}/desired"
         request_id = str(uuid.uuid4())
@@ -406,8 +412,7 @@ class Cluster:
         process_time: float,
         thread_times: dict[str, float],
         meta: Metastore | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     # ------------------------------------------------------------------ #
     # Orchestrator election
@@ -443,7 +448,9 @@ class Cluster:
 
     @classmethod
     @contextmanager
-    def make_cluster(cls, zookeeper_settings: ZookeeperSettings, group: str | None = None) -> Iterator[Cluster]:
+    def make_cluster(
+        cls, zookeeper_settings: ZookeeperSettings, group: str | None = None
+    ) -> Iterator[Cluster]:
         zk_manager = ZkConnectionManager(zookeeper_settings)
         zk_manager.start()
 

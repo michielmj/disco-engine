@@ -163,6 +163,7 @@ def test_router_transports_returns_transport_objects_in_order() -> None:
 # InProcessTransport tests
 # ---------------------------------------------------------------------------
 
+
 class FakeInProcessNodeRuntime:
     """Minimal stand-in for a NodeRuntime registered with InProcessTransport."""
 

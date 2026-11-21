@@ -22,12 +22,12 @@ class NodeStatus(IntEnum):
 
 class NodeRuntimeLike(Protocol):
     def send_event(
-            self,
-            target_node: str,
-            target_simproc: str,
-            epoch: float,
-            data: Any,
-            headers: Dict[str, str] | None = None,
+        self,
+        target_node: str,
+        target_simproc: str,
+        epoch: float,
+        data: Any,
+        headers: Dict[str, str] | None = None,
     ) -> None: ...
 
     @property
@@ -35,7 +35,7 @@ class NodeRuntimeLike(Protocol):
         raise NotImplementedError
 
     @property
-    def epoch(self) -> float | None :
+    def epoch(self) -> float | None:
         raise NotImplementedError
 
     @property
@@ -86,19 +86,15 @@ class Node(ABC):
     def on_events(self, simproc: str, events: Iterable[Event]) -> None: ...
 
     def send_event(
-            self,
-            target_node: str,
-            target_simproc: str,
-            epoch: float,
-            data: Any,
-            headers: dict[str, str] | None = None
+        self,
+        target_node: str,
+        target_simproc: str,
+        epoch: float,
+        data: Any,
+        headers: dict[str, str] | None = None,
     ):
         self.__runtime__.send_event(
-            target_node=target_node,
-            target_simproc=target_simproc,
-            epoch=epoch,
-            data=data,
-            headers=headers
+            target_node=target_node, target_simproc=target_simproc, epoch=epoch, data=data, headers=headers
         )
 
     @property

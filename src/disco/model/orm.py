@@ -95,15 +95,15 @@ class OrmBundle:
     metadata: MetaData
 
     # Usable Table objects (resolved from metadata)
-    node_tables: Mapping[str, Table]                 # node_type -> Table
-    default_edge_table: Optional[Table]              # default edge table, if configured
-    edge_tables_by_simproc: Mapping[str, Table]      # simproc -> Table
+    node_tables: Mapping[str, Table]  # node_type -> Table
+    default_edge_table: Optional[Table]  # default edge table, if configured
+    edge_tables_by_simproc: Mapping[str, Table]  # simproc -> Table
 
     # Name mapping used by db_validate/db_install
-    node_table_names: Mapping[str, str]              # node_type -> table name
-    default_edge_table_name: Optional[str]           # table name
-    edge_table_names_by_simproc: Mapping[str, str]   # simproc -> table name
-    required_table_names: Set[str]                   # all required table names (no schema prefix)
+    node_table_names: Mapping[str, str]  # node_type -> table name
+    default_edge_table_name: Optional[str]  # table name
+    edge_table_names_by_simproc: Mapping[str, str]  # simproc -> table name
+    required_table_names: Set[str]  # all required table names (no schema prefix)
 
     ddl_available: bool
 
@@ -288,8 +288,7 @@ def _is_str_type(col: Column) -> bool:
 def _require_col(table: Table, name: str) -> Column:
     if name not in table.c:
         raise ModelOrmValidationError(
-            f"Table '{table.fullname}' is missing required column '{name}'. "
-            f"Columns: {list(table.c.keys())}"
+            f"Table '{table.fullname}' is missing required column '{name}'. Columns: {list(table.c.keys())}"
         )
     return table.c[name]
 
@@ -435,7 +434,9 @@ def build_orm_bundle(
 
     else:
         if db is None:
-            raise ModelOrmLoadError("Reflection mode requires a db handle (Engine|Connection|SessionManager).")
+            raise ModelOrmLoadError(
+                "Reflection mode requires a db handle (Engine|Connection|SessionManager)."
+            )
 
         conn_or_engine = normalize_db_handle(db)
         md = reflect_tables(conn_or_engine, required_names, schema=schema)

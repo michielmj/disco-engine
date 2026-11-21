@@ -16,6 +16,7 @@ from sqlalchemy.engine import URL
 
 class ConfigError(RuntimeError):
     """Configuration-related error."""
+
     pass
 
 
@@ -112,10 +113,7 @@ def _config_file_context(path: Path | None) -> Any:
 
 class LoggingSettings(BaseModel):
     loglevel: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] = "INFO"
-    format: str = (
-        "%(asctime)-20s %(processName)-30s %(name)-40s "
-        "%(levelname)-8s: %(message)s"
-    )
+    format: str = "%(asctime)-20s %(processName)-30s %(name)-40s %(levelname)-8s: %(message)s"
 
 
 class GrpcSettings(BaseModel):
@@ -131,17 +129,22 @@ class GrpcSettings(BaseModel):
     max_workers: int = Field(10, description="Maximum number of worker threads for the gRPC server.")
     grace_s: float = Field(60.0, description="Grace period in seconds for server shutdown.")
 
-    max_send_message_bytes: int | None = Field(default=None, description="Maximum send message size in bytes (None ="
-                                                                         "default).")
-    max_receive_message_bytes: int | None = Field(default=None, description="Maximum receive message size in bytes ("
-                                                                            "None = default).")
+    max_send_message_bytes: int | None = Field(
+        default=None, description="Maximum send message size in bytes (None =default)."
+    )
+    max_receive_message_bytes: int | None = Field(
+        default=None, description="Maximum receive message size in bytes (None = default)."
+    )
 
-    keepalive_time_s: float | None = Field(default=None, description="Time between keepalive pings in seconds (None = "
-                                                                     "disabled).")
-    keepalive_timeout_s: float | None = Field(default=None, description="Timeout for keepalive pings in seconds (None "
-                                                                        "= default).")
-    keepalive_permit_without_calls: bool = Field(False, description="Allow keepalive pings even when there are no "
-                                                                    "active calls.")
+    keepalive_time_s: float | None = Field(
+        default=None, description="Time between keepalive pings in seconds (None = disabled)."
+    )
+    keepalive_timeout_s: float | None = Field(
+        default=None, description="Timeout for keepalive pings in seconds (None = default)."
+    )
+    keepalive_permit_without_calls: bool = Field(
+        False, description="Allow keepalive pings even when there are no active calls."
+    )
 
     compression: Literal["none", "gzip"] = Field("none", description="Compression algorithm for gRPC calls.")
 
@@ -149,14 +152,18 @@ class GrpcSettings(BaseModel):
         default_factory=lambda: [0.05, 0.15, 0.5, 1.0, 2.0],
         description="Backoff sequence for promise retries in seconds.",
     )
-    promise_retry_max_window_s: float = Field(3.0, description="Maximum time window for promise delivery retries in "
-                                                               "seconds.")
+    promise_retry_max_window_s: float = Field(
+        3.0, description="Maximum time window for promise delivery retries in seconds."
+    )
     loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
-        None, description="Logging level for gRPC (CRITICAL, WARNING, INFO, DEBUG)")
+        None, description="Logging level for gRPC (CRITICAL, WARNING, INFO, DEBUG)"
+    )
 
 
 class ZookeeperSettings(BaseModel):
-    hosts: str = Field("localhost:2181", description="Comma-separated host:port pairs for Zookeeper ensemble.")
+    hosts: str = Field(
+        "localhost:2181", description="Comma-separated host:port pairs for Zookeeper ensemble."
+    )
     chroot: str | None = Field(default=None, description="Optional chroot path, e.g. /disco.")
     default_group: str = Field("default", description="Default logical group / namespace used in the app.")
     # session_timeout_s: float = Field(10.0, description="Zookeeper session timeout in seconds.")
@@ -164,13 +171,20 @@ class ZookeeperSettings(BaseModel):
     max_retries: int = Field(5, description="Maximum number of retry attempts for failed operations.")
     retry_delay_s: float = Field(1.0, description="Delay between retries in seconds.")
     auth_scheme: str | None = Field(default=None, description="Optional auth scheme, e.g. 'digest'.")
-    auth_credentials: str | None = Field(default=None, description="Optional auth credentials, e.g. 'user:password'.")
+    auth_credentials: str | None = Field(
+        default=None, description="Optional auth credentials, e.g. 'user:password'."
+    )
     use_tls: bool = Field(False, description="Enable TLS/SSL for Zookeeper connection.")
-    ca_cert: str | None = Field(default=None, description="Path to CA certificate file for TLS, if applicable.")
-    client_cert: str | None = Field(default=None, description="Path to client certificate file for mutual TLS.")
+    ca_cert: str | None = Field(
+        default=None, description="Path to CA certificate file for TLS, if applicable."
+    )
+    client_cert: str | None = Field(
+        default=None, description="Path to client certificate file for mutual TLS."
+    )
     client_key: str | None = Field(default=None, description="Path to client private key for mutual TLS.")
     loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
-        None, description="Logging level for Zookeeper / Kazoo (CRITICAL, WARNING, INFO, DEBUG)")
+        None, description="Logging level for Zookeeper / Kazoo (CRITICAL, WARNING, INFO, DEBUG)"
+    )
 
 
 Dialect = Literal["postgresql", "sqlite"]
@@ -221,7 +235,8 @@ class DatabaseSettings(BaseModel):
     pool_pre_ping: bool = True
 
     loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
-        None, description="Logging level for sqlalchemy (CRITICAL, WARNING, INFO, DEBUG)")
+        None, description="Logging level for sqlalchemy (CRITICAL, WARNING, INFO, DEBUG)"
+    )
 
     def sqlalchemy_url(self) -> URL:
         if self.dialect == "sqlite":
@@ -246,11 +261,12 @@ class DataLoggerSettings(BaseModel):
     rotate_bytes: int = Field(256 << 20, description="Segment file size (default=256 MB)")
     zstd_level: int = Field(1, description="ZSTD Compression level (default=1)")
     loglevel: Optional[Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]] = Field(
-        None, description="Logging level for data_logger (CRITICAL, WARNING, INFO, DEBUG)")
+        None, description="Logging level for data_logger (CRITICAL, WARNING, INFO, DEBUG)"
+    )
 
 
 class ModelSettings(BaseModel):
-    plugin: str | None = Field('my-model', description="...")
+    plugin: str | None = Field("my-model", description="...")
     package: str | None = Field(None, description="...")
     path: DirectoryPath | None = Field(None, description="...")
     dev_import_root: DirectoryPath | None = Field(None, description="...")
@@ -260,9 +276,7 @@ class ModelSettings(BaseModel):
     def _validate_exactly_one_source(self) -> "ModelSettings":
         count = sum(x is not None for x in (self.plugin, self.package, self.path))
         if count != 1:
-            raise ValueError(
-                "Exactly one of `plugin`, `package`, or `path` must be provided."
-            )
+            raise ValueError("Exactly one of `plugin`, `package`, or `path` must be provided.")
         return self
 
 
@@ -274,6 +288,7 @@ class SerializationSettings(BaseModel):
 
     def validate_protocol(self) -> None:
         import pickle as _pickle
+
         if not (0 <= self.protocol <= _pickle.HIGHEST_PROTOCOL):
             raise ValueError(
                 f"Unsupported pickle protocol={self.protocol}. "

@@ -38,13 +38,13 @@ class Graph:
         "_layers",
         "num_vertices",
         "scenario_id",
-        "_vertices",                   # np.ndarray | None  (index i -> vertex key)
-        "_vertex_weight",              # np.ndarray[float64] of length num_vertices
-        "_mask",                       # GraphMask | None
-        "_label_matrix",               # Matrix[BOOL] | None
-        "_label_meta",                 # dict[int, tuple[str, str]]
-        "_labels_by_type",             # dict[str, dict[str, int]]
-        "_label_indices_by_type",      # dict[str, np.ndarray]
+        "_vertices",  # np.ndarray | None  (index i -> vertex key)
+        "_vertex_weight",  # np.ndarray[float64] of length num_vertices
+        "_mask",  # GraphMask | None
+        "_label_matrix",  # Matrix[BOOL] | None
+        "_label_meta",  # dict[int, tuple[str, str]]
+        "_labels_by_type",  # dict[str, dict[str, int]]
+        "_label_indices_by_type",  # dict[str, np.ndarray]
         "_label_index_by_type_value",  # dict[tuple[str, str], int]
         "_num_labels",
     )
@@ -71,9 +71,7 @@ class Graph:
         self.scenario_id = scenario_id
 
         # vertices: 1D array mapping vertex index -> vertex key
-        self._vertices: Optional[np.ndarray] = (
-            np.asarray(vertices) if vertices is not None else None
-        )
+        self._vertices: Optional[np.ndarray] = np.asarray(vertices) if vertices is not None else None
 
         # vertex_weight: per-vertex compute weight, default 1.0
         if vertex_weight is None:
@@ -154,8 +152,7 @@ class Graph:
 
         if self._vertices is not None and len(self._vertices) != self.num_vertices:
             raise ValueError(
-                f"vertices array length ({len(self._vertices)}) must match "
-                f"num_vertices ({self.num_vertices})"
+                f"vertices array length ({len(self._vertices)}) must match num_vertices ({self.num_vertices})"
             )
 
         if len(self._vertex_weight) != self.num_vertices:
@@ -213,9 +210,7 @@ class Graph:
         if mask_vector.dtype is not gb.dtypes.BOOL:
             raise TypeError(f"Mask vector must have BOOL dtype, got {mask_vector.dtype!r}")
         if mask_vector.size != self.num_vertices:
-            raise ValueError(
-                f"Mask size ({mask_vector.size}) must match num_vertices ({self.num_vertices})"
-            )
+            raise ValueError(f"Mask size ({mask_vector.size}) must match num_vertices ({self.num_vertices})")
 
         self._mask = GraphMask(mask_vector, scenario_id=self.scenario_id)
 
@@ -358,7 +353,9 @@ class Graph:
         else:
             return label_idxs, self._label_matrix[:, label_idxs]
 
-    def labels_for_type_masked(self, label_type: str, keep_label_indices: bool = True) -> Tuple[np.ndarray, Matrix]:
+    def labels_for_type_masked(
+        self, label_type: str, keep_label_indices: bool = True
+    ) -> Tuple[np.ndarray, Matrix]:
         """
         Return (label_indices, submatrix) for a label type.
 
@@ -479,8 +476,7 @@ class Graph:
 
             if (verts_arr < 0).any() or (verts_arr >= self.num_vertices).any():
                 raise IndexError(
-                    f"Vertex indices for label {label_type!r}:{value!r} "
-                    f"must be in [0, {self.num_vertices})"
+                    f"Vertex indices for label {label_type!r}:{value!r} must be in [0, {self.num_vertices})"
                 )
 
             key = (label_type, value)
@@ -561,7 +557,7 @@ class Graph:
         true_b = gb.Matrix.from_scalar(True, 1, b, dtype=gb.dtypes.BOOL)
         true_a = gb.Matrix.from_scalar(True, 1, a, dtype=gb.dtypes.BOOL)
 
-        left = A.kronecker(true_b, "land")   # (v x a*b)
+        left = A.kronecker(true_b, "land")  # (v x a*b)
         right = true_a.kronecker(B, "land")  # (v x a*b)
 
         return left.ewise_mult(right, "land")
@@ -577,7 +573,8 @@ class Graph:
         return M
 
     def _augment_with_unlabelled(
-        self, sub_mat: Matrix,
+        self,
+        sub_mat: Matrix,
     ) -> Matrix:
         """
         Augment a per-type label sub-matrix with an extra "unlabelled" column.
@@ -605,7 +602,7 @@ class Graph:
         # Build augmented matrix: original columns + one extra column.
         aug_mat = gb.Matrix(nrows=sub_mat.nrows, ncols=sub_mat.ncols + 1, dtype=gb.dtypes.UINT64)
         # noinspection PyStatementEffect
-        aug_mat[:, :sub_mat.ncols] << sub_mat
+        aug_mat[:, : sub_mat.ncols] << sub_mat
         aug_mat[unlabelled_indices, sub_mat.ncols] = True
 
         return aug_mat
@@ -777,7 +774,7 @@ class Graph:
         groups: List[np.ndarray] = []
         keys: List[int] = []
         for i in range(len(ofs) - 1):
-            grp = ixs[ofs[i]:ofs[i + 1]]
+            grp = ixs[ofs[i] : ofs[i + 1]]
             if grp.size == 0:
                 continue
             groups.append(grp)
@@ -825,7 +822,9 @@ class Graph:
         n_unlabelled = int(unlabelled.sum())
         if n_unlabelled > 0:
             vertex_map[unlabelled] = np.arange(
-                next_sv, next_sv + n_unlabelled, dtype=np.int64,
+                next_sv,
+                next_sv + n_unlabelled,
+                dtype=np.int64,
             )
             next_sv += n_unlabelled
 
@@ -844,9 +843,11 @@ class Graph:
 
         # --- projection matrix P (FP64): shape (num_super × num_vertices) ---
         P = gb.Matrix.from_coo(
-            vertex_map, orig_indices,
+            vertex_map,
+            orig_indices,
             np.ones(self.num_vertices, dtype=np.float64),
-            nrows=num_super, ncols=self.num_vertices,
+            nrows=num_super,
+            ncols=self.num_vertices,
         )
 
         # --- compress each layer: P @ A @ Pᵀ, then strip self-loops ---
@@ -862,13 +863,16 @@ class Graph:
         compressed_label_matrix = None
         if self._label_matrix is not None and self._num_labels > 0:
             P_bool = gb.Matrix.from_coo(
-                vertex_map, orig_indices,
+                vertex_map,
+                orig_indices,
                 np.ones(self.num_vertices, dtype=bool),
-                nrows=num_super, ncols=self.num_vertices,
+                nrows=num_super,
+                ncols=self.num_vertices,
                 dtype=gb.dtypes.BOOL,
             )
             compressed_label_matrix = P_bool.mxm(
-                self._label_matrix, "lor_land",
+                self._label_matrix,
+                "lor_land",
             ).new()
             compressed_label_meta = dict(self._label_meta)
 

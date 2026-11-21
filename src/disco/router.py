@@ -13,6 +13,7 @@ logger = getLogger(__name__)
 
 class RouterError(DiscoRuntimeError):
     """Base exception for routing errors."""
+
     pass
 
 
@@ -25,6 +26,7 @@ class TransportInfo:
     Router uses the original order of the transports list to determine
     priority (InProcess -> IPC -> gRPC).
     """
+
     transport: Transport
     name: str
 
@@ -139,7 +141,7 @@ class Router:
         # No transport claimed responsibility; this is a configuration error.
         msg = (
             f"No transport available for node={target_node!r}, "
-            f"repid={repid!r}. Known transports={ [ti.name for ti in self._transports] }"
+            f"repid={repid!r}. Known transports={[ti.name for ti in self._transports]}"
         )
         logger.error(msg)
         raise RouterError(msg)

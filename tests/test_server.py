@@ -15,6 +15,7 @@ from disco.worker import WorkerState
 # Minimal fake settings types (explicit attributes, no getattr tricks)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class FakeGrpcSettings:
     bind_host: str | None = None
@@ -61,6 +62,7 @@ class FakeAppSettings:
 # ---------------------------------------------------------------------------
 # Fakes for Cluster/Worker and a no-OS "multiprocessing context"
 # ---------------------------------------------------------------------------
+
 
 @dataclass(slots=True)
 class DesiredStateCall:
@@ -109,13 +111,13 @@ class FakeProcess:
     _pid_seq = 1000
 
     def __init__(
-            self,
-            *,
-            name: str,
-            target: Any,
-            args: Tuple[Any, ...],
-            daemon: bool,
-            autorun: bool,
+        self,
+        *,
+        name: str,
+        target: Any,
+        args: Tuple[Any, ...],
+        daemon: bool,
+        autorun: bool,
     ) -> None:
         self.name = name
         self._target = target
@@ -188,14 +190,14 @@ class FakeWorker:
     instances: List["FakeWorker"] = []
 
     def __init__(
-            self,
-            *,
-            address: str,
-            cluster: Any,
-            event_queues: Mapping[str, Any],
-            promise_queues: Mapping[str, Any],
-            settings: Any,
-            name: Optional[str] = None,
+        self,
+        *,
+        address: str,
+        cluster: Any,
+        event_queues: Mapping[str, Any],
+        promise_queues: Mapping[str, Any],
+        settings: Any,
+        name: Optional[str] = None,
     ) -> None:
         self.address = address
         self.cluster = cluster
@@ -212,6 +214,7 @@ class FakeWorker:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_resolve_bind_host_requires_non_loopback_if_not_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = FakeAppSettings(grpc=FakeGrpcSettings(bind_host=None))

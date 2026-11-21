@@ -24,6 +24,7 @@ class WorkerSnapshot:
         - `info` is loaded from Metastore via Cluster.get_worker_info() and may raise
           if the worker disappears between reads.
     """
+
     address: str
     state: WorkerState
     info: WorkerInfo | None

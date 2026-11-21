@@ -12,13 +12,14 @@ from disco.cluster import (
     DesiredWorkerState,
     REGISTERED_WORKERS,
     WORKERS,
-    DESIRED_STATE
+    DESIRED_STATE,
 )
 
 
 # ---------------------------------------------------------------------------
 # Fake Metastore
 # ---------------------------------------------------------------------------
+
 
 class FakeMetastore:
     """
@@ -270,6 +271,7 @@ def test_get_available_prefers_matching_expid_and_unique_partitions(meta: FakeMe
 # Desired state tests
 # ---------------------------------------------------------------------------
 
+
 def test_set_desired_state_writes_desired_worker_state(meta: FakeMetastore, cluster: Cluster):
     worker = "w1"
     cluster.set_desired_state(
@@ -348,4 +350,3 @@ def test_on_desired_state_change_writes_ack_on_error(meta: FakeMetastore, cluste
     assert ack["request_id"] == desired_obj.request_id
     assert ack["success"] is False
     assert ack["error"] == "boom"
-    

@@ -36,9 +36,7 @@ def test_by_distinct_labels_and_matrix() -> None:
     )
 
     num_vertices = label_matrix_np.shape[0]
-    label_matrix = gb.Matrix.from_dense(
-        label_matrix_np, nrows=num_vertices, ncols=label_matrix_np.shape[1]
-    )
+    label_matrix = gb.Matrix.from_dense(label_matrix_np, nrows=num_vertices, ncols=label_matrix_np.shape[1])
 
     # ------------------------------------------------------------------
     # Build Graph with labels only (no structural layers)
@@ -91,9 +89,7 @@ def test_by_distinct_labels_rejects_duplicate_label_per_type() -> None:
     )
 
     num_vertices = label_matrix_np.shape[0]
-    label_matrix = gb.Matrix.from_dense(
-        label_matrix_np, nrows=num_vertices, ncols=label_matrix_np.shape[1]
-    )
+    label_matrix = gb.Matrix.from_dense(label_matrix_np, nrows=num_vertices, ncols=label_matrix_np.shape[1])
 
     g = Graph.from_edges(edge_layers={}, num_vertices=num_vertices, scenario_id="test-scenario")
     g.set_labels(label_matrix, label_meta)
@@ -127,9 +123,7 @@ def test_by_distinct_labels_rejects_supergraph_with_merged_locations() -> None:
     )
 
     num_vertices = label_matrix_np.shape[0]
-    label_matrix = gb.Matrix.from_dense(
-        label_matrix_np, nrows=num_vertices, ncols=label_matrix_np.shape[1]
-    )
+    label_matrix = gb.Matrix.from_dense(label_matrix_np, nrows=num_vertices, ncols=label_matrix_np.shape[1])
 
     g = Graph.from_edges(edge_layers={}, num_vertices=num_vertices, scenario_id="test-scenario")
     g.set_labels(label_matrix, label_meta)

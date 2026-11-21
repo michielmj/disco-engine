@@ -66,6 +66,7 @@ class NoMoreEventsError(DiscoRuntimeError):
     A simulation is an infinite chain of events. This error is raised when this chain is known to
     be broken.
     """
+
     pass
 
 
@@ -98,7 +99,7 @@ class SimProc:
         route_event: Callable[[EventEnvelope], None],
         route_promise: Callable[[PromiseEnvelope], None],
         predecessors: Set[Tuple[str, str]],  # set of source_node, source_process
-        successors: Set[Tuple[str, str]],    # set of target_node, target_process
+        successors: Set[Tuple[str, str]],  # set of target_node, target_process
     ):
         """
         :param name: name of the simproc (used for identifying sender of events)
@@ -135,7 +136,7 @@ class SimProc:
             f"{self._name}(epoch={self._epoch}, "
             f"next_epoch={self._next_epoch}, "
             f"Queue=({str(self._queue)}), "
-            f'successors={{{", ".join([f"{n}: ({str(s)})" for n, s in self._successors.items()])}}})'
+            f"successors={{{', '.join([f'{n}: ({str(s)})' for n, s in self._successors.items()])}}})"
         )
 
     def try_next_epoch(self):
@@ -166,10 +167,7 @@ class SimProc:
         if (
             not self._queue.has_predecessors
             or self._queue.epoch >= self._next_epoch
-            or (
-                self._queue.next_epoch is not None
-                and self._queue.next_epoch > self._next_epoch
-            )
+            or (self._queue.next_epoch is not None and self._queue.next_epoch > self._next_epoch)
         ):
             # next epoch becomes now epoch
             self._epoch = self._next_epoch
@@ -262,11 +260,7 @@ class SimProc:
 
         # Update if soft wake-up is set before queue time. If next epoch is None, this means we do not know if
         # soft wakeup is planned before or after next promise from predecessors.
-        if (
-            self.next_wakeup is not None
-            and next_epoch is not None
-            and self.next_wakeup < next_epoch
-        ):
+        if self.next_wakeup is not None and next_epoch is not None and self.next_wakeup < next_epoch:
             next_epoch = self.next_wakeup
 
         if self._next_epoch != next_epoch:
@@ -340,8 +334,7 @@ class SimProc:
                     # assert epoch > successor.last_promise, "Oops, something went terribly wrong. Promised later " \
                     #                                        "already..."
                     assert epoch >= successor.last_promise, (
-                        "Oops, something went terribly wrong. Promised later "
-                        "already..."
+                        "Oops, something went terribly wrong. Promised later already..."
                     )
 
                     num_events = successor.epochs.pop(epoch)
@@ -350,16 +343,18 @@ class SimProc:
                     if epoch > successor.last_promise:
                         successor.seqnr += 1
 
-                    self._route_promise(PromiseEnvelope(
-                        repid=self._repid,
-                        sender_node=self._node_name,
-                        sender_simproc=self._name,
-                        target_node=target_node,
-                        target_simproc=target_simproc,
-                        seqnr=successor.seqnr,
-                        epoch=epoch,
-                        num_events=num_events,
-                    ))
+                    self._route_promise(
+                        PromiseEnvelope(
+                            repid=self._repid,
+                            sender_node=self._node_name,
+                            sender_simproc=self._name,
+                            target_node=target_node,
+                            target_simproc=target_simproc,
+                            seqnr=successor.seqnr,
+                            epoch=epoch,
+                            num_events=num_events,
+                        )
+                    )
 
                     successor.last_promise = epoch
 
@@ -367,16 +362,18 @@ class SimProc:
                 if next_epoch > successor.last_promise:
                     successor.seqnr += 1
 
-                    self._route_promise(PromiseEnvelope(
-                        repid=self._repid,
-                        sender_node=self._node_name,
-                        sender_simproc=self._name,
-                        target_node=target_node,
-                        target_simproc=target_simproc,
-                        seqnr=successor.seqnr,
-                        epoch=next_epoch,
-                        num_events=MAX_UINT32,
-                    ))
+                    self._route_promise(
+                        PromiseEnvelope(
+                            repid=self._repid,
+                            sender_node=self._node_name,
+                            sender_simproc=self._name,
+                            target_node=target_node,
+                            target_simproc=target_simproc,
+                            seqnr=successor.seqnr,
+                            epoch=next_epoch,
+                            num_events=MAX_UINT32,
+                        )
+                    )
 
                     successor.last_promise = next_epoch
                     if next_epoch not in successor.epochs:
@@ -392,7 +389,12 @@ class SimProc:
         self._event_outbox = []
 
     def send_event(
-        self, target_node: str, target_simproc: str, epoch: float, data: Any, headers: Dict[str, str] | None = None
+        self,
+        target_node: str,
+        target_simproc: str,
+        epoch: float,
+        data: Any,
+        headers: Dict[str, str] | None = None,
     ):
         """
         Send the events that are collected in the simproc' outbox
@@ -409,25 +411,25 @@ class SimProc:
 
         successor = self._successors[(target_node, target_simproc)]
         if epoch < successor.last_promise:
-            raise DiscoTimingError(
-                "May not send events before last promise to successor."
-            )
+            raise DiscoTimingError("May not send events before last promise to successor.")
 
         if epoch not in successor.epochs:
             successor.epochs[epoch] = 1
         else:
             successor.epochs[epoch] += 1
 
-        self._event_outbox += [EventEnvelope(
-            repid=self._repid,
-            sender_node=self._node_name,
-            sender_simproc=self._name,
-            target_node=target_node,
-            target_simproc=target_simproc,
-            epoch=epoch,
-            data=data,
-            headers=headers or {}
-        )]
+        self._event_outbox += [
+            EventEnvelope(
+                repid=self._repid,
+                sender_node=self._node_name,
+                sender_simproc=self._name,
+                target_node=target_node,
+                target_simproc=target_simproc,
+                epoch=epoch,
+                data=data,
+                headers=headers or {},
+            )
+        ]
 
     def wakeup(self, epoch: float, hard: bool = False):
         """
@@ -530,7 +532,12 @@ class SimProc:
         return self._queue.waiting_for
 
     def receive_event(
-        self, sender_node: str, sender_simproc: str, epoch: float, data: Any, headers: Dict[str, str] | None = None
+        self,
+        sender_node: str,
+        sender_simproc: str,
+        epoch: float,
+        data: Any,
+        headers: Dict[str, str] | None = None,
     ) -> bool:
         """
         Receive an event. Called from the node_controller. Originates from try_next_epoch on a predecessor.
@@ -581,9 +588,7 @@ class SimProc:
         )
 
         if (
-            self._queue.promise(
-                sender_node, sender_simproc, seqnr, epoch, num_events
-            )
+            self._queue.promise(sender_node, sender_simproc, seqnr, epoch, num_events)
             and self._next_epoch is None
         ):
             if self._update_next_epoch():

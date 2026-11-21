@@ -5,4 +5,3 @@ except ModuleNotFoundError:
 
 
 __all__ = ["__version__"]
-

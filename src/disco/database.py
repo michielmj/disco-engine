@@ -64,13 +64,7 @@ def df_to_table(
     if clear_all:
         session.execute(delete(table))  # portable "clear table"
     elif clear_scenario is not None:
-        session.execute(
-            delete(
-                table
-            ).where(
-                table.c['scenario_id'] == literal(clear_scenario)
-            )
-        )
+        session.execute(delete(table).where(table.c["scenario_id"] == literal(clear_scenario)))
 
     cols = {c.name for c in table.columns}
     df2 = df[[c for c in df.columns if c in cols]].copy()

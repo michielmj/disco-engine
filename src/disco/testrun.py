@@ -128,7 +128,7 @@ class TestRun:
             self._partitioning = partitioning
 
         if self._partitioning.num_partitions != 1:
-            raise TestRunError('A partitioning with more than one partition is not allowed for a test run.')
+            raise TestRunError("A partitioning with more than one partition is not allowed for a test run.")
 
         if not self._partitioning.node_specs:
             raise TestRunError("TestRun requires at least one node.")
@@ -152,7 +152,6 @@ class TestRun:
         self._initialized = False
 
         for i, ns in enumerate(self._partitioning.node_specs):
-
             node_mask = self._partitioning.assignment_vector(ns.node_name)
             graph_view = graph.get_view(mask=node_mask)
 
@@ -161,7 +160,7 @@ class TestRun:
                 graph=graph_view,
                 model=self._model,
                 partitioning=self._partitioning,
-                node_name=ns.node_name
+                node_name=ns.node_name,
             )
 
             rt = NodeRuntime(
@@ -184,7 +183,7 @@ class TestRun:
             "TestRun created: repid=%s scenario=%s with nodes:\n%s",
             repid,
             graph.scenario_id,
-            "\n".join([ns.node_name for ns in self._partitioning.node_specs])
+            "\n".join([ns.node_name for ns in self._partitioning.node_specs]),
         )
 
     @property

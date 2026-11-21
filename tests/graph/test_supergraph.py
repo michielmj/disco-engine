@@ -1,5 +1,6 @@
 # tests/graph/test_supergraph.py
 """Tests for Graph.compress() and SuperGraph."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -51,8 +52,12 @@ def _attach_labels(
         cols = np.array([c for _, c in assignments], dtype=np.int64)
         vals = np.ones(len(assignments), dtype=bool)
         mat = gb.Matrix.from_coo(
-            rows, cols, vals,
-            nrows=graph.num_vertices, ncols=n_labels, dtype=gb.dtypes.BOOL,
+            rows,
+            cols,
+            vals,
+            nrows=graph.num_vertices,
+            ncols=n_labels,
+            dtype=gb.dtypes.BOOL,
         )
     graph.set_labels(mat, label_meta)
 
@@ -165,21 +170,32 @@ def test_spec_example_two_groups():
     _attach_labels(
         g,
         label_meta={
-            0: ("t", "a"), 1: ("t", "b"), 2: ("t", "c"), 3: ("t", "d"),
+            0: ("t", "a"),
+            1: ("t", "b"),
+            2: ("t", "c"),
+            3: ("t", "d"),
         },
         assignments=[
-            (0, 0), (1, 0), (2, 0), (3, 0),
-            (4, 1), (4, 2),
-            (5, 1), (5, 2),
-            (6, 1), (6, 3),
-            (7, 1), (7, 3),
+            (0, 0),
+            (1, 0),
+            (2, 0),
+            (3, 0),
+            (4, 1),
+            (4, 2),
+            (5, 1),
+            (5, 2),
+            (6, 1),
+            (6, 3),
+            (7, 1),
+            (7, 3),
         ],
     )
     sg = g.compress(["t"])
 
     assert sg.num_vertices == 2
     np.testing.assert_array_equal(
-        sg.vertex_map, [0, 0, 0, 0, 1, 1, 1, 1],
+        sg.vertex_map,
+        [0, 0, 0, 0, 1, 1, 1, 1],
     )
 
 
@@ -205,22 +221,33 @@ def test_spec_example_single_group():
     _attach_labels(
         g,
         label_meta={
-            0: ("t", "a"), 1: ("t", "b"), 2: ("t", "c"), 3: ("t", "d"),
+            0: ("t", "a"),
+            1: ("t", "b"),
+            2: ("t", "c"),
+            3: ("t", "d"),
         },
         assignments=[
-            (0, 0), (1, 0), (2, 0),
-            (3, 0), (3, 2),
-            (4, 1), (4, 2),
-            (5, 1), (5, 2),
-            (6, 1), (6, 3),
-            (7, 1), (7, 3),
+            (0, 0),
+            (1, 0),
+            (2, 0),
+            (3, 0),
+            (3, 2),
+            (4, 1),
+            (4, 2),
+            (5, 1),
+            (5, 2),
+            (6, 1),
+            (6, 3),
+            (7, 1),
+            (7, 3),
         ],
     )
     sg = g.compress(["t"])
 
     assert sg.num_vertices == 1
     np.testing.assert_array_equal(
-        sg.vertex_map, [0, 0, 0, 0, 0, 0, 0, 0],
+        sg.vertex_map,
+        [0, 0, 0, 0, 0, 0, 0, 0],
     )
 
 
@@ -311,11 +338,13 @@ def test_edges_sum_and_self_loops_removed():
     - 2→3 becomes sv1→sv1 (self-loop) and is discarded.
     """
     g = Graph.from_edges(
-        {0: (
-            np.array([0, 1, 2]),
-            np.array([2, 3, 3]),
-            np.array([1.0, 2.0, 3.0]),
-        )},
+        {
+            0: (
+                np.array([0, 1, 2]),
+                np.array([2, 3, 3]),
+                np.array([1.0, 2.0, 3.0]),
+            )
+        },
         num_vertices=4,
         scenario_id="test",
     )

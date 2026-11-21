@@ -50,12 +50,8 @@ class NodeTopology:
             "node": self.node,
             "node_type": self.node_type,
             "self_relations": [(a, b) for (a, b) in self.self_relations],
-            "predecessors": {
-                str(k): [(n, s) for (n, s) in sorted(v)] for k, v in self.predecessors.items()
-            },
-            "successors": {
-                str(k): [(n, s) for (n, s) in sorted(v)] for k, v in self.successors.items()
-            },
+            "predecessors": {str(k): [(n, s) for (n, s) in sorted(v)] for k, v in self.predecessors.items()},
+            "successors": {str(k): [(n, s) for (n, s) in sorted(v)] for k, v in self.successors.items()},
         }
 
     @staticmethod
@@ -115,7 +111,6 @@ class PartitioningCorruptError(DiscoRuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class Partitioning:
-
     partitioning_id: str
     scenario_id: str
     num_partitions: int
@@ -185,11 +180,11 @@ class Partitioning:
 
     @classmethod
     def from_node_instance_spec(
-            cls,
-            node_specs: List[NodeInstanceSpec] | Tuple[NodeInstanceSpec, ...],
-            incidence: gb.Matrix,
-            graph: Graph,
-            model: Model,
+        cls,
+        node_specs: List[NodeInstanceSpec] | Tuple[NodeInstanceSpec, ...],
+        incidence: gb.Matrix,
+        graph: Graph,
+        model: Model,
     ) -> Self:
         node_specs = tuple(node_specs)
         if not node_specs:
@@ -224,11 +219,15 @@ class Partitioning:
 
         n_nodes = len(node_specs)
         if int(incidence.nrows) != n_nodes:
-            raise ValueError(f"incidence.nrows ({int(incidence.nrows)}) must equal number of nodes ({n_nodes})")
+            raise ValueError(
+                f"incidence.nrows ({int(incidence.nrows)}) must equal number of nodes ({n_nodes})"
+            )
         if incidence.dtype != gb.dtypes.BOOL:
             raise TypeError("incidence matrix must have BOOL dtype")
 
-        topo = cls.compute_topology_from_graph(node_specs=node_specs, incidence=incidence, graph=graph, model=model)
+        topo = cls.compute_topology_from_graph(
+            node_specs=node_specs, incidence=incidence, graph=graph, model=model
+        )
 
         return cls(
             partitioning_id=pid,
@@ -413,7 +412,7 @@ class Partitioning:
             node_specs=node_specs,
             incidence=incidence,
             topology_by_node=topology_by_node,
-            node_indices=node_indices
+            node_indices=node_indices,
         )
 
     @classmethod
@@ -448,7 +447,6 @@ class Partitioning:
             raise ValueError(f"Number of graph layers does not match number of simprocs.")
 
         for layer_idx in range(len(graph.layers)):
-
             simproc_name = simproc_names_by_order[layer_idx]
             M = graph.get_matrix(layer_idx)
 

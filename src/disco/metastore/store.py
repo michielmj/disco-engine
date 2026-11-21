@@ -25,16 +25,19 @@ logger = getLogger(__name__)
 
 class MetastoreError(DiscoError):
     """Base exception for Metastore-related errors."""
+
     pass
 
 
 class MetastoreStoppedError(MetastoreError):
     """Raised when operations are attempted on a stopped Metastore."""
+
     pass
 
 
 class MetastoreConflictError(MetastoreError):
     """Raised when an atomic update fails due to repeated concurrent modifications."""
+
     pass
 
 
@@ -44,6 +47,7 @@ class VersionToken:
     Concurrency token for a key. In ZooKeeper this maps to `stat.version`.
     (In etcd this would map to `mod_revision`.)
     """
+
     value: int
 
 
@@ -56,6 +60,7 @@ class QueueEntity:
     - `consume()` removes it from the queue (ack).
     - `release()` puts it back (nack).
     """
+
     value: Any
     _queue: LockingQueue
 
@@ -85,14 +90,14 @@ class Metastore:
     """
 
     def __init__(
-            self,
-            connection: ZkConnectionManager,
-            group: Optional[str] = None,
-            packb: Callable[[Any], bytes] = pickle.dumps,
-            unpackb: Callable[[bytes], Any] = pickle.loads,
-            base_structure: Optional[list[str]] = None,
-            *,
-            queue_factory: Callable[[KazooClient, str], _LockingQueueProto] | None = None,
+        self,
+        connection: ZkConnectionManager,
+        group: Optional[str] = None,
+        packb: Callable[[Any], bytes] = pickle.dumps,
+        unpackb: Callable[[bytes], Any] = pickle.loads,
+        base_structure: Optional[list[str]] = None,
+        *,
+        queue_factory: Callable[[KazooClient, str], _LockingQueueProto] | None = None,
     ) -> None:
         self._connection = connection
         self._group = group
@@ -173,9 +178,9 @@ class Metastore:
     # ----------------------------------------------------------------------
 
     def watch_with_callback(
-            self,
-            path: str,
-            callback: Callable[[Any, str], bool],
+        self,
+        path: str,
+        callback: Callable[[Any, str], bool],
     ) -> uuid.UUID:
         """
         Register a watch on `path`. Callback receives (decoded_value, full_path).
@@ -192,15 +197,15 @@ class Metastore:
                 # Node deleted → stop watching.
                 return False
 
-            value = None if raw == b'' else self._unpackb(raw)
+            value = None if raw == b"" else self._unpackb(raw)
             return callback(value, p)
 
         return self._connection.watch_data(full_path, _wrapped)
 
     def watch_members_with_callback(
-            self,
-            path: str,
-            callback: Callable[[list[str], str], bool],
+        self,
+        path: str,
+        callback: Callable[[list[str], str], bool],
     ) -> uuid.UUID:
         """
         Register a children watch on the logical `path`.
@@ -250,12 +255,12 @@ class Metastore:
         return self.get_key(item)
 
     def update_key(
-            self,
-            path: str,
-            value: Any,
-            ephemeral: bool = False,
-            *,
-            expected: Optional[VersionToken] = None,
+        self,
+        path: str,
+        value: Any,
+        ephemeral: bool = False,
+        *,
+        expected: Optional[VersionToken] = None,
     ) -> None:
         """
         Write a key. If expected is provided, perform a CAS write (set with version).
@@ -293,15 +298,15 @@ class Metastore:
             return False
 
     def atomic_update_key(
-            self,
-            path: str,
-            updater: Callable[[Any], Any],
-            *,
-            max_retries: int = 20,
-            backoff_base_s: float = 0.005,
-            backoff_max_s: float = 0.200,
-            create_if_missing: bool = False,
-            ephemeral: bool = False,
+        self,
+        path: str,
+        updater: Callable[[Any], Any],
+        *,
+        max_retries: int = 20,
+        backoff_base_s: float = 0.005,
+        backoff_max_s: float = 0.200,
+        create_if_missing: bool = False,
+        ephemeral: bool = False,
     ) -> Any:
         """
         Atomically update a single key using optimistic concurrency control.
@@ -338,7 +343,7 @@ class Metastore:
                     return new_value
 
             # Backoff with jitter
-            delay = min(backoff_max_s, backoff_base_s * (2 ** attempt))
+            delay = min(backoff_max_s, backoff_base_s * (2**attempt))
             delay = delay * (0.5 + random())  # jitter in [0.5, 1.5)
             sleep(delay)
 
@@ -367,9 +372,9 @@ class Metastore:
     # ----------------------------------------------------------------------
 
     def get_keys(
-            self,
-            path: str,
-            expand: dict[str, Any] | None = None,
+        self,
+        path: str,
+        expand: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """
         Returns all keys and values found at the logical path `path`.
@@ -412,11 +417,11 @@ class Metastore:
         return data
 
     def update_keys(
-            self,
-            path: str,
-            members: dict[str, Any],
-            expand: dict[str, Any] | None = None,
-            drop: bool = False,
+        self,
+        path: str,
+        members: dict[str, Any],
+        expand: dict[str, Any] | None = None,
+        drop: bool = False,
     ) -> None:
         """
         Stores all keys and values in `members` under logical path `path`.

@@ -175,9 +175,7 @@ class ZkConnectionManager:
         Internal helper to attach a Kazoo DataWatch for a given cached callback.
         """
 
-        def _wrapped(
-            data: Optional[bytes], stat: Any, event: Any
-        ) -> bool:
+        def _wrapped(data: Optional[bytes], stat: Any, event: Any) -> bool:
             keep = callback(data, path)
             if not keep:
                 # Remove from cache if callback decides to stop
@@ -229,12 +227,12 @@ class ZkConnectionManager:
         Reinstall all cached data and children watches after a LOST -> CONNECTED transition.
         """
         with self._lock:
-            data_items: list[
-                tuple[uuid.UUID, tuple[str, Callable[[Optional[bytes], str], bool]]]
-            ] = list(self._watched.items())
-            children_items: list[
-                tuple[uuid.UUID, tuple[str, Callable[[Optional[list[str]], str], bool]]]
-            ] = list(self._children_watched.items())
+            data_items: list[tuple[uuid.UUID, tuple[str, Callable[[Optional[bytes], str], bool]]]] = list(
+                self._watched.items()
+            )
+            children_items: list[tuple[uuid.UUID, tuple[str, Callable[[Optional[list[str]], str], bool]]]] = (
+                list(self._children_watched.items())
+            )
 
         for watch_id, (path, data_cb) in data_items:
             logger.debug("Reinstalling data watch %s on path %s", watch_id, path)

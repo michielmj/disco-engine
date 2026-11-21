@@ -65,9 +65,7 @@ class FakeKazooClient:
         if self._create_raises_node_exists:
             raise NodeExistsError()
 
-        self.create_calls.append(
-            {"path": path, "value": value, "ephemeral": ephemeral, "makepath": makepath}
-        )
+        self.create_calls.append({"path": path, "value": value, "ephemeral": ephemeral, "makepath": makepath})
         self._nodes.add(path)
 
     def set(self, path: str, value: bytes) -> None:
@@ -205,7 +203,9 @@ def test_publish_replaces_persistent_leader_node(monkeypatch: pytest.MonkeyPatch
     # Allow the second create to succeed after we "replace" the node.
     original_create = client.create
 
-    def create_side_effect(path: str, value: bytes, *, ephemeral: bool = False, makepath: bool = False) -> None:
+    def create_side_effect(
+        path: str, value: bytes, *, ephemeral: bool = False, makepath: bool = False
+    ) -> None:
         if client._create_raises_node_exists:
             client._create_raises_node_exists = False
             raise NodeExistsError()

@@ -88,8 +88,7 @@ def get_vertex_indices_for_label(
 
     result = session.execute(
         select(vertex_labels.c.vertex_index).where(
-            (vertex_labels.c.scenario_id == scenario_id) &
-            (vertex_labels.c.label_id == label_id)
+            (vertex_labels.c.scenario_id == scenario_id) & (vertex_labels.c.label_id == label_id)
         )
     )
     return [int(row[0]) for row in result]

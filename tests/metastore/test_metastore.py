@@ -259,6 +259,7 @@ def connection(fake_client):
 # Tests
 # ---------------------------------------------------------------------------
 
+
 # noinspection PyTypeChecker,PyUnresolvedReferences,PyArgumentList, PyUnusedLocal
 def test_init_ensures_base_structure_without_group(connection, fake_client):
     _m = Metastore(connection=connection, group=None, base_structure=["/base", "/nested/path"])
@@ -482,6 +483,7 @@ def test_dequeue_force_mode_consume_drops_locked_head(connection, fake_client, m
 # Tests: versioning / CAS / atomic update
 # ---------------------------------------------------------------------------
 
+
 # noinspection PyTypeChecker,PyUnresolvedReferences,PyArgumentList
 def test_get_key_with_version_missing_returns_none(connection, fake_client):
     m = Metastore(connection=connection, group=None)
@@ -632,7 +634,9 @@ def test_atomic_update_key_create_race_then_retry(connection, fake_client, monke
     real_create = fake_client.create
     calls = {"n": 0}
 
-    def flaky_create(path: str, value: bytes, makepath: bool = False, ephemeral: bool = False, **kwargs: Any) -> None:
+    def flaky_create(
+        path: str, value: bytes, makepath: bool = False, ephemeral: bool = False, **kwargs: Any
+    ) -> None:
         calls["n"] += 1
         if calls["n"] == 1:
             real_create(path, pickle.dumps("other"), makepath=makepath, ephemeral=ephemeral, **kwargs)

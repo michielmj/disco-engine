@@ -8,6 +8,7 @@ Strategy:
   - Model is built from SimpleNamespace stubs to avoid heavyweight loading.
   - db_validate is exercised for real: tables must satisfy the ORM contracts.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -337,12 +338,18 @@ def test_per_simproc_edge_table() -> None:
             ],
         )
         # demand: v0->v1; supply: v1->v2
-        conn.execute(insert(demand_edges), [
-            {"scenario_id": "s1", "source_key": "v0", "target_key": "v1"},
-        ])
-        conn.execute(insert(supply_edges), [
-            {"scenario_id": "s1", "source_key": "v1", "target_key": "v2"},
-        ])
+        conn.execute(
+            insert(demand_edges),
+            [
+                {"scenario_id": "s1", "source_key": "v0", "target_key": "v1"},
+            ],
+        )
+        conn.execute(
+            insert(supply_edges),
+            [
+                {"scenario_id": "s1", "source_key": "v1", "target_key": "v2"},
+            ],
+        )
 
     spec = _make_spec(
         node_types={"sp": {"table": "sp_nodes"}},

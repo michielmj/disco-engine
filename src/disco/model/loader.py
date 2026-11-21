@@ -208,6 +208,7 @@ def load_model_from_package(
 
     try:
         from importlib import resources
+
         text = (resources.files(package) / model_yml).read_text(encoding="utf-8")
     except Exception as e:
         raise ModelLoadError(

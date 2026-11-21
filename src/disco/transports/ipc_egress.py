@@ -19,13 +19,14 @@ logger = getLogger(__name__)
 
 class IPCTransport(Transport):
     """Transport that delivers envelopes via queues and shared memory."""
+
     def __init__(
         self,
         cluster: Cluster,
         event_queues: Mapping[str, Queue[IPCEventMsg]],
         promise_queues: Mapping[str, Queue[IPCPromiseMsg]],
         large_payload_threshold: int = 64 * 1024,
-        serializer: Callable[[Any], tuple[bytes, str]] | None = None  # data -> packed_data, protocol
+        serializer: Callable[[Any], tuple[bytes, str]] | None = None,  # data -> packed_data, protocol
     ) -> None:
         self._cluster = cluster
         self._event_queues = event_queues
@@ -76,7 +77,7 @@ class IPCTransport(Transport):
             data = envelope.data
         else:
             data, serialization_protocol = self._serializer(envelope.data)
-            headers = headers | {'serialization_protocol': serialization_protocol}
+            headers = headers | {"serialization_protocol": serialization_protocol}
 
         if len(envelope.data) <= self._large_payload_threshold:
             msg = IPCEventMsg(
@@ -118,7 +119,7 @@ class IPCTransport(Transport):
                 shm.unlink()
                 raise
 
-            if sys.platform == 'win32':
+            if sys.platform == "win32":
                 # Windows: keep the sender's handle open so the receiver can
                 # open the mapping by name.  Released via __del__ (or when the
                 # receiver signals completion through an external mechanism).
@@ -159,4 +160,4 @@ def _default_serializer(value: Any) -> tuple[bytes, str]:
     """
     import pickle
 
-    return pickle.dumps(value), f'PICKLE{pickle.DEFAULT_PROTOCOL}'
+    return pickle.dumps(value), f"PICKLE{pickle.DEFAULT_PROTOCOL}"

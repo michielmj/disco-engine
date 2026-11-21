@@ -39,8 +39,8 @@ _SERVER_RUNNING = False
 
 
 def _get_logging_scope(
-        settings: AppSettings,
-        loglevel: mp_logging.LevelConfig = None,
+    settings: AppSettings,
+    loglevel: mp_logging.LevelConfig = None,
 ) -> mp_logging.LevelConfig:
     logscope = {"": logging.INFO}
 
@@ -70,8 +70,10 @@ def _parse_log_level(loglevel: str | int) -> int:
     lvl = mapping.get(loglevel.upper())
     if isinstance(lvl, int):
         return lvl
-    raise ConfigError(f"Invalid logging.level={loglevel!r}. Expected one of: "
-                      f"{sorted({k for k,v in mapping.items() if isinstance(v,int) and isinstance(k,str)})}")
+    raise ConfigError(
+        f"Invalid logging.level={loglevel!r}. Expected one of: "
+        f"{sorted({k for k, v in mapping.items() if isinstance(v, int) and isinstance(k, str)})}"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,12 +231,12 @@ def _worker_main(
 
 
 def _orchestrator_process_entry(
-        address: str,
-        settings: AppSettings,
-        group: Optional[str],
-        stop_event: Any,
-        log_queue: Any,
-        loglevel: mp_logging.LevelConfig,
+    address: str,
+    settings: AppSettings,
+    group: Optional[str],
+    stop_event: Any,
+    log_queue: Any,
+    loglevel: mp_logging.LevelConfig,
 ) -> None:
     """Placeholder orchestrator: start, wait for stop_event, exit cleanly."""
     mp_logging.configure_worker(log_queue, level=loglevel)
@@ -326,6 +328,7 @@ class Server:
     def _mp_context(self) -> Any:
         # Local spawn context: do not rely on global start method; avoids forking KazooClient.
         import multiprocessing as mp
+
         return mp.get_context("spawn")
 
     def _run(self) -> None:
@@ -352,7 +355,9 @@ class Server:
             mp_logging.configure_worker(log_cfg.queue, level=self._logscope)
             logger.info("Server starting with %d workers (group=%s)", len(self._worker_specs), self._group)
 
-            with Cluster.make_cluster(zookeeper_settings=self._settings.zookeeper, group=self._group) as cluster:
+            with Cluster.make_cluster(
+                zookeeper_settings=self._settings.zookeeper, group=self._group
+            ) as cluster:
                 self._cluster = cluster
                 self._install_signal_handlers()
 
@@ -364,7 +369,14 @@ class Server:
                     self._orchestrator_proc = ctx.Process(
                         name="orchestrator",
                         target=_orchestrator_process_entry,
-                        args=(address, self._settings, self._group, stop_event, log_cfg.queue, self._logscope),
+                        args=(
+                            address,
+                            self._settings,
+                            self._group,
+                            stop_event,
+                            log_cfg.queue,
+                            self._logscope,
+                        ),
                         daemon=False,
                     )
                     self._orchestrator_proc.start()
@@ -382,7 +394,7 @@ class Server:
                             spec.name,
                             log_cfg.queue,
                             stop_event,
-                            self._logscope
+                            self._logscope,
                         ),
                         daemon=False,
                     )

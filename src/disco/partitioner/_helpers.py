@@ -2,6 +2,7 @@
 """
 Shared helpers for all Partitioner implementations.
 """
+
 from __future__ import annotations
 
 from typing import Iterator, List, Tuple
@@ -73,12 +74,8 @@ def _iter_node_instances(
                 continue
 
             # Vertex assignment: vertices that carry ALL labels in this combo.
-            cnt = (
-                graph.label_matrix_masked[:, co]
-                .new(dtype=gb.dtypes.INT64)
-                .reduce_rowwise(gb.monoid.plus)
-            )
-            assignment_vector: gb.Vector = (cnt == len(co)).select('!=', False).new()
+            cnt = graph.label_matrix_masked[:, co].new(dtype=gb.dtypes.INT64).reduce_rowwise(gb.monoid.plus)
+            assignment_vector: gb.Vector = (cnt == len(co)).select("!=", False).new()
 
             # Vertex indices
             vertex_indices, _ = assignment_vector.to_coo()
@@ -89,6 +86,4 @@ def _iter_node_instances(
                 _, lvk = graph.label_meta[int(entry)]
                 label_values.append(str(lvk))
 
-            yield node_type, label_values, assignment_vector, vertex_indices.astype(
-                np.int64
-            )
+            yield node_type, label_values, assignment_vector, vertex_indices.astype(np.int64)

@@ -39,6 +39,7 @@ class FakeKazooClient:
 
 class DummySettings:
     """Simple stand-in for ZookeeperSettings."""
+
     def __init__(self, chroot: str = "/") -> None:
         self.chroot = chroot
 

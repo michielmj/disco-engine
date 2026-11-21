@@ -68,7 +68,9 @@ class NodeTypeSpec(BaseModel):
         if not s:
             raise ValueError("node type class may not be empty/whitespace")
         if ":" not in s and "." not in s:
-            raise ValueError("node type class must look like 'pkg.module:ClassName' or 'pkg.module.ClassName'")
+            raise ValueError(
+                "node type class must look like 'pkg.module:ClassName' or 'pkg.module.ClassName'"
+            )
         return s
 
     # noinspection PyNestedDecorators
