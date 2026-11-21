@@ -305,7 +305,7 @@ class NodeRuntime(NodeRuntimeLike):
         self._status = NodeStatus.INITIALIZED
         logger.debug("Node[%s] initialized", self._name)
 
-    def runner(self, duration: float) -> Generator[None, None, None]:
+    def runner(self, duration: float) -> Generator[None]:
         """
         Called by the Worker runner in ACTIVE state.
         """

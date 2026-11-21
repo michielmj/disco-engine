@@ -1,5 +1,6 @@
 import pickle
 from collections.abc import Iterable
+from typing import Any
 
 import graphblas as gb
 from toolbox.orderbook import Orderbook
@@ -27,7 +28,7 @@ class StockingPoint(Node):
 
     """
 
-    def __init__(self, **init_args):
+    def __init__(self, params: dict[str, Any]):
 
         data = self.data.vertex_data(columns=["ip_target", "dem_dist", "dem_params"])
         self.ixs = data.index.array

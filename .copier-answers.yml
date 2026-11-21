@@ -11,7 +11,7 @@ platforms:
 - windows
 - macos
 project_name: disco
-python_version: '3.13'
+python_version: '3.14'
 tier: full
 user_guide: false
 web_api: false

@@ -69,7 +69,9 @@ def df_to_table(
 
     cols = {c.name for c in table.columns}
     df2 = df[[c for c in df.columns if c in cols]].copy()
-    df2 = df2.where(pd.notnull(df2), None)  # NaN/NA -> None
+    # NaN/NA -> None. `where(..., None)` alone leaves NaN in float columns (pandas 2 and 3) and,
+    # in pandas 3, in str columns; go through object so the driver always gets None, not NaN.
+    df2 = df2.astype(object).where(pd.notnull(df2), None)
 
     records = df2.to_dict(orient="records")
     stmt = insert(table)

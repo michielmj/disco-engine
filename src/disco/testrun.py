@@ -240,7 +240,7 @@ class TestRun:
         logger.info("TestRun starting run: duration=%s", duration)
 
         # Create one runner per node for this duration.
-        runners: tuple[Generator[object, None, None], ...] = tuple(
+        runners: tuple[Generator[object], ...] = tuple(
             self.nodes[ns.node_name].runner(duration=duration) for ns in self._partitioning.node_specs
         )
         active = list(range(len(runners)))
