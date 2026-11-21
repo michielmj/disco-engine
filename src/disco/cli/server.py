@@ -16,7 +16,12 @@ class ServerCommand(BaseModel):
     grace_s: int | None = Field(None, description="Grace duration for shutdown.")
     orchestrator: bool = Field(True, description="Disable orchestrator if false.")
     config_file: str | None = Field(None, description="Optional Disco config file (toml/yaml).")
-    loglevel: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "critical", "error", "warning", "info", "debug"] | None = Field(None, description="Logging level override.")
+    loglevel: (
+        Literal[
+            "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "critical", "error", "warning", "info", "debug"
+        ]
+        | None
+    ) = Field(None, description="Logging level override.")
 
 
 def handle_server(command: ServerCommand) -> None:

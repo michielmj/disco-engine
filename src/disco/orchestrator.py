@@ -476,9 +476,7 @@ class Orchestrator:
             )
             return
 
-    def _mark_replication_failed(
-        self, *, expid: str, repid: str, exc: dict[str, Any] | None = None
-    ) -> None:
+    def _mark_replication_failed(self, *, expid: str, repid: str, exc: dict[str, Any] | None = None) -> None:
         try:
             if exc:
                 self._store.set_replication_exc(

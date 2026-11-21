@@ -301,10 +301,8 @@ class SimProc:
 
             # If an advance promise was made in a procedure this takes precedence if it is after next_epoch or
             # if next_epoch is not yet known.
-            if (
-                (next_epoch is None and successor.advance_promise > self._epoch)
-                or (next_epoch is not None
-                and successor.advance_promise > next_epoch)
+            if (next_epoch is None and successor.advance_promise > self._epoch) or (
+                next_epoch is not None and successor.advance_promise > next_epoch
             ):
                 next_epoch = successor.advance_promise
 
