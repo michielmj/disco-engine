@@ -205,7 +205,8 @@ class Worker:
         self._graph: Graph | None = None
         self._graph_scenario_id: str | None = None
 
-        # Cached partitioning and selection (partitioning tied to graph + selected_partitioning + partition index).
+        # Cached partitioning and selection (partitioning tied to graph + selected_partitioning + partition
+        # index).
         self._partitioning: Partitioning | None = None
         self._node_specs: dict[str, NodeInstanceSpec] | None = None
         self._partitioning_id: str | None = None
@@ -946,7 +947,8 @@ class Worker:
         self._set_partition_status_locked(ExperimentStatus.LOADED)
 
         # --- Data logger ---
-        # Failure here is treated as worker-fatal (no catch) because it undermines observability and persistence.
+        # Failure here is treated as worker-fatal (no catch) because it undermines observability and
+        # persistence.
         dl = self._settings.data_logger
         dl_path = Path(dl.path) / str(assignment.expid) / str(assignment.repid) / str(assignment.partition)
         dlogger = DataLogger(
@@ -962,7 +964,8 @@ class Worker:
         params = experiment.params or {}
 
         logger.info(
-            "Worker %s setting up run for expid=%s repid=%s partition=%s nodes=%s scenario=%s partitioning_id=%s",
+            "Worker %s setting up run for expid=%s repid=%s partition=%s nodes=%s scenario=%s "
+            "partitioning_id=%s",
             self._name,
             assignment.expid,
             assignment.repid,

@@ -292,7 +292,8 @@ class Orchestrator:
                 addresses, _pref = self._cluster.get_available(exp.expid)
                 if len(addresses) >= num_partitions:
                     logger.info(
-                        "Selected partitioning %s for experiment %s after waiting (num_partitions=%d, available=%d).",
+                        "Selected partitioning %s for experiment %s after waiting "
+                        "(num_partitions=%d, available=%d).",
                         pid,
                         exp.expid,
                         num_partitions,

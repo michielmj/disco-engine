@@ -159,7 +159,8 @@ class Partitioning:
         for _i, ns in enumerate(self.node_specs):
             if ns.partition < 0 or ns.partition >= self.num_partitions:
                 raise ValueError(
-                    f"node '{ns.node_name}' has partition {ns.partition}, outside [0,{self.num_partitions - 1}]"
+                    f"node '{ns.node_name}' has partition {ns.partition}, "
+                    f"outside [0,{self.num_partitions - 1}]"
                 )
             if ns.node_name not in self.topology_by_node:
                 raise ValueError(f"missing topology for node '{ns.node_name}' in Partitioning object")
@@ -375,7 +376,8 @@ class Partitioning:
                 )
             if not isinstance(v, gb.Vector):
                 raise PartitioningCorruptError(
-                    f"partitioning '{partitioning_id}': assignments for node '{ns.node_name}' is not a graphblas.Vector"
+                    f"partitioning '{partitioning_id}': assignments for node '{ns.node_name}' "
+                    "is not a graphblas.Vector"
                 )
             idx, vals = v.to_coo()
             true_idx = idx[vals != 0]

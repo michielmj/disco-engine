@@ -104,7 +104,8 @@ class LeaderElection:
         try:
             self._client.create(self._leader_path, data, ephemeral=True, makepath=True)
         except NodeExistsError:
-            # Should not happen under correct election semantics, but handle stale persistent nodes gracefully.
+            # Should not happen under correct election semantics, but handle stale persistent nodes
+            # gracefully.
             try:
                 stat = self._client.exists(self._leader_path)
                 if stat is not None and getattr(stat, "ephemeralOwner", 0) == 0:

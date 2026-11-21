@@ -1,6 +1,8 @@
 """
-A SimProc (Simulation Process) is a core building block of the distributed simulation engine. A simproc can be thought
-of as an information layer across the simulation network in with information flows in one direction only. One such
+A SimProc (Simulation Process) is a core building block of the distributed simulation engine. A simproc can be
+thought
+of as an information layer across the simulation network in with information flows in one direction only. One
+such
 simproc can be the order simproc where downstream nodes place orders at upstream nodes. Another simproc can
 be a supply simproc where an upstream node supplies goods to downstream nodes.
 
@@ -12,33 +14,49 @@ These are the basic properties of simprocs:
 - The simprocs in a simulation are ordered. SimProcs can send events to lower level simprocs but not to
   higher level simprocs.
 - SimProcs make *Promises* to dependent simprocs. A promise tells dependent simprocs at what times they may
-  receive events from the simproc. Promises are made automatically by the SimProc and cannot be triggered directly
+  receive events from the simproc. Promises are made automatically by the SimProc and cannot be triggered
+  directly
   in the event handler. A promise has a sequence number, an epoch, and a maximum number of events that
-  will be sent by the simproc to that dependency for that epoch. The maximum number of events for an epoch may be
-  adjusted downward for an epoch by repromising it. In this way a node can tell its dependencies that they need
-  not expect events before that time, thereby creating an opportunity for concurrency. Repromises with a higher
+  will be sent by the simproc to that dependency for that epoch. The maximum number of events for an epoch may
+  be
+  adjusted downward for an epoch by repromising it. In this way a node can tell its dependencies that they
+  need
+  not expect events before that time, thereby creating an opportunity for concurrency. Repromises with a
+  higher
   number of events will be ignored as it is assumed that these have just been overtaken by a later repromise.
 - The *epoch* of a simproc is the (simulation) time for the node for which all events have been received and
-  all prior events have been processed. If only part of the events have been received or no promise has been made
-  for the next epoch yet, then the epoch remains at the earlier time even if all events have been processed. The
-  *epoch* is updated just before the *event_handler* is invoked so there will only be events pending for the epoch
-  during that. An idle simproc is at an epoch without events pending. The *epoch* is initialized with -1 and updates to
+  all prior events have been processed. If only part of the events have been received or no promise has been
+  made
+  for the next epoch yet, then the epoch remains at the earlier time even if all events have been processed.
+  The
+  *epoch* is updated just before the *event_handler* is invoked so there will only be events pending for the
+  epoch
+  during that. An idle simproc is at an epoch without events pending. The *epoch* is initialized with -1 and
+  updates to
   0 just before the first invocation of the *event_handler*.
-- The *next_epoch* of a simproc is the earliest time after *epoch* at which events will be processed. The next epoch
+- The *next_epoch* of a simproc is the earliest time after *epoch* at which events will be processed. The next
+  epoch
   is defined by a promise or by a wakeup. If neither are available, the next epoch is *None* (undefined).
-- The *event_handler* for a simproc is a callback that is invoked when all events for an epoch have been received.
+- The *event_handler* for a simproc is a callback that is invoked when all events for an epoch have been
+  received.
   This is where the actual simulation logic for the node is implemented, where the node's state is updated,
   and where events are sent to dependent simprocs.
-- Wakeups may be set for the simproc in the event handler to set the time of a future epoch outside of the event
+- Wakeups may be set for the simproc in the event handler to set the time of a future epoch outside of the
+  event
   promising. A *wakeup* is essentially an event to self. There are soft and hard wakeups. A *soft wakeup*
   inserts an epoch in the sequence of future epochs. There may be future epochs before it so an epoch for soft
-  wakeup can only be processed once promises are fully made until at least one epoch after the wakeup (or a hard
-  wakeup is scheduled after it). A *hard wakeup* means there will be no future epochs before it (unless there are
-  prior hard wakeups). All events and promises prior to a hard wakeup will be postponed. Hard wakeups are particularly
+  wakeup can only be processed once promises are fully made until at least one epoch after the wakeup (or a
+  hard
+  wakeup is scheduled after it). A *hard wakeup* means there will be no future epochs before it (unless there
+  are
+  prior hard wakeups). All events and promises prior to a hard wakeup will be postponed. Hard wakeups are
+  particularly
   useful to inform dependent simprocs that they may continue processing their epochs until that time, thereby
   improving concurrency.
-- An *advance_promise* can be made to a specific dependent simproc to inform that the node will not send Any events
-  before that time. Trying to send an event to a dependency for an earlier epoch after the advance promise has been
+- An *advance_promise* can be made to a specific dependent simproc to inform that the node will not send Any
+  events
+  before that time. Trying to send an event to a dependency for an earlier epoch after the advance promise has
+  been
   made will lead to an error.
 """
 
@@ -143,16 +161,19 @@ class SimProc:
     def try_next_epoch(self):
         """
         This method does two things:
-        - simproc the next epoch if all events have been received and there are no prior events left in the queue
+        - simproc the next epoch if all events have been received and there are no prior events left in the
+          queue
           (this updates epoch)
         - update *next_epoch* (will be None if unknown)
 
-        The method returns true if *epoch* has been updated meaning that the events for the preceding epoch were
+        The method returns true if *epoch* has been updated meaning that the events for the preceding epoch
+        were
         processed.
 
         :return: True if epoch was updated.
         """
-        # If next_epoch is None, this means that the graph has processed the epoch already and the next epoch is not
+        # If next_epoch is None, this means that the graph has processed the epoch already and the next epoch
+        # is not
         # yet enabled. In this case
         if self._next_epoch is None:
             return False
@@ -197,8 +218,10 @@ class SimProc:
             # Make promises
             self._promise()
 
-            # Send events in outbox. We are storing events in the outbox such that promises are made before events
-            # are sent. This way, successors get information about future events and do not have to wait unnecessarily
+            # Send events in outbox. We are storing events in the outbox such that promises are made before
+            # events
+            # are sent. This way, successors get information about future events and do not have to wait
+            # unnecessarily
             # for the (larger) messages to be received.
             self._send()
             return True
@@ -220,7 +243,8 @@ class SimProc:
         - after the current epoch was processed;
         - after processing new promises.
 
-         In neither case should there be events left for the current epoch. The only time during which there are
+         In neither case should there be events left for the current epoch. The only time during which there
+         are
          events to be processed for the current epoch is during event handling (or to be more precise during
          *try_next_epoch*).
 
@@ -237,7 +261,8 @@ class SimProc:
         if self.hard_wakeup or not self._queue.has_predecessors:
             next_epoch = self.next_wakeup
 
-            # if the next_wakeup is not set, this means that there will be no more handler invocations which is an
+            # if the next_wakeup is not set, this means that there will be no more handler invocations which
+            # is an
             # error
             if next_epoch is None:
                 raise NoMoreEventsError(
@@ -249,12 +274,14 @@ class SimProc:
         elif self._epoch < self._queue.epoch:
             next_epoch = self._queue.epoch
 
-        # Possibility 3: there are no events to be processed yet but all promises for the next epoch were made.
+        # Possibility 3: there are no events to be processed yet but all promises for the next epoch were
+        # made.
         # Note: we deal with soft wakeups scheduled at an earlier time in the next step
         elif self._queue.next_epoch is not None:
             next_epoch = self._queue.next_epoch
 
-        # Possibility 4: there is no hard wakeup and the queue next epoch is not yet known. In this case next_epoch
+        # Possibility 4: there is no hard wakeup and the queue next epoch is not yet known. In this case
+        # next_epoch
         # is unknown.
         else:
             next_epoch = None
@@ -287,7 +314,8 @@ class SimProc:
         be set to a later epoch if an *advance_promise* was made for the specific successor.
 
 
-        Make promises to successors (after collecting events, the event controller attempts to proceed to next epoch
+        Make promises to successors (after collecting events, the event controller attempts to proceed to next
+        epoch
         The next epoch is the smaller of the next epoch provided from an event graph with higher prio, and
         The next epoch from the event controller after processing all events.
         """
@@ -316,21 +344,27 @@ class SimProc:
                 #
                 # Notes:
                 #
-                # - successor.epochs contains all epochs for which there are events (maps epoch to num_events sent
+                # - successor.epochs contains all epochs for which there are events (maps epoch to num_events
+                #   sent
                 #   so far)
-                # - we now know the next_epoch for this simproc so all events before that time are known and can be
+                # - we now know the next_epoch for this simproc so all events before that time are known and
+                #   can be
                 #   promised
-                # - we can also make an advance promise for the next_epoch but we do not yet know the number of events
+                # - we can also make an advance promise for the next_epoch but we do not yet know the number
+                #   of events
                 for epoch in sorted(successor.epochs):
-                    # TODO: how often do we call this? Should we not make sure that epochs remains sorted so we do
+                    # TODO: how often do we call this? Should we not make sure that epochs remains sorted so
+                    # we do
                     # not have to sort each time again?
 
                     # Stop iteration if epoch in future.
                     if epoch >= next_epoch:
                         break
 
-                    # MJa 2022-10-19 it is actually possible that epoch == last_promise if a prepromise was made
-                    # assert epoch > successor.last_promise, "Oops, something went terribly wrong. Promised later " \
+                    # MJa 2022-10-19 it is actually possible that epoch == last_promise if a prepromise was
+                    # made
+                    # assert epoch > successor.last_promise, "Oops, something went terribly wrong. Promised
+                    # later " \
                     #                                        "already..."
                     assert epoch >= successor.last_promise, (
                         "Oops, something went terribly wrong. Promised later already..."

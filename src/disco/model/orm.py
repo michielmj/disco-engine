@@ -153,14 +153,16 @@ def _parse_python_ref(ref: str) -> tuple[str, str]:
     else:
         if "." not in r:
             raise ModelOrmLoadError(
-                f"Invalid ORM provider reference '{ref}'. Expected 'pkg.module:callable' or 'pkg.module.callable'."
+                f"Invalid ORM provider reference '{ref}'. "
+                "Expected 'pkg.module:callable' or 'pkg.module.callable'."
             )
         mod, attr = r.rsplit(".", 1)
         mod, attr = mod.strip(), attr.strip()
 
     if not mod or not attr:
         raise ModelOrmLoadError(
-            f"Invalid ORM provider reference '{ref}'. Expected 'pkg.module:callable' or 'pkg.module.callable'."
+            f"Invalid ORM provider reference '{ref}'. "
+            "Expected 'pkg.module:callable' or 'pkg.module.callable'."
         )
     return mod, attr
 

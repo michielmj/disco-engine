@@ -344,7 +344,8 @@ class Server:
             promise_queues[spec.address] = ctx.Queue()
 
         with mp_logging.setup_logging(level=self._logscope) as log_cfg:
-            # mp_logging.configure_worker(log_cfg.queue, level=[("disco", self._loglevel), ("", logging.INFO)])
+            # mp_logging.configure_worker(log_cfg.queue, level=[("disco", self._loglevel), ("",
+            # logging.INFO)])
             mp_logging.configure_worker(log_cfg.queue, level=self._logscope)
             logger.info("Server starting with %d workers (group=%s)", len(self._worker_specs), self._group)
 

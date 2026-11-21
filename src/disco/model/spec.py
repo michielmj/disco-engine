@@ -162,7 +162,8 @@ class ModelSpec(BaseModel):
 
     Internally, this spec is normalized to:
       - simprocs: List[str] (ordered simproc names)
-      - simproc_edge_data_tables: Dict[str, str] (simproc name -> edge data table) for those simprocs that define one
+      - simproc_edge_data_tables: Dict[str, str] (simproc name -> edge data table) for those simprocs that
+        define one
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
@@ -187,7 +188,9 @@ class ModelSpec(BaseModel):
     default_edge_data_table: str | None = Field(
         default=None,
         alias="default-edge-data-table",
-        description="Scenario table for default edge data (used when no simproc-specific edge table applies).",
+        description=(
+            "Scenario table for default edge data (used when no simproc-specific edge table applies)."
+        ),
     )
 
     # -----------------------------
@@ -275,7 +278,8 @@ class ModelSpec(BaseModel):
             raise ValueError("default-edge-data-table may not be empty/whitespace")
         if s.lower().startswith("graph_"):
             raise ValueError(
-                "default-edge-data-table may not start with 'graph_' (reserved for graph infrastructure tables)"
+                "default-edge-data-table may not start with 'graph_' "
+                "(reserved for graph infrastructure tables)"
             )
         return s
 
