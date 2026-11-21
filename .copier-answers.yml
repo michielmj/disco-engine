@@ -1,0 +1,17 @@
+# Changes here will be overwritten by Copier. Change an answer with `copier update --trust --data key=value`.
+_commit: v0.3.0
+_src_path: git@github.com:michielmj/scaffolder.git
+ci: github
+description: A distributed event simulation core engine.
+native: pybind11
+org: michielmj
+package: disco
+platforms:
+- linux
+- windows
+- macos
+project_name: disco
+python_version: '3.13'
+tier: full
+user_guide: false
+web_api: false

@@ -1,3 +1,14 @@
+---
+paths:
+  - "src/disco/worker.py"
+  - "src/disco/orchestrator.py"
+  - "src/disco/cluster.py"
+  - "src/disco/runtime.py"
+  - "tests/test_worker.py"
+  - "tests/test_orchestrator.py"
+  - "tests/test_cluster.py"
+---
+
 # Worker invariants (Chapter 5)
 
 ## State machine

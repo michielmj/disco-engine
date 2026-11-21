@@ -221,12 +221,22 @@ src/disco/_version.py
 tmp_segments/
 
 # local scripts not to include
-scripts/
+scripts/*
+!scripts/new_task.sh
+!scripts/test_linux.sh
 
 # local development environment
 /docker-compose.yaml
 /local_tests
 
-uv.lock
 /dlogger
 *.errsnap
+
+# Scaffolder: secrets, personal settings, task worktrees, test logs
+.env.*
+!.env.example
+.claude/settings.local.json
+CLAUDE.local.md
+.claude/worktrees/
+.task-ports
+.test-logs/

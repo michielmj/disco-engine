@@ -45,6 +45,18 @@ run **without** threading, metastore/cluster coordination, or external transport
 pip install disco-engine
 ```
 
+### Development
+
+Development uses [uv](https://docs.astral.sh/uv/). `uv sync` installs the
+locked runtime and dev dependencies into `.venv` and builds the C++ event
+queue; it rebuilds it when a native source changes.
+
+```bash
+uv sync
+uv run pytest
+uv run mypy src/disco
+```
+
 ---
 
 ## License

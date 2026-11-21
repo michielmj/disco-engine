@@ -1,0 +1,5 @@
+# Store text with LF line endings, whatever each developer's core.autocrlf is.
+* text=auto
+# Shell scripts must be LF in the working tree too: the Linux test container
+# runs them, and its bash fails on CRLF.
+*.sh text eol=lf
