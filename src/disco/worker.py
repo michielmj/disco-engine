@@ -218,7 +218,7 @@ class Worker:
         # - self._runners is immutable during ACTIVE (tuple of generator objects).
         # - self._active_runners is a list of indices into self._runners for runners not finished yet.
         #   This avoids dict lookups and avoids rebuilding tuples during the hot path.
-        self._runners: tuple[Generator[object, None, None], ...] = ()
+        self._runners: tuple[Generator[object], ...] = ()
         self._active_runners: list[int] = []
 
         # Desired-state handoff from callback thread -> runner thread.
@@ -888,7 +888,7 @@ class Worker:
                 # graph change invalidates partitioning cache
                 self._partitioning = None
                 self._partitioning_id = None
-            except (OperationalError, DBAPIError):
+            except OperationalError, DBAPIError:
                 # DB connectivity/auth is considered worker-fatal: cannot start experiments reliably.
                 raise
             except (KeyError, TypeError, ValueError, DiscoRuntimeError) as exc:
