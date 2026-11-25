@@ -29,8 +29,9 @@ The script keeps the shared machine usable:
 
 The application also ships to Windows, so on a Windows machine run
 `uv run pytest` (add `-m slow`, or a path and `-k name`, as needed).
-The application also ships to macOS. Unless you are on a Mac, CI is the only
-place the suite runs there: read the macOS job's log when it fails.
+The application also ships to macOS. Unless you are on a Mac, the only place
+the suite runs there is the cibuildwheel job in `build.yml` (PRs to `main`, and
+dispatch): read its macOS log when it fails.
 A test that passes on one platform and fails on another usually depends on
 path separators, line endings, file locking, case-insensitive file names or
 the default encoding. Supply what the test needs, and never paper over the

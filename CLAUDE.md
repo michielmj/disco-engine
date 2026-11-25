@@ -57,8 +57,10 @@ uv run python -m grpc_tools.protoc -I src --python_out=src --grpc_python_out=src
   src/disco/transports/proto/transport.proto
 ```
 
-disco ships to Linux, macOS and Windows. The tests must pass on each, and CI
-runs them on all of them; the run-tests skill says how.
+disco ships to Linux, macOS and Windows, and the tests must pass on each.
+`test.yml` runs them on Linux on every push and PR; `build.yml` runs them
+inside cibuildwheel on Linux, macOS and Windows, only for PRs to `main` and on
+dispatch. The run-tests skill says how to run them.
 
 ## Definition of done
 

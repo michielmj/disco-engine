@@ -18,7 +18,6 @@ a first stable release."
 
 | # | Found in | Problem | Where | Priority |
 |---|---|---|---|---|
-| 4 | architect, 2026-11-21 | `guard_shell.py` hangs on `git -C <path>`. `WORD` nests `+` inside `+`, which backtracks catastrophically: the check time doubles per path character (23 characters take 6 s), so the hook times out and blocks the command. Fix: `WORD = r"""(?:[^\s"';&\|]\|"[^"]*"\|'[^']*')+"""`, with a test on a long `-C` path. The same fix belongs upstream in `michielmj/scaffolder`. | `.claude/hooks/guard_shell.py` | 1 (wave 1) |
 | 8 | py314-deps review | The partitioner fails on a graph whose layer has BOOL weights: `plus_times(incidence @ M)` raises `KeyError`. The same happens on graphblas 2025.2. | `src/disco/partitioning.py:456-457` | 1 (wave 1) |
 | 9 | py314-deps review | `matrix_has_cycle` reports a cycle for the acyclic chain 0→1→2: `_longest_path_length` runs n-1 iterations and so never sees convergence. | `src/disco/helpers/gb.py:57,74` | 1 (wave 1) |
 | 10 | py314-deps | `TestRun.initialize(params)` ignores its argument and uses `experiment.params` instead. Decided (owner, 2026-11-25): "follow interface for initialization consistently accross testrun and worker. Use only params." | `src/disco/testrun.py:217` | 1 (wave 1) |
@@ -35,7 +34,6 @@ a first stable release."
 
 | # | Found in | Problem | Decision needed | Priority |
 |---|---|---|---|---|
-| 13 | scaffold-lint-layering | `CLAUDE.md` says CI runs the tests on Linux, macOS and Windows. `test.yml` runs them on Linux only. `build.yml` runs the cibuildwheel tests on all three, but only for PRs to `main` and on dispatch. | Decided (owner, 2026-11-25): "Linux only". Change the sentence; `test.yml` stays as it is. | 1 (wave 1) |
 | 14 | py314-deps review | `.claude/rules/graph.md`: the `monoid.plus` object raises on BOOL, and only the `"plus"` string and `op.plus` give OR. `.new(dtype=)` and `.dup(dtype=)` behave the same, although the rule says they differ. Both hold on graphblas 2025.2 and on 2026.11. | Decided (owner, 2026-11-25): "ok" to correcting the wording on the next branch that works on the graph code. | 1 (wave 1) |
 
 ## Structure, for the restructuring

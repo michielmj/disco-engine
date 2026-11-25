@@ -67,6 +67,14 @@ BLOCKED = [
     "git add src .",
     "git add -- .",
     "git -C ../other add -A",
+    # WORD beside a quote, `;`, `&` and `|`: the option's path ends there.
+    "git -C ../other;git add -A",
+    "git -C '../other dir' add -A",
+    'git -C "../other dir" push --force',
+    'git -C "../a;b" push --force',
+    "git -C ../other&&git push --force",
+    "git -C ../other|git push --force",
+    "git -C ../other && git push -f",
     # Force-pushing, in every spelling.
     "git push -f",
     "git push --force",
@@ -155,6 +163,9 @@ ALLOWED = [
     "git add ./src/a.py",
     "git add .gitignore",
     "git status",
+    "git -C '../other dir' status",
+    'git -C "../a;b" status',
+    "git -C ../other status && git log -n 1",
     "git log --format=%H -n 5",
     "git push origin feature",
     "git push -u origin feature",
@@ -339,7 +350,11 @@ def test_readonly_guard_allows(command: str) -> None:
 
 
 def _run(
-    hook: str, payload: str, cwd: Path | None = None, env: dict[str, str] | None = None
+    hook: str,
+    payload: str,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    timeout: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(HOOKS / f"{hook}.py")],
@@ -349,6 +364,7 @@ def _run(
         check=False,
         cwd=cwd,
         env=env,
+        timeout=timeout,
     )
 
 
@@ -403,3 +419,16 @@ def test_unreadable_input_is_blocked(hook: str, payload: str) -> None:
 
 def test_an_unreadable_agent_type_is_blocked() -> None:
     assert _run("guard_shell", '{"tool_input": {"command": "ls"}, "agent_type": 3}').returncode == 2
+
+
+def test_a_long_git_dash_c_path_is_checked_quickly() -> None:
+    """The old WORD nested `+` in `+`: the check time doubled per path character."""
+    path = "/home/user/projects/a-long-worktree-path/with/parts/x"
+    assert len(path) >= 50
+    for command, blocked in [(f"git -C {path} status", False), (f"git -C {path} push --force", True)]:
+        event = {"tool_name": "Bash", "tool_input": {"command": command}}
+        try:
+            done = _run("guard_shell", json.dumps(event), timeout=15)
+        except subprocess.TimeoutExpired:
+            pytest.fail(f"the guard took over 15 s on: {command}")
+        assert (done.returncode == 2) == blocked
