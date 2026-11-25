@@ -1636,6 +1636,10 @@ updated_at    TIMESTAMP NOT NULL
   random `mask_id` (UUID).
 - For each `(scenario_id, mask_id)` there are zero or more `vertex_index` rows.
 - `updated_at` is touched whenever a mask is ensured/persisted.
+- `updated_at` is a naive `DateTime` column holding UTC.
+  Cleanup compares `updated_at` with a naive UTC cutoff, so every write must
+  store naive UTC: a timezone-aware value would shift or break that
+  comparison and delete live masks.
 
 `GraphMask` is responsible for populating and maintaining this table; it is used
 from `graph.extract` and other higher‑level helpers.
@@ -1712,6 +1716,8 @@ Key fields (via `__slots__`):
     - Calls `has_self_loop` to forbid self‑loops.
     - Optionally calls `matrix_has_cycle` to detect cycles in the layer
       when `check_cycles=True`.
+      `matrix_has_cycle` is False for any acyclic layer (a chain `0→1→2`
+      included) and True for a cycle or a self‑loop, wherever the cycle lies.
 
 #### 7.3.2 Structural Accessors
 

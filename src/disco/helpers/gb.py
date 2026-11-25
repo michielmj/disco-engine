@@ -85,14 +85,19 @@ def _longest_path_length(matrix_serialized: bytes) -> Vector:
     v = Vector(dtypes.INT64, size=n)
     v(mask=~indeg.S) << 0  # only sources are reachable at length 0; others are "missing" (-inf)
 
-    # Relax up to n-1 times (DAG longest path has at most n-1 edges)
-    for _ in range(n - 1):
+    # A DAG's longest path has at most n-1 edges, so v is final after n-1
+    # relaxations; one more is needed to see that it has stopped changing.
+    for _ in range(n):
         w = v.dup()
         v(op.max) << semiring.max_plus(v @ A)
         if v.isequal(w):
+            # In a DAG every vertex is reachable from a source. A vertex that is
+            # not lies on, or behind, a cycle that has no source feeding it.
+            if v.nvals < n:
+                raise ValueError("Vertices not reachable from a source; graph has a directed cycle.")
             return v
 
-    raise ValueError("No convergence in n-1 iterations; graph likely has a directed cycle.")
+    raise ValueError("No convergence in n iterations; graph has a directed cycle.")
 
 
 def longest_path_length(matrix: Matrix) -> Vector:
