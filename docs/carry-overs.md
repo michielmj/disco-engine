@@ -18,20 +18,16 @@ a first stable release."
 
 | # | Found in | Problem | Where | Priority |
 |---|---|---|---|---|
-| 4 | architect, 2026-11-21 | `guard_shell.py` hangs on `git -C <path>`. `WORD` nests `+` inside `+`, which backtracks catastrophically: the check time doubles per path character (23 characters take 6 s), so the hook times out and blocks the command. Fix: `WORD = r"""(?:[^\s"';&\|]\|"[^"]*"\|'[^']*')+"""`, with a test on a long `-C` path. The same fix belongs upstream in `michielmj/scaffolder`. | `.claude/hooks/guard_shell.py` | 1 (wave 1) |
-| 10 | py314-deps | `TestRun.initialize(params)` ignores its argument and uses `experiment.params` instead. Decided (owner, 2026-11-25): "follow interface for initialization consistently accross testrun and worker. Use only params." | `src/disco/testrun.py:217` | 1 (wave 1) |
 
 ## Code that will break, or that can hide a failure
 
 | # | Found in | Problem | Where | Priority |
 |---|---|---|---|---|
-| 5 | scaffold-lint-layering review | Tests that zip with `strict=False` can silently truncate. | `tests/test_testrun.py:324`, `tests/graph/test_extract.py:418,423`, `tests/test_partitioning.py:83` | 1 (wave 1) |
 
 ## Documented facts that do not hold
 
 | # | Found in | Problem | Decision needed | Priority |
 |---|---|---|---|---|
-| 13 | scaffold-lint-layering | `CLAUDE.md` says CI runs the tests on Linux, macOS and Windows. `test.yml` runs them on Linux only. `build.yml` runs the cibuildwheel tests on all three, but only for PRs to `main` and on dispatch. | Decided (owner, 2026-11-25): "Linux only". Change the sentence; `test.yml` stays as it is. | 1 (wave 1) |
 
 ## Structure, for the restructuring
 

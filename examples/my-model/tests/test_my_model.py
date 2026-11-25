@@ -40,6 +40,6 @@ def test_run(tmp_path):
         dlogger=dlogger,
         partitioning=partitioning,
     )
-    testrun.initialize({})
+    testrun.initialize()
 
     testrun.run(100)

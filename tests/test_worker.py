@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from multiprocessing import Queue
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -538,3 +538,96 @@ def test_no_kick_needed_for_ingress_in_ready_or_paused(worker_env):
         )
     )
     assert not w._kick.is_set()
+
+
+# -----------------------------
+# Rule: TestRun and the Worker give a node the same params
+# -----------------------------
+
+
+class _Replication:
+    def get_seed_sequence(self, partition: int) -> object:
+        return object()
+
+
+class _Spec:
+    partition = 0
+
+
+class _InitRecorder:
+    """Stands in for NodeRuntime: records what initialize() receives."""
+
+    instances: ClassVar[list[_InitRecorder]] = []
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.initialized_with: list[Any] = []
+        _InitRecorder.instances.append(self)
+
+    def initialize(self, params: Any) -> None:
+        self.initialized_with.append(params)
+
+
+@pytest.mark.parametrize("node_params", [{"rate": 2.5, "name": "x"}, {}])
+def test_worker_initializes_every_node_with_the_experiments_node_params(
+    monkeypatch: pytest.MonkeyPatch, worker_env, tmp_path, node_params
+):
+    w, _cluster, store, _ev_q, _pr_q = worker_env
+
+    class Exp:
+        duration = 1.0
+        scenario_id = "s1"
+        selected_partitioning = "p1"
+        replications: ClassVar[dict[str, _Replication]] = {"rep1": _Replication()}
+
+    Exp.node_params = node_params  # type: ignore[attr-defined]
+    store._exp = Exp()  # type: ignore[assignment]
+
+    class Partitioning:
+        node_specs: ClassVar[list[Any]] = [
+            type("NS", (), {"node_name": n, "partition": 0})() for n in ("n1", "n2")
+        ]
+
+        @classmethod
+        def load(cls, **kwargs: Any) -> Any:
+            return cls()
+
+        def assignment_vector(self, name: str) -> object:
+            return object()
+
+    class FakeGraph:
+        def get_view(self, mask: Any) -> object:
+            return object()
+
+    class DL:
+        path = str(tmp_path)
+        ring_bytes = rotate_bytes = zstd_level = 1
+
+    class Settings:
+        data_logger = DL
+        model = object()
+
+    class Sessions:
+        def session(self) -> Any:
+            from contextlib import nullcontext
+
+            return nullcontext()
+
+    _InitRecorder.instances = []
+    monkeypatch.setattr(worker_mod, "load_graph_for_scenario", lambda session, sid: FakeGraph())
+    monkeypatch.setattr(worker_mod, "Partitioning", Partitioning)
+    monkeypatch.setattr(worker_mod, "DataLogger", lambda **kw: object())
+    monkeypatch.setattr(worker_mod.GraphData, "for_node", staticmethod(lambda **kw: object()))
+    monkeypatch.setattr(worker_mod, "NodeRuntime", _InitRecorder)
+    w._settings = Settings()  # type: ignore[assignment]
+    w._session_manager = Sessions()  # type: ignore[assignment]
+    w._model = object()  # type: ignore[assignment]
+
+    with w._lock:
+        w._apply_desired_locked(
+            FakeDesired(request_id="r", state=WorkerState.RESERVED, expid="e1", repid="rep1", partition=0)
+        )
+        assert w._setup_run_locked() is True
+
+    assert len(_InitRecorder.instances) == 2
+    for rt in _InitRecorder.instances:
+        assert rt.initialized_with == [node_params]
