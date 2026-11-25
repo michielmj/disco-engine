@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from numpy.random import SeedSequence
 
 import disco.testrun as testrun_mod
-from disco.experiments import ExperimentStatus
+from disco.experiments import Experiment, ExperimentStatus
 
 # -----------------------------
 # Minimal fakes / test doubles
@@ -43,17 +43,19 @@ class FakeGraph:
         return self
 
 
-class FakeExperiment:
-    def __init__(
-        self,
-        expid: str = "exp1",
-        replications: dict[str, Any] | None = None,
-        params: dict[str, Any] | None = None,
-    ) -> None:
-        self.expid = expid
-        self.replications = replications or {}
-        self.params = params or {}
-        self.status = ExperimentStatus.CREATED
+def make_experiment(
+    expid: str = "exp1",
+    replications: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> Experiment:
+    """A real Experiment: TestRun and Worker must read params the same way (Experiment.node_params)."""
+    return Experiment(
+        duration=1.0,
+        scenario_id="sid",
+        expid=expid,
+        replications=cast("dict[str, Any]", replications or {}),
+        params=params,
+    )
 
 
 class FakeSettings:
@@ -224,7 +226,7 @@ def patch_testrun_deps(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_ctor_sets_status_loaded_and_picks_repid_from_experiment_replications(patch_testrun_deps):
-    exp = FakeExperiment(expid="exp1", replications={"repA": object(), "repB": object()})
+    exp = make_experiment(expid="exp1", replications={"repA": object(), "repB": object()})
     g = FakeGraph(scenario_id="sid")
     settings = FakeSettings()
 
@@ -247,7 +249,7 @@ def test_ctor_uses_provided_model_without_calling_load_model(
 
     monkeypatch.setattr(testrun_mod, "load_model", _load_model)
 
-    exp = FakeExperiment(expid="exp1", replications={"repA": object()})
+    exp = make_experiment(expid="exp1", replications={"repA": object()})
     g = FakeGraph()
     settings = FakeSettings()
     provided_model = FakeModel()
@@ -259,7 +261,7 @@ def test_ctor_uses_provided_model_without_calling_load_model(
 
 
 def test_ctor_builds_partitioning_when_not_provided(patch_testrun_deps):
-    exp = FakeExperiment(expid="exp1", replications={"repA": object()})
+    exp = make_experiment(expid="exp1", replications={"repA": object()})
     g = FakeGraph()
     settings = FakeSettings()
 
@@ -272,7 +274,7 @@ def test_ctor_builds_partitioning_when_not_provided(patch_testrun_deps):
 
 
 def test_ctor_rejects_partitioning_with_more_than_one_partition(patch_testrun_deps):
-    exp = FakeExperiment(expid="exp1", replications={"repA": object()})
+    exp = make_experiment(expid="exp1", replications={"repA": object()})
     g = FakeGraph()
     settings = FakeSettings()
 
@@ -283,7 +285,7 @@ def test_ctor_rejects_partitioning_with_more_than_one_partition(patch_testrun_de
 
 
 def test_ctor_rejects_empty_node_specs(patch_testrun_deps):
-    exp = FakeExperiment(expid="exp1", replications={"repA": object()})
+    exp = make_experiment(expid="exp1", replications={"repA": object()})
     g = FakeGraph()
     settings = FakeSettings()
 
@@ -294,7 +296,7 @@ def test_ctor_rejects_empty_node_specs(patch_testrun_deps):
 
 
 def test_seeds_assigned_deterministically_by_node_specs_order(patch_testrun_deps):
-    exp = FakeExperiment(expid="exp1", replications={"repA": object()})
+    exp = make_experiment(expid="exp1", replications={"repA": object()})
     g = FakeGraph()
     settings = FakeSettings()
 
@@ -321,7 +323,7 @@ def test_seeds_assigned_deterministically_by_node_specs_order(patch_testrun_deps
     expected = ss.spawn(len(part.node_specs))
 
     # Compare via generated state (stable within a process; you said it needn't be stable across envs).
-    for spec, exp_ss in zip(part.node_specs, expected, strict=False):
+    for spec, exp_ss in zip(part.node_specs, expected, strict=True):
         rt = tr.nodes[spec.node_name]  # type: ignore[attr-defined]
         got_state = rt.seed_sequence.generate_state(8)
         exp_state = exp_ss.generate_state(8)
@@ -329,7 +331,7 @@ def test_seeds_assigned_deterministically_by_node_specs_order(patch_testrun_deps
 
 
 def test_initialize_calls_nodes_in_node_specs_order_and_sets_status_initialized(patch_testrun_deps):
-    exp = FakeExperiment(expid="exp1", replications={"repA": object()}, params={"p": 1, "q": 2})
+    exp = make_experiment(expid="exp1", replications={"repA": object()}, params={"p": 1, "q": 2})
     g = FakeGraph()
     settings = FakeSettings()
 
@@ -346,7 +348,7 @@ def test_initialize_calls_nodes_in_node_specs_order_and_sets_status_initialized(
     # No initialize yet
     assert exp.status == ExperimentStatus.LOADED
 
-    tr.initialize({})
+    tr.initialize()
 
     assert exp.status == ExperimentStatus.INITIALIZED
 
@@ -363,8 +365,41 @@ def test_initialize_calls_nodes_in_node_specs_order_and_sets_status_initialized(
     assert init_order == [ns.node_name for ns in part.node_specs]
 
 
+def test_initialize_gives_every_node_the_experiment_params_dict(patch_testrun_deps):
+    params = {"rate": 0.5, "nested": {"k": [1, 2]}}
+    exp = make_experiment(replications={"repA": object()}, params=params)
+    part = FakePartitioning(node_specs=(FakeNodeInstanceSpec(0, "a"), FakeNodeInstanceSpec(0, "b")))
+    tr = testrun_mod.TestRun(experiment=exp, graph=FakeGraph(), settings=FakeSettings(), partitioning=part)
+
+    tr.initialize()
+
+    for name in ("a", "b"):
+        assert tr.nodes[name].initialize_calls == [params]  # type: ignore[attr-defined]
+
+
+def test_initialize_without_experiment_params_gives_every_node_an_empty_dict(patch_testrun_deps):
+    exp = make_experiment(replications={"repA": object()}, params=None)
+    part = FakePartitioning(node_specs=(FakeNodeInstanceSpec(0, "a"),))
+    tr = testrun_mod.TestRun(experiment=exp, graph=FakeGraph(), settings=FakeSettings(), partitioning=part)
+
+    tr.initialize()
+
+    assert tr.nodes["a"].initialize_calls == [{}]  # type: ignore[attr-defined]
+
+
+def test_initialize_rejects_a_params_argument(patch_testrun_deps):
+    exp = make_experiment(replications={"repA": object()}, params={"p": 1})
+    part = FakePartitioning(node_specs=(FakeNodeInstanceSpec(0, "a"),))
+    tr = testrun_mod.TestRun(experiment=exp, graph=FakeGraph(), settings=FakeSettings(), partitioning=part)
+
+    with pytest.raises(TypeError):
+        tr.initialize({})  # type: ignore[call-arg]
+
+    assert tr.nodes["a"].initialize_calls == []  # type: ignore[attr-defined]
+
+
 def test_run_initializes_if_needed_sets_status_active_and_steps_until_all_stop(patch_testrun_deps):
-    exp = FakeExperiment(expid="exp1", replications={"repA": object()}, params={"p": 1})
+    exp = make_experiment(expid="exp1", replications={"repA": object()}, params={"p": 1})
     g = FakeGraph()
     settings = FakeSettings()
 
@@ -394,7 +429,7 @@ def test_run_initializes_if_needed_sets_status_active_and_steps_until_all_stop(p
 def test_run_can_be_called_multiple_times_earlier_duration_is_noop_later_duration_progresses(
     patch_testrun_deps,
 ):
-    exp = FakeExperiment(expid="exp1", replications={"repA": object()}, params={})
+    exp = make_experiment(expid="exp1", replications={"repA": object()}, params={})
     g = FakeGraph()
     settings = FakeSettings()
 

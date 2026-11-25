@@ -859,7 +859,7 @@ Experiment/partition status is updated through `ExperimentStore` helpers:
 Typical partition lifecycle (happy path):
 
 - `LOADED` -- prerequisites loaded (experiment, graph, partitioning, model).
-- `INITIALIZED` -- NodeRuntimes created and `initialize(**params)` completed.
+- `INITIALIZED` -- NodeRuntimes created and `initialize(params)` completed, where `params` is the experiment's `node_params`, the same dict `TestRun` passes (Ch 16).
 - `ACTIVE` -- worker enters `ACTIVE` and runners are created.
 - `FINISHED` -- all NodeRuntime runners completed and the run ends.
 
@@ -3276,7 +3276,7 @@ During construction, NodeRuntime:
 
 Model code may require initialization prior to simulation start. NodeRuntime therefore exposes:
 
-- `initialize(**kwargs)`: forwards to `node.initialize(**kwargs)` and leaves the runtime in `INITIALIZED` state.
+- `initialize(params)`: takes one dict (the experiment's `node_params`), passes it to the node's `__init__` and leaves the runtime in `INITIALIZED` state.
 
 The Worker (or higher-level orchestration) is responsible for invoking `initialize` before starting the runner.
 
@@ -4396,7 +4396,8 @@ Each `NodeRuntime` receives its own `SeedSequence`. The master seed is never pas
   - sets `experiment.status = LOADED`
 
 - `initialize()`:
-  - calls `NodeRuntime.initialize(**experiment.params)` for each node in `partitioning.node_specs` order
+  - takes no argument: the params come from the experiment, as in the Worker. Calls `rt.initialize(experiment.node_params)` (one dict, `experiment.params or {}`) for each node in `partitioning.node_specs` order; `Experiment.node_params` is the one definition both TestRun and the Worker use
+  - `initialize(params)` raises `TypeError`
   - sets `experiment.status = INITIALIZED`
 
 - `run(duration)`:

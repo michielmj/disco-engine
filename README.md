@@ -37,6 +37,9 @@ run **without** threading, metastore/cluster coordination, or external transport
 - **TestRun** for fast local runs without infrastructure (single-process, in-process transport only)
 - **Data logging** via an optional `DataLogger`
 
+If you call `TestRun.initialize()` yourself, call it with no argument: the nodes receive the experiment's `params`
+(set them on the `Experiment`). `initialize({...})` now raises `TypeError` (a breaking change, allowed in this phase).
+
 ---
 
 ## 🚀 Installation
