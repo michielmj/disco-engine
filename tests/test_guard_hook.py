@@ -368,11 +368,23 @@ def _run(
     )
 
 
+_GIT_CONFIG_PARAMETERS = ("GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS")
+_GIT_CONFIG_INDEXED = ("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")
+
+
 def _git_identity(tmp_path: Path, initials: str | None) -> dict[str, str]:
-    """An environment whose only git configuration is a global file holding `initials`."""
+    """An environment whose only git configuration is a global file holding `initials`.
+
+    Git also reads configuration passed through the environment, so that is removed.
+    """
     config = tmp_path / "gitconfig"
     config.write_text(f"[user]\n\tinitials = {initials}\n" if initials else "", encoding="utf-8")
-    return {**os.environ, "GIT_CONFIG_GLOBAL": str(config), "GIT_CONFIG_NOSYSTEM": "1"}
+    ambient = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in _GIT_CONFIG_PARAMETERS and not key.startswith(_GIT_CONFIG_INDEXED)
+    }
+    return {**ambient, "GIT_CONFIG_GLOBAL": str(config), "GIT_CONFIG_NOSYSTEM": "1"}
 
 
 @pytest.mark.parametrize(
