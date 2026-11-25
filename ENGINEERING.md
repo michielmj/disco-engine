@@ -1712,6 +1712,8 @@ Key fields (via `__slots__`):
     - Calls `has_self_loop` to forbid self‑loops.
     - Optionally calls `matrix_has_cycle` to detect cycles in the layer
       when `check_cycles=True`.
+      `matrix_has_cycle` is False for any acyclic layer (a chain `0→1→2`
+      included) and True for a cycle or a self‑loop, wherever the cycle lies.
 
 #### 7.3.2 Structural Accessors
 
