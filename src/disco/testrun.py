@@ -6,7 +6,6 @@ import logging as _logging
 import uuid
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
 
 from data_logger import DataLogger
 from numpy.random import SeedSequence

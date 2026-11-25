@@ -4396,7 +4396,8 @@ Each `NodeRuntime` receives its own `SeedSequence`. The master seed is never pas
   - sets `experiment.status = LOADED`
 
 - `initialize()`:
-  - calls `NodeRuntime.initialize(**experiment.params)` for each node in `partitioning.node_specs` order
+  - takes no argument: the params come from the experiment, as in the Worker. Calls `rt.initialize(experiment.node_params)` (one dict, `experiment.params or {}`) for each node in `partitioning.node_specs` order; `Experiment.node_params` is the one definition both TestRun and the Worker use
+  - `initialize(params)` raises `TypeError`
   - sets `experiment.status = INITIALIZED`
 
 - `run(duration)`:
