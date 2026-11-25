@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from multiprocessing import Queue
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -557,7 +557,7 @@ class _Spec:
 class _InitRecorder:
     """Stands in for NodeRuntime: records what initialize() receives."""
 
-    instances: list[_InitRecorder] = []
+    instances: ClassVar[list[_InitRecorder]] = []
 
     def __init__(self, **kwargs: Any) -> None:
         self.initialized_with: list[Any] = []
@@ -577,13 +577,15 @@ def test_worker_initializes_every_node_with_the_experiments_node_params(
         duration = 1.0
         scenario_id = "s1"
         selected_partitioning = "p1"
-        replications = {"rep1": _Replication()}
+        replications: ClassVar[dict[str, _Replication]] = {"rep1": _Replication()}
 
     Exp.node_params = node_params  # type: ignore[attr-defined]
     store._exp = Exp()  # type: ignore[assignment]
 
     class Partitioning:
-        node_specs = [type("NS", (), {"node_name": n, "partition": 0})() for n in ("n1", "n2")]
+        node_specs: ClassVar[list[Any]] = [
+            type("NS", (), {"node_name": n, "partition": 0})() for n in ("n1", "n2")
+        ]
 
         @classmethod
         def load(cls, **kwargs: Any) -> Any:

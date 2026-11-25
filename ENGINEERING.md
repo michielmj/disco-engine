@@ -3276,7 +3276,7 @@ During construction, NodeRuntime:
 
 Model code may require initialization prior to simulation start. NodeRuntime therefore exposes:
 
-- `initialize(params)`: takes one dict (the experiment's `node_params`), forwards it to the node's `initialize` and leaves the runtime in `INITIALIZED` state.
+- `initialize(params)`: takes one dict (the experiment's `node_params`), passes it to the node's `__init__` and leaves the runtime in `INITIALIZED` state.
 
 The Worker (or higher-level orchestration) is responsible for invoking `initialize` before starting the runner.
 
