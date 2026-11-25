@@ -49,6 +49,19 @@ def _rows_to_df(rows: Sequence[Mapping[str, Any]], columns: Sequence[ColumnEleme
     return pd.DataFrame(rows, columns=col_names)
 
 
+def _is_datetime_fill(fill: Any) -> bool:
+    """A fill a datetime64 column takes without a warning: a datetime, or a parsable string."""
+    if isinstance(fill, datetime | np.datetime64):
+        return True
+    if isinstance(fill, str):
+        try:
+            pd.Timestamp(fill)
+        except ValueError:
+            return False
+        return True
+    return False
+
+
 def _fill_missing(df: pd.DataFrame, fill: Any) -> pd.DataFrame:
     """
     Fill missing values column by column, giving what ``df.fillna(fill)`` gave
@@ -68,7 +81,7 @@ def _fill_missing(df: pd.DataFrame, fill: Any) -> pd.DataFrame:
         elif isinstance(col.dtype, pd.StringDtype):
             compatible = isinstance(fill, str)
         elif col.dtype.kind == "M":
-            compatible = isinstance(fill, datetime | np.datetime64)
+            compatible = _is_datetime_fill(fill)
         else:
             compatible = True
         out[name] = (col if compatible else col.astype(object)).fillna(fill)

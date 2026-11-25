@@ -13,8 +13,8 @@ from .schema import vertex_masks
 
 def _utcnow() -> datetime:
     """
-    The current UTC time as a naive datetime: the `updated_at` and `created_at`
-    columns are naive `DateTime` holding UTC, and rows already stored stay valid.
+    The current UTC time as a naive datetime: the `updated_at` column is a naive
+    `DateTime` holding UTC, and rows already stored stay valid.
     """
     return datetime.now(UTC).replace(tzinfo=None)
 

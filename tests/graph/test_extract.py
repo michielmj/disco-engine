@@ -543,3 +543,19 @@ def test_default_fill_of_a_datetime_column_warns_nothing() -> None:
     assert out["t"].tolist() == [pd.Timestamp("2020-01-01"), 0]
     full = pd.DataFrame({"t": pd.to_datetime(["2020-01-01", "2020-01-02"])})
     assert _fill_missing(full, 0)["t"].dtype == full["t"].dtype
+
+
+@pytest.mark.filterwarnings("error::pandas.errors.Pandas4Warning")
+@pytest.mark.parametrize("tz", [None, "UTC"])
+def test_default_fill_of_a_datetime_column_with_an_empty_string_keeps_the_dtype(tz: str | None) -> None:
+    from disco.graph.extract import _fill_missing
+
+    t = pd.to_datetime(["2020-01-01", None])
+    if tz:
+        t = t.tz_localize(tz)
+    df = pd.DataFrame({"t": t})
+    out = _fill_missing(df, "")
+
+    assert out["t"].dtype == df["t"].dtype
+    assert out["t"].iloc[0] == df["t"].iloc[0]
+    assert pd.isna(out["t"].iloc[1])

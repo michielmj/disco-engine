@@ -451,9 +451,10 @@ class Partitioning:
 
         for layer_idx in range(len(graph.layers)):
             simproc_name = simproc_names_by_order[layer_idx]
-            # Topology depends only on which edges exist: take the pattern as INT64
-            # ones. BOOL would make plus an OR, and float weights must not truncate.
-            M = graph.get_matrix(layer_idx).apply(gb.unary.one).new(dtype=gb.dtypes.INT64)
+            # Topology depends only on which edges exist: keep the real edges
+            # (stored zeros dropped, as helpers/gb.py) as INT64 ones. BOOL would
+            # make plus an OR, and float weights must not truncate.
+            M = graph.get_matrix(layer_idx).select("!=", 0).apply(gb.unary.one).new(dtype=gb.dtypes.INT64)
 
             Q = gb.op.plus_times(incidence @ M)
             R = gb.op.plus_times(Q @ incidence.T).select("!=", 0)

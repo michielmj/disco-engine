@@ -347,3 +347,15 @@ def test_topology_depends_on_the_edges_not_on_the_weight_type(dtype: Any, weight
 
     assert from_int["n0"].successors["s0"] == {("n1", "s0")}
     assert from_layer == from_int
+
+
+@pytest.mark.parametrize(
+    ("dtype", "weight"),
+    [(gb.dtypes.FP64, 0.0), (gb.dtypes.INT64, 0)],
+)
+def test_a_stored_zero_weight_is_not_an_edge(dtype: Any, weight: Any) -> None:
+    # A row with weight 0 is stored as an entry; the topology drops it, as the cycle check does.
+    topology = _topology_for(dtype, weight)
+
+    assert topology["n0"].successors == {}
+    assert topology["n1"].predecessors == {}

@@ -1636,7 +1636,7 @@ updated_at    TIMESTAMP NOT NULL
   random `mask_id` (UUID).
 - For each `(scenario_id, mask_id)` there are zero or more `vertex_index` rows.
 - `updated_at` is touched whenever a mask is ensured/persisted.
-- `created_at` and `updated_at` are naive `DateTime` columns holding UTC.
+- `updated_at` is a naive `DateTime` column holding UTC.
   Cleanup compares `updated_at` with a naive UTC cutoff, so every write must
   store naive UTC: a timezone-aware value would shift or break that
   comparison and delete live masks.
