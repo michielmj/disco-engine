@@ -14,10 +14,12 @@ paths:
 
 - Under BOOL, `plus` is logical OR, not addition, and `times` does not exist:
   the `monoid.plus` object and `semiring.plus_times` raise `KeyError`, while
-  the `"plus"` string and `op.plus` give OR. To count or sum, cast to INT64
-  first with `matrix.dup(dtype=gb.dtypes.INT64)`. `.dup(dtype=...)` and
-  `.apply(identity).new(dtype=...)` cast before the operation and behave the
-  same.
+  the `"plus"` string and `op.plus` give OR. To count or sum BOOL values, cast
+  to INT64 first with `matrix.dup(dtype=gb.dtypes.INT64)`. `.dup(dtype=...)`
+  and `.apply(identity).new(dtype=...)` cast before the operation and behave
+  the same. Casting a float layer to INT64 truncates its weights (0.5 becomes
+  0): when only the edges matter, take the pattern with
+  `.apply(gb.unary.one).new(dtype=gb.dtypes.INT64)`.
 - An empty sparse slice, such as a label with no vertices, makes
   `np.min`/`np.max` raise on a zero-size array. Guard every reduction with an
   empty check.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from typing import Any, Literal, cast
 
 import graphblas as gb
@@ -60,10 +61,14 @@ def _fill_missing(df: pd.DataFrame, fill: Any) -> pd.DataFrame:
     out = df.copy()
     for name in df.columns:
         col = df[name]
+        if not col.isna().any():
+            continue
         if col.dtype.kind in "iufc":
             compatible = isinstance(fill, int | float | complex | np.number) and not isinstance(fill, bool)
         elif isinstance(col.dtype, pd.StringDtype):
             compatible = isinstance(fill, str)
+        elif col.dtype.kind == "M":
+            compatible = isinstance(fill, datetime | np.datetime64)
         else:
             compatible = True
         out[name] = (col if compatible else col.astype(object)).fillna(fill)

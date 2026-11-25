@@ -333,9 +333,17 @@ def _topology_for(weight_dtype: Any, weight: Any) -> dict[str, NodeTopology]:
     )
 
 
-def test_topology_of_a_bool_layer_equals_that_of_int64_weights_of_one() -> None:
-    from_bool = _topology_for(gb.dtypes.BOOL, True)
+@pytest.mark.parametrize(
+    ("dtype", "weight"),
+    [
+        (gb.dtypes.BOOL, True),
+        (gb.dtypes.FP64, 0.5),  # truncating to INT64 would drop the link
+        (gb.dtypes.FP64, 2.5),
+    ],
+)
+def test_topology_depends_on_the_edges_not_on_the_weight_type(dtype: Any, weight: Any) -> None:
+    from_layer = _topology_for(dtype, weight)
     from_int = _topology_for(gb.dtypes.INT64, 1)
 
     assert from_int["n0"].successors["s0"] == {("n1", "s0")}
-    assert from_bool == from_int
+    assert from_layer == from_int
