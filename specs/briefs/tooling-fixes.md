@@ -68,3 +68,50 @@ Delete both rows from `docs/carry-overs.md` in this branch.
 - The branch is pushed, with a Surfaced decisions commit whose Evidence
   lines give the test counts, each mutation and its result, and what using
   it showed.
+
+## Round 1 (2026-11-25): an ambient-config test, and the other cibuildwheel workflows
+
+The review of e32cf4e found no FAIL. This round takes two of its
+observations. Both remedies are prescribed: no re-review; the architect
+checks the diff.
+
+<finding id="1">
+tests/test_guard_hook.py::test_the_hook_refuses_a_commit_without_initials
+fails in this environment. Here git reads the initials from config set
+through the environment (origin "command line"), and `_git_identity` does
+not clear that. It is a pre-existing test that depends on ambient host
+state.
+</finding>
+
+**Remedy (prescribed):** `_git_identity` returns an environment from which
+every way of passing git config through the environment is removed:
+`GIT_CONFIG_COUNT`, each `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>`,
+and `GIT_CONFIG_PARAMETERS`, besides the global and system files it already
+replaces. This happened in this container, where the owner sets the
+initials through `GIT_CONFIG_COUNT`/`KEY_0`/`VALUE_0`, so it is an incident
+(`.claude/rules/testing.md`). Show the test failing with
+`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.initials GIT_CONFIG_VALUE_0=abc`
+set and the old helper, and passing with the new one. Change no hook code.
+
+<finding id="2">
+`.claude/skills/run-tests/SKILL.md:32-34` says "the only place the suite
+runs there is the cibuildwheel job in `build.yml`", which is incomplete.
+`release-publish.yml` (on `release: published`, and dispatch) also runs
+cibuildwheel on ubuntu-22.04, macos-14 and windows-latest, and so runs the
+pyproject `test-command`. `build-windows.yml` (dispatch) does the same on
+Windows. The CLAUDE.md sentence is accurate about `build.yml`, but it also
+leaves those two workflows out.
+</finding>
+
+**Remedy (prescribed):** name all three in both places, checked against the
+workflow files: `build.yml` (PRs to `main`, dispatch), `release-publish.yml`
+(a published release, dispatch), `build-windows.yml` (dispatch). Keep it to
+a sentence or two.
+
+Not in this round, recorded by the architect as backlog: the remaining
+exponential backtracking in the guard's initials rule (repeated `-C`/`-c`
+options) and in `INTERPRETER` (repeated `uv run` options); neither has a
+realistic trigger.
+
+Fresh Evidence lines on the fixed head: the round's mutation, the whole
+guard suite, and the checks.
