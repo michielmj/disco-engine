@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import numpy as np
+import pytest
 from graphblas import Vector
 from sqlalchemy import (
     Column,
@@ -423,5 +424,69 @@ def test_outbound_and_inbound_map() -> None:
         entries_i = {(int(r), int(c)): float(v) for r, c, v in zip(rows_i, cols_i, vals_i, strict=False)}
         assert entries_i.get((0, 1)) == 1.5
         assert entries_i.get((1, 2)) == 2.5
+
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: default_fill on text columns (pandas 4 raises on a fill of another type)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.filterwarnings("error::pandas.errors.Pandas4Warning")
+def test_default_fill_of_text_columns_warns_nothing_and_keeps_the_values() -> None:
+    for engine, SessionLocal, _node_data, _edge_data in engine_session_and_model_tables():
+        metadata = MetaData()
+        texts = Table(
+            "texts",
+            metadata,
+            Column("scenario_id", String, primary_key=True),
+            Column("key", String, primary_key=True),
+            Column("name", String),  # some missing
+            Column("note", String),  # all missing
+            Column("value", Float),
+        )
+        edge_texts = Table(
+            "edge_texts",
+            metadata,
+            Column("scenario_id", String, primary_key=True),
+            Column("source_key", String, primary_key=True),
+            Column("target_key", String, primary_key=True),
+            Column("name", String),
+            Column("note", String),
+        )
+        metadata.create_all(engine)
+
+        session: Session = SessionLocal()
+        _populate_vertices_and_edges(session, "S1")
+        session.execute(
+            insert(texts), [{"scenario_id": "S1", "key": "A", "name": "x", "note": None, "value": 1.5}]
+        )
+        session.execute(
+            insert(edge_texts),
+            [{"scenario_id": "S1", "source_key": "A", "target_key": "B", "name": "e", "note": None}],
+        )
+        session.commit()
+        graph = Graph(layers={}, num_vertices=3, scenario_id="S1")
+
+        df = get_vertex_data(
+            session, graph, texts, [texts.c.name, texts.c.note, texts.c.value], default_fill=0
+        )
+        assert df["name"].tolist() == ["x", 0, 0]
+        assert df["note"].tolist() == [0, 0, 0]
+        assert df["value"].tolist() == [1.5, 0.0, 0.0]
+        assert df["value"].dtype == np.float64
+
+        for fn in (get_outbound_edge_data, get_inbound_edge_data):
+            edf = fn(
+                session,
+                graph,
+                edge_texts,
+                [edge_texts.c.name, edge_texts.c.note],
+                layer_idx=0,
+                default_fill=0,
+            )
+            assert edf["name"].tolist() == ["e", 0]
+            assert edf["note"].tolist() == [0, 0]
 
         session.close()

@@ -62,7 +62,7 @@ def _fill_missing(df: pd.DataFrame, fill: Any) -> pd.DataFrame:
         col = df[name]
         if col.dtype.kind in "iufc":
             compatible = isinstance(fill, int | float | complex | np.number) and not isinstance(fill, bool)
-        elif col.dtype.kind != "O" and pd.api.types.is_string_dtype(col.dtype):
+        elif isinstance(col.dtype, pd.StringDtype):
             compatible = isinstance(fill, str)
         else:
             compatible = True
