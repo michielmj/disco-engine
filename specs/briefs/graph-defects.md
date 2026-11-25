@@ -86,3 +86,72 @@ Delete the five rows from `docs/carry-overs.md` in this branch.
 - The branch is pushed, with a Surfaced decisions commit whose Evidence
   lines give the test counts, each mutation and its result, and what using
   it showed.
+
+## Round 1 (2026-11-25): float weights, full columns, and a test that can fail
+
+The review of d39eb65 found three FAILs. The cycle check, the mask cleanup
+code and the `graph.md` facts were confirmed correct. A re-review, scoped to
+this round, follows: fixes 1 and 2 change behaviour.
+
+<finding id="1">
+src/disco/partitioning.py:455: `.dup(dtype=INT64)` truncates float weights,
+so a layer edge weighted in (-1, 1) (for example 0.5) becomes 0. The two
+plus_times products then give 0, `select("!=", 0)` drops the link, and the
+node loses that predecessor or successor. Edge weights are `Float NOT NULL`
+(graph/schema.py:44), so every graph loaded from the database has FP64
+layers. On the two-paths-join graph with FP64 0.5: branch `n0 successors:
+{}`, staging `{'s0': {('n1','s0')}}`. FP64 2.5 and INT64 1 are the same on
+both. No test covers non-BOOL weights.
+</finding>
+
+**Remedy (prescribed):** the topology depends only on which edges exist, so
+compute it on the pattern: cast BOOL layers only, or take the pattern of
+every layer as INT64 ones (`M.apply(gb.unary.one).new(dtype=gb.dtypes.INT64)`
+or equivalent). Pin it with an FP64 layer of weight 0.5, giving the same
+topology as staging, shown failing on d39eb65's code. Narrow the new
+`graph.md` advice so it no longer reads as "cast any layer to INT64": the
+cast is for counting on BOOL; a float layer must not be truncated.
+
+<finding id="2">
+src/disco/graph/extract.py:63-70 (`_fill_missing`): a column with no missing
+values is still cast to `object` when the fill does not match its type. On
+the real `get_vertex_data` path, with SQLite and a table where every value
+is present: `default_fill=0`: branch gives `key: object, name: object`,
+staging gives `key: str, name: str`. `default_fill=""`: branch gives
+`count: object`, staging gives `count: int64`. The new test passes only
+because each of its text columns has a missing value.
+</finding>
+
+**Remedy (prescribed):** touch a column only when it has a missing value
+(`col.isna().any()`). Pin it with full columns of each kind (int, float,
+`str`) under fills `0` and `""`, comparing dtypes and values with staging,
+shown failing on d39eb65's code. While there, cover the case the review
+also found: a `datetime64` column with a numeric fill still emits
+`Pandas4Warning`. Brief item 3 asks for none on the extraction path, so
+handle it with the same rule (same result as today, no warning).
+
+<finding id="3">
+tests/graph/test_graph_mask.py::test_written_masks_are_stamped_with_naive_utc:
+the test is named for the rule "stored values stay naive UTC", but its
+`s.tzinfo is None` check cannot fail, because SQLite drops tzinfo. This can
+be checked without PostgreSQL.
+</finding>
+
+**Remedy (prescribed):** assert on what the code hands the database, not on
+what SQLite gives back: capture the bound parameters with a SQLAlchemy
+`before_cursor_execute` listener (or assert `graph_mask._utcnow().tzinfo is
+None` and that the writes use it). Show it failing with an aware
+`datetime.now(UTC)`. Then the PostgreSQL item in your Evidence is no longer
+needed for this rule.
+
+**Also in this round:**
+- `ENGINEERING.md` Ch 7's `vertex_masks` section (around line 1632): state
+  that `created_at` and `updated_at` hold naive UTC. That is the contract
+  the cleanup relies on.
+- Not in this round, and recorded by the architect as carry-overs: the
+  `utcnow()` call in `src/disco/graph/db.py:252`, the empty graph (n=0)
+  reported as cyclic, and `_fill_missing` on duplicate column names. Don't
+  add them to `docs/carry-overs.md` here.
+
+Fresh Evidence lines on the fixed head: the round's tests and mutations, the
+full suite (with `uv run --python 3.14`), and the checks.
