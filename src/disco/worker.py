@@ -848,7 +848,7 @@ class Worker:
         - Loads Partitioning for selected partitioning ID + partition index (metastore).
         - Loads Model once per worker (fixed module/package).
         - Creates DataLogger for this (expid, repid, partition).
-        - Builds NodeRuntimes for all nodes in partition and runs initialize(**params).
+        - Builds NodeRuntimes for all nodes in partition and runs initialize(params), where params is experiment.node_params (as in TestRun).
         - Advances ExperimentStatus:
             * LOADED: once prerequisites (experiment/graph/partitioning/model) exist
             * INITIALIZED: once NodeRuntimes are successfully initialized

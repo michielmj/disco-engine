@@ -859,7 +859,7 @@ Experiment/partition status is updated through `ExperimentStore` helpers:
 Typical partition lifecycle (happy path):
 
 - `LOADED` -- prerequisites loaded (experiment, graph, partitioning, model).
-- `INITIALIZED` -- NodeRuntimes created and `initialize(**params)` completed.
+- `INITIALIZED` -- NodeRuntimes created and `initialize(params)` completed, where `params` is the experiment's `node_params`, the same dict `TestRun` passes (Ch 16).
 - `ACTIVE` -- worker enters `ACTIVE` and runners are created.
 - `FINISHED` -- all NodeRuntime runners completed and the run ends.
 
@@ -3276,7 +3276,7 @@ During construction, NodeRuntime:
 
 Model code may require initialization prior to simulation start. NodeRuntime therefore exposes:
 
-- `initialize(**kwargs)`: forwards to `node.initialize(**kwargs)` and leaves the runtime in `INITIALIZED` state.
+- `initialize(params)`: takes one dict (the experiment's `node_params`), forwards it to the node's `initialize` and leaves the runtime in `INITIALIZED` state.
 
 The Worker (or higher-level orchestration) is responsible for invoking `initialize` before starting the runner.
 
