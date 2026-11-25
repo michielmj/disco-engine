@@ -155,3 +155,66 @@ needed for this rule.
 
 Fresh Evidence lines on the fixed head: the round's tests and mutations, the
 full suite (with `uv run --python 3.14`), and the checks.
+
+## Round 2 (2026-11-25): stored zeros, and datetime under an empty fill
+
+The scoped re-review of 746a118 found two FAILs, both changes from
+staging's results that round 1 introduced. It confirmed the rest of round 1.
+A scoped re-review follows: remedy 2 is described.
+
+<finding id="1">
+src/disco/partitioning.py:456 `.apply(gb.unary.one)` turns an explicitly
+stored zero weight into an edge. On staging, a 0 weight summed to 0 and
+`select("!=", 0)` dropped the link. Edge weights are `Float NOT NULL`, and
+`_load_edge_layers` (graph/db.py:325-350) stores a 0.0 row as an entry, so a
+DB edge with weight 0 now adds a predecessor/successor link that staging
+did not. FP64 0.0 gives branch `n0 successors {'s0': {('n1','s0')}}` and
+staging `{}`; INT64 0 gives the same split. The codebase's own convention
+drops zeros: `helpers/gb.py:81` uses `matrix.select("!=", 0).apply(unary.one)`
+("keep only real edges").
+</finding>
+
+**Remedy (prescribed):** `M.select("!=", 0).apply(gb.unary.one).new(dtype=gb.dtypes.INT64)`,
+the convention of `helpers/gb.py:81`. Add a stored zero (FP64 0.0) to the
+parametrized topology test, expecting staging's result, shown failing on
+746a118. Add "drop stored zeros first" to the `.claude/rules/graph.md`
+advice for float layers.
+
+The architect decides one consequence: weights that cancelled (+1 and -1
+into the same node pair) gave no link on staging and now give one. An edge
+exists on both paths, so the link is right and staging's result was a
+numeric artefact. Record it as DECIDED; no test is needed for it.
+
+<finding id="2">
+src/disco/graph/extract.py:70-71 now treats a datetime64 column as
+compatible only with a datetime fill. A datetime64 column (naive or
+tz-aware) that has a missing value, under `default_fill=""`, now becomes
+`object` holding `""`. On staging it stayed `datetime64[us]` holding `NaT`,
+with no warning. Comparing staging's `df.fillna` with the branch's
+`_fill_missing` (pandas 3.1.1): `'' dt miss staging=('datetime64[us]',
+[Timestamp, NaT]) | branch=('object', [Timestamp, ''])`, and the same for a
+tz-aware column. `test_default_fill_of_a_datetime_column_warns_nothing` only
+tests fill 0. At d39eb65 datetime was `compatible = True`, which matched
+staging for `""`.
+</finding>
+
+**Remedy (described):** a datetime64 column with a missing value gives
+staging's result under each fill a model author uses (`0` and `""` at
+least; naive and tz-aware), with no `Pandas4Warning`. Pin fill `""` beside
+the existing fill-0 test, shown failing on 746a118. If pandas offers no way
+to give staging's result for some fill without the warning, stop and record
+it as ESCALATED with the case, rather than choose a new result.
+
+**Also in this round:**
+- `ENGINEERING.md` Ch 7 (around line 1639) and the `_utcnow` docstring say
+  `graph_vertex_masks` has `created_at` and `updated_at`. It has only
+  `updated_at` (`graph/schema.py:85`); `created_at` belongs to
+  `graph_scenarios`. The error came from this brief's round 1 (the
+  architect's), not from you. Correct both to the schema.
+- Not in this round, recorded by the architect as backlog: `Pandas4Warning`
+  for a timedelta64 column under a numeric fill and for a tz-aware column
+  under a naive Timestamp fill (both on staging too), and nullable `Int64`
+  under fill `""`.
+
+Fresh Evidence lines on the fixed head: the round's tests and mutations, the
+full suite (with `uv run --python 3.14`), and the checks.
