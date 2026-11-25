@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from typing import Any, Literal, cast
 
 import graphblas as gb
@@ -46,6 +47,45 @@ def _rows_to_df(rows: Sequence[Mapping[str, Any]], columns: Sequence[ColumnEleme
     if not rows:
         return pd.DataFrame(columns=col_names)
     return pd.DataFrame(rows, columns=col_names)
+
+
+def _is_datetime_fill(fill: Any) -> bool:
+    """A fill a datetime64 column takes without a warning: a datetime, or a parsable string."""
+    if isinstance(fill, datetime | np.datetime64):
+        return True
+    if isinstance(fill, str):
+        try:
+            pd.Timestamp(fill)
+        except ValueError:
+            return False
+        return True
+    return False
+
+
+def _fill_missing(df: pd.DataFrame, fill: Any) -> pd.DataFrame:
+    """
+    Fill missing values column by column, giving what ``df.fillna(fill)`` gave
+    before pandas 4.
+
+    A fill value of another type than the column's raises in pandas 4. Until
+    then the column became ``object`` holding the fill value; cast to ``object``
+    first to get the same result without the warning.
+    """
+    out = df.copy()
+    for name in df.columns:
+        col = df[name]
+        if not col.isna().any():
+            continue
+        if col.dtype.kind in "iufc":
+            compatible = isinstance(fill, int | float | complex | np.number) and not isinstance(fill, bool)
+        elif isinstance(col.dtype, pd.StringDtype):
+            compatible = isinstance(fill, str)
+        elif col.dtype.kind == "M":
+            compatible = _is_datetime_fill(fill)
+        else:
+            compatible = True
+        out[name] = (col if compatible else col.astype(object)).fillna(fill)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +185,7 @@ def get_vertex_data(
         raise ValueError("index_by must be 'index' or 'key'")
 
     if default_fill is not None:
-        df = df.fillna(default_fill)
+        df = _fill_missing(df, default_fill)
 
     return df
 
@@ -366,7 +406,7 @@ def get_outbound_edge_data(
         raise ValueError("index_by must be 'indices' or 'keys'")
 
     if default_fill is not None:
-        df = df.fillna(default_fill)
+        df = _fill_missing(df, default_fill)
 
     return df
 
@@ -480,7 +520,7 @@ def get_inbound_edge_data(
         raise ValueError("index_by must be 'indices' or 'keys'")
 
     if default_fill is not None:
-        df = df.fillna(default_fill)
+        df = _fill_missing(df, default_fill)
 
     return df
 

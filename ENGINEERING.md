@@ -859,7 +859,7 @@ Experiment/partition status is updated through `ExperimentStore` helpers:
 Typical partition lifecycle (happy path):
 
 - `LOADED` -- prerequisites loaded (experiment, graph, partitioning, model).
-- `INITIALIZED` -- NodeRuntimes created and `initialize(**params)` completed.
+- `INITIALIZED` -- NodeRuntimes created and `initialize(params)` completed, where `params` is the experiment's `node_params`, the same dict `TestRun` passes (Ch 16).
 - `ACTIVE` -- worker enters `ACTIVE` and runners are created.
 - `FINISHED` -- all NodeRuntime runners completed and the run ends.
 
@@ -1636,6 +1636,10 @@ updated_at    TIMESTAMP NOT NULL
   random `mask_id` (UUID).
 - For each `(scenario_id, mask_id)` there are zero or more `vertex_index` rows.
 - `updated_at` is touched whenever a mask is ensured/persisted.
+- `updated_at` is a naive `DateTime` column holding UTC.
+  Cleanup compares `updated_at` with a naive UTC cutoff, so every write must
+  store naive UTC: a timezone-aware value would shift or break that
+  comparison and delete live masks.
 
 `GraphMask` is responsible for populating and maintaining this table; it is used
 from `graph.extract` and other higher‑level helpers.
@@ -1712,6 +1716,8 @@ Key fields (via `__slots__`):
     - Calls `has_self_loop` to forbid self‑loops.
     - Optionally calls `matrix_has_cycle` to detect cycles in the layer
       when `check_cycles=True`.
+      `matrix_has_cycle` is False for any acyclic layer (a chain `0→1→2`
+      included) and True for a cycle or a self‑loop, wherever the cycle lies.
 
 #### 7.3.2 Structural Accessors
 
@@ -3276,7 +3282,7 @@ During construction, NodeRuntime:
 
 Model code may require initialization prior to simulation start. NodeRuntime therefore exposes:
 
-- `initialize(**kwargs)`: forwards to `node.initialize(**kwargs)` and leaves the runtime in `INITIALIZED` state.
+- `initialize(params)`: takes one dict (the experiment's `node_params`), passes it to the node's `__init__` and leaves the runtime in `INITIALIZED` state.
 
 The Worker (or higher-level orchestration) is responsible for invoking `initialize` before starting the runner.
 
@@ -4396,7 +4402,8 @@ Each `NodeRuntime` receives its own `SeedSequence`. The master seed is never pas
   - sets `experiment.status = LOADED`
 
 - `initialize()`:
-  - calls `NodeRuntime.initialize(**experiment.params)` for each node in `partitioning.node_specs` order
+  - takes no argument: the params come from the experiment, as in the Worker. Calls `rt.initialize(experiment.node_params)` (one dict, `experiment.params or {}`) for each node in `partitioning.node_specs` order; `Experiment.node_params` is the one definition both TestRun and the Worker use
+  - `initialize(params)` raises `TypeError`
   - sets `experiment.status = INITIALIZED`
 
 - `run(duration)`:
