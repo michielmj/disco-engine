@@ -203,7 +203,7 @@ class TestRun:
     def node_names(self) -> list[str]:
         return [ns.node_name for ns in self._partitioning.node_specs]
 
-    def initialize(self, params: dict[str, Any]) -> None:
+    def initialize(self) -> None:
         """
         Initialize all NodeRuntimes in deterministic order (by partitioning.node_specs).
 
@@ -214,7 +214,7 @@ class TestRun:
         if self._initialized:
             return
 
-        params = self._experiment.params or {}
+        params = self._experiment.node_params
         for ns in self._partitioning.node_specs:
             self.nodes[ns.node_name].initialize(params)
 
@@ -234,7 +234,7 @@ class TestRun:
         Exceptions are not caught; any error is raised to aid debugging.
         """
         if not self._initialized:
-            self.initialize({})
+            self.initialize()
 
         self._experiment.status = ExperimentStatus.ACTIVE
         logger.info("TestRun starting run: duration=%s", duration)

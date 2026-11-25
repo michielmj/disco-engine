@@ -80,7 +80,7 @@ def _empty_topology(node_name: str, node_type: str) -> NodeTopology:
 
 def _coo_structure(m: gb.Matrix) -> set[tuple[int, int]]:
     r, c, _ = m.to_coo()
-    return set(zip(r.tolist(), c.tolist(), strict=False))
+    return set(zip(r.tolist(), c.tolist(), strict=True))
 
 
 def _coo_indices(v: gb.Vector) -> set[int]:

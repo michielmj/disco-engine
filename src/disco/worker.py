@@ -961,7 +961,7 @@ class Worker:
 
         # --- NodeRuntimes + initialize ---
         seed_sequence = experiment.replications[assignment.repid].get_seed_sequence(assignment.partition)
-        params = experiment.params or {}
+        params = experiment.node_params
 
         logger.info(
             "Worker %s setting up run for expid=%s repid=%s partition=%s nodes=%s scenario=%s "
