@@ -314,3 +314,28 @@ def test_store_and_load_round_trip_full() -> None:
 
     # topology round-trip
     assert loaded.topology_by_node["p0-A-x"].node_type == "A"
+
+
+def _topology_for(weight_dtype: Any, weight: Any) -> dict[str, NodeTopology]:
+    # Two paths join: 0->2 and 1->2, with 0 and 1 on node n0 and 2 on n1.
+    # Under BOOL, plus is OR; the result must still equal the INT64 result.
+    n_vertices = 3
+    nodes = (
+        NodeInstanceSpec(partition=0, node_name="n0", node_type="A"),
+        NodeInstanceSpec(partition=1, node_name="n1", node_type="A"),
+    )
+    incidence = _incidence_from_rows(n_vertices, rows=[[0, 1], [2]])
+    M = gb.Matrix.from_coo([0, 1], [2, 2], [weight, weight], nrows=3, ncols=3, dtype=weight_dtype)
+    graph = GraphStub(scenario_id="s", num_vertices=n_vertices, layers=[0], matrices={0: M})
+    model = ModelStub(spec=ModelSpecStub(simprocs=["s0"], node_types={"A": NodeTypeSpecStub([])}))
+    return Partitioning.compute_topology_from_graph(
+        node_specs=nodes, incidence=incidence, graph=graph, model=model
+    )
+
+
+def test_topology_of_a_bool_layer_equals_that_of_int64_weights_of_one() -> None:
+    from_bool = _topology_for(gb.dtypes.BOOL, True)
+    from_int = _topology_for(gb.dtypes.INT64, 1)
+
+    assert from_int["n0"].successors["s0"] == {("n1", "s0")}
+    assert from_bool == from_int

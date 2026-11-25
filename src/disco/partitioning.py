@@ -451,7 +451,8 @@ class Partitioning:
 
         for layer_idx in range(len(graph.layers)):
             simproc_name = simproc_names_by_order[layer_idx]
-            M = graph.get_matrix(layer_idx)
+            # Count paths: BOOL weights would make plus an OR (graph.md)
+            M = graph.get_matrix(layer_idx).dup(dtype=gb.dtypes.INT64)
 
             Q = gb.op.plus_times(incidence @ M)
             R = gb.op.plus_times(Q @ incidence.T).select("!=", 0)

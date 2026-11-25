@@ -48,6 +48,28 @@ def _rows_to_df(rows: Sequence[Mapping[str, Any]], columns: Sequence[ColumnEleme
     return pd.DataFrame(rows, columns=col_names)
 
 
+def _fill_missing(df: pd.DataFrame, fill: Any) -> pd.DataFrame:
+    """
+    Fill missing values column by column, giving what ``df.fillna(fill)`` gave
+    before pandas 4.
+
+    A fill value of another type than the column's raises in pandas 4. Until
+    then the column became ``object`` holding the fill value; cast to ``object``
+    first to get the same result without the warning.
+    """
+    out = df.copy()
+    for name in df.columns:
+        col = df[name]
+        if col.dtype.kind in "iufc":
+            compatible = isinstance(fill, int | float | complex | np.number) and not isinstance(fill, bool)
+        elif col.dtype.kind != "O" and pd.api.types.is_string_dtype(col.dtype):
+            compatible = isinstance(fill, str)
+        else:
+            compatible = True
+        out[name] = (col if compatible else col.astype(object)).fillna(fill)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # 1. Vertex data via index→key mapping (graph.vertices)
 # ---------------------------------------------------------------------------
@@ -145,7 +167,7 @@ def get_vertex_data(
         raise ValueError("index_by must be 'index' or 'key'")
 
     if default_fill is not None:
-        df = df.fillna(default_fill)
+        df = _fill_missing(df, default_fill)
 
     return df
 
@@ -366,7 +388,7 @@ def get_outbound_edge_data(
         raise ValueError("index_by must be 'indices' or 'keys'")
 
     if default_fill is not None:
-        df = df.fillna(default_fill)
+        df = _fill_missing(df, default_fill)
 
     return df
 
@@ -480,7 +502,7 @@ def get_inbound_edge_data(
         raise ValueError("index_by must be 'indices' or 'keys'")
 
     if default_fill is not None:
-        df = df.fillna(default_fill)
+        df = _fill_missing(df, default_fill)
 
     return df
 
