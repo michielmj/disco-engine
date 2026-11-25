@@ -81,3 +81,51 @@ Delete rows 10 and 5 from `docs/carry-overs.md` in this branch.
 - The branch is pushed, with a Surfaced decisions commit whose Evidence
   lines give the test counts, each mutation and its result, and what using
   it showed.
+
+## Round 1 (2026-11-25): pin the Worker's side, and the docs that still say `**params`
+
+The review of 3d42e66 found one FAIL. A re-review, scoped to this round,
+follows: the remedy is described, not prescribed.
+
+<finding id="1">
+src/disco/worker.py:964, tests/: Only TestRun's side of the rule "TestRun
+and the Worker give a node the same params" is pinned. Both paths now read
+`Experiment.node_params`, but no test covers the Worker's read:
+tests/test_worker.py has no match for `params` or `initialize`, and its
+tests replace `_setup_run_locked` with a fake (lines 282, 339). Mutation:
+worker.py:964 changed to `params = {}`, full suite: 524 passed, 1 skipped,
+1 failed (an unrelated, environment-dependent guard-hook test). So the
+Worker can drift from TestRun again and the suite stays green.
+</finding>
+
+**Remedy (described):** pin the Worker's side of the rule: for an
+experiment with params, and for one without, every NodeRuntime the Worker
+builds is initialized with `experiment.node_params`. Show it failing with
+the reviewer's mutation (`params = {}` at worker.py:964). Drive the
+Worker's real setup path as far as its existing fakes allow
+(`tests/test_worker.py`, the Metastore fakes named in
+`.claude/rules/testing.md`); if the setup cannot run without a real
+cluster, find the narrowest seam that still exercises the line that reads
+the params, and record what the test does not cover. Do not change
+the Worker's threading or WorkerState (`.claude/rules/worker.md`).
+
+**Also in this round:**
+- The docs that still describe `initialize(**params)`: `ENGINEERING.md`
+  Ch 5 (around line 862), the docstring at `worker.py:851`, and Ch 11
+  (around line 3279, `initialize(**kwargs)`). `NodeRuntime.initialize` takes
+  one dict (`runtime.py:303`). Bring all three to that, and Ch 5 to the
+  shared `node_params` that Ch 16 now states.
+- `examples/my-model`: your ESCALATED reasoning does not hold. The review
+  found that neither `disco-toolbox` 0.1.0 nor `disco-tools` 0.2.0 depends
+  on disco-engine, and the example does not declare it either: it runs
+  against whichever disco is installed beside it. The architect decides:
+  the example tracks the engine in this repository (it changed alongside it
+  in b9d97e7), so change its call to `testrun.initialize()` on this branch.
+  Record the example's missing disco-engine dependency as a DISCREPANCY;
+  adding it is not part of this round.
+- `tests/test_guard_hook.py::test_the_hook_refuses_a_commit_without_initials`
+  fails in this container for a reason outside this branch; it is being
+  fixed on `tooling-fixes`. Record it in your Evidence, don't fix it here.
+
+Fresh Evidence lines on the fixed head: the round's test and its mutation,
+the full suite (with `uv run --python 3.14`), and the checks.
