@@ -46,3 +46,10 @@ a first stable release."
 | 3 | scaffold-lint-layering | Move SQLAlchemy out of `graph.graph_mask` and `graph.schema`, then drop `allow_indirect_imports` from the graph-core contract (decision 0001). | with item 1 |
 | 6 | scaffold-lint-layering review | The forbidden contracts in `.importlinter` list their source modules by hand, so a new module is not covered until someone adds it. | 2 (restructuring) |
 | 7 | scaffold-lint-layering | `grpc_ingress` imports `disco.worker` under `TYPE_CHECKING`. There are two import cycles, transports→runtime→router→transports and node→graph_data→model→node, and the top-level modules have no total layering. | with item 1 |
+
+## Data paths that do a dependency's work (decision 0002)
+
+| # | Found in | Problem | Where | Priority |
+|---|---|---|---|---|
+| 23 | release re-review, 2026-11-26 | The partitioner's topology loops in Python over every pair of `R.to_coo()` (14,253,408 pairs for 1M vertices, 5 layers of 5M edges, 2,000 nodes), and dominates topology time. Older than release #56. | `src/disco/partitioning.py:461-466` | unset |
+| 24 | release re-review, 2026-11-26 | `_longest_path_length` is `lru_cache`d on `pickle.dumps(matrix)`: 4.3 ms per call on 500k edges, and up to 6 serialized matrices kept in memory. Older than release #56; after `dependency-fixes` the cycle check no longer calls it. | `src/disco/helpers/gb.py` | unset |
