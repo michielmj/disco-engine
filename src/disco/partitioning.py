@@ -452,12 +452,13 @@ class Partitioning:
         for layer_idx in range(len(graph.layers)):
             simproc_name = simproc_names_by_order[layer_idx]
             # Topology depends only on which edges exist: keep the real edges
-            # (stored zeros dropped, as helpers/gb.py) as INT64 ones. BOOL would
-            # make plus an OR, and float weights must not truncate.
-            M = graph.get_matrix(layer_idx).select("!=", 0).apply(gb.unary.one).new(dtype=gb.dtypes.INT64)
+            # (stored zeros dropped, as helpers/gb.py) and multiply on their
+            # structure with any_pair, which ignores the values (any dtype,
+            # any weight).
+            M = graph.get_matrix(layer_idx).select("!=", 0).new()
 
-            Q = gb.op.plus_times(incidence @ M)
-            R = gb.op.plus_times(Q @ incidence.T).select("!=", 0)
+            Q = gb.semiring.any_pair(incidence @ M).new()
+            R = gb.semiring.any_pair(Q @ incidence.T).new()
 
             r_rows, r_cols, _ = R.to_coo()
             for rr, cc in zip(r_rows.tolist(), r_cols.tolist(), strict=False):

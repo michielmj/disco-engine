@@ -40,3 +40,26 @@ def test_longest_path_lengths_of_a_dag_with_branches_of_different_length() -> No
     idx, vals = v.to_coo()
     assert dict(zip(idx.tolist(), vals.tolist(), strict=True)) == {0: 0, 1: 1, 2: 2, 3: 1, 4: 3, 5: 0}
     assert np.array_equal(idx, np.arange(6))
+
+
+def test_a_cycle_with_no_source_is_a_cycle() -> None:
+    assert matrix_has_cycle(_adj(3, [(0, 1), (1, 2), (2, 0)])) is True
+    assert matrix_has_cycle(_adj(2, [(0, 1), (1, 0)])) is True
+
+
+def test_an_empty_graph_is_acyclic() -> None:
+    assert matrix_has_cycle(gb.Matrix(gb.dtypes.INT64, nrows=0, ncols=0)) is False
+    assert matrix_has_cycle(gb.Matrix(gb.dtypes.INT64, nrows=3, ncols=3)) is False
+
+
+@pytest.mark.parametrize("dtype", [gb.dtypes.INT64, gb.dtypes.FP64, gb.dtypes.BOOL])
+def test_a_stored_zero_is_not_an_edge(dtype: gb.dtypes.DataType) -> None:
+    # 0 -> 1 -> 2 -> 0, but the closing edge 2 -> 0 is a stored zero: no cycle.
+    nonzero = True if dtype == gb.dtypes.BOOL else 1
+    zero = False if dtype == gb.dtypes.BOOL else 0
+    m = gb.Matrix.from_coo([0, 1, 2], [1, 2, 0], [nonzero, nonzero, zero], nrows=3, ncols=3, dtype=dtype)
+    assert m.nvals == 3  # the zero is stored
+    assert matrix_has_cycle(m) is False
+    # a stored zero on the diagonal is not a self-loop either
+    z = gb.Matrix.from_coo([0], [0], [zero], nrows=2, ncols=2, dtype=dtype)
+    assert matrix_has_cycle(z) is False

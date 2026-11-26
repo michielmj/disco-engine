@@ -1716,8 +1716,11 @@ Key fields (via `__slots__`):
     - Calls `has_self_loop` to forbid self‑loops.
     - Optionally calls `matrix_has_cycle` to detect cycles in the layer
       when `check_cycles=True`.
-      `matrix_has_cycle` is False for any acyclic layer (a chain `0→1→2`
-      included) and True for a cycle or a self‑loop, wherever the cycle lies.
+      `matrix_has_cycle` is False for any acyclic layer (a chain `0→1→2` and
+      an empty graph included) and True for a cycle or a self‑loop, wherever
+      the cycle lies. Only real edges count: a stored zero is not an edge.
+      The answer is scipy's: `scipy.sparse.csgraph.connected_components`
+      (strong), fewer components than vertices means a cycle.
 
 #### 7.3.2 Structural Accessors
 
@@ -2165,7 +2168,13 @@ def get_vertex_data(
   - `"index"` → DataFrame indexed by vertex index.
   - `"key"` → DataFrame indexed by vertex key.
 
-- `default_fill` is an optional value to `fillna` for missing model rows.
+- `default_fill` is an optional value that is passed unchanged to
+  `DataFrame.fillna` for missing model rows: a scalar, or a mapping from column
+  name to value (`{"count": 0, "name": ""}`) for a table of mixed types. pandas
+  decides what a value that does not fit a column's dtype does: today it warns
+  and casts, and pandas 4 raises. `get_outbound_edge_data` and
+  `get_inbound_edge_data` take it the same way. `GraphData` and
+  `SimProcGraphData` do not forward it.
 
 Numeric vector extraction:
 
@@ -4691,6 +4700,13 @@ minimising cross-partition event traffic.
    return `Partitioning.from_node_instance_spec(...)`.
 
 Node name format: `"p{part_idx}-{node_type}-{label_value_1}-..."`.
+
+**Node topology.** `Partitioning` records, per layer, a link from node `a` to
+node `b` when some real edge of the layer leaves a vertex of `a` and enters a
+vertex of `b`. A real edge is a stored entry that is not zero (a stored zero is
+not an edge); its weight, sign and dtype do not matter, so weights that cancel
+still give a link. It is computed on the layer's structure with the `any_pair`
+semiring (`incidence @ A @ incidenceᵀ`).
 
 ### 18.6 `_iter_node_instances` helper
 

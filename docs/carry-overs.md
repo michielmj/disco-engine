@@ -18,15 +18,12 @@ a first stable release."
 
 | # | Found in | Problem | Where | Priority |
 |---|---|---|---|---|
-| 15 | graph-defects review | `matrix_has_cycle` reports a cycle for an empty graph (n = 0), on staging and after the fix of item 9. | `src/disco/helpers/gb.py` | unset |
 
 ## Code that will break, or that can hide a failure
 
 | # | Found in | Problem | Where | Priority |
 |---|---|---|---|---|
 | 16 | graph-defects | `graph_scenarios.created_at` is written with the deprecated `datetime.utcnow()` (item 12 fixed `graph_mask` only). | `src/disco/graph/db.py:252` | unset |
-| 17 | graph-defects review | The default fill still emits `Pandas4Warning`, as before item 11, for a timedelta64 column under a numeric fill and for a datetime fill whose timezone-awareness differs from the column's. | `src/disco/graph/extract.py` (`_fill_missing`) | unset |
-| 18 | graph-defects review | `_fill_missing` raises `AttributeError` on a frame with duplicate column names, where `df.fillna` worked. No caller is known to select duplicate names. | `src/disco/graph/extract.py` (`_fill_missing`) | unset |
 | 19 | tooling-fixes review | Two guard patterns still backtrack exponentially on repeated options: the initials rule on many `-C`/`-c` git options (22 take 2.2 s), and `INTERPRETER` on many `uv run` options (18 take 24 s). Neither has a realistic trigger. The upstream template has the same patterns. | `.claude/hooks/guard_shell.py` | unset |
 
 ## Documented facts that do not hold
