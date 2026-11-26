@@ -62,13 +62,12 @@ semantics, which can change your own model code:
   `pd.api.types.is_string_dtype(df[c])`. A missing text value from the database is now `NaN`, where pandas 2 kept
   `None`: replace `value is None` with `pd.isna(value)`. A column whose values are all missing stays `object`
   and keeps `None`; `pd.isna` handles both.
+- **Filling missing rows.** `default_fill` of `get_vertex_data` and of the edge-data functions in `disco.graph` is
+  handed to `DataFrame.fillna` as it is. For a table of mixed types pass a mapping, `default_fill={"count": 0, "name": ""}`,
+  so that each column gets a value of its own type: pandas warns today when a value does not fit a column's
+  dtype, and pandas 4 raises. `GraphData` does not offer `default_fill`: fill the frame it returns yourself.
 
 The pandas 3 release notes list the other changes.
-
-- **Filling missing rows.** `default_fill` of `get_vertex_data` and of the edge-data functions is handed to
-  `DataFrame.fillna` as it is. For a table of mixed types pass a mapping, `default_fill={"count": 0, "name": ""}`,
-  so that each column gets a value of its own type: pandas warns today when a value does not fit a column's
-  dtype, and pandas 4 raises.
 
 ### Development
 
