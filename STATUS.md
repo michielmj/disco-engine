@@ -10,7 +10,7 @@ This is where the work stands. Specs say *what* (`specs/`); this file says
 | Adopt the scaffolder template | `scaffold-adoption`, `scaffold-lint-layering` | landed in `staging` (#47, #48), 2026-11-21 | none (owner's direction, 2026-11-21) | `scaffold-lint-layering` fix round 1: no re-review: prescribed and mutation-verified |
 | Python 3.14–3.15, dependency upgrades | `py314-deps` | landed in `staging` (#49), 2026-11-21 | none (owner's direction, 2026-11-21) | round 1: scoped re-review, 0 FAIL; round 2 (example only): no re-review: prescribed, diff checked by the architect |
 | Wave 1: defects and small fixes (carry-overs 4, 5, 8–14) | `graph-defects` (8, 9, 11, 12, 14), `tooling-fixes` (4, 13), `testrun-params` (10, 5) | landed in `staging`, 2026-11-25: `tooling-fixes` (#52), `testrun-params` (#53), `graph-defects` (#54) | none (owner's priorities, 2026-11-25; D4 answered "A") | `tooling-fixes`: 0 FAIL, round 1 prescribed, no re-review: diff checked by the architect. `testrun-params`: 1 FAIL, round 1, scoped re-review 0 FAIL. `graph-defects`: 3 FAIL, round 1, scoped re-review 2 FAIL, round 2, scoped re-review 0 FAIL. Merged tree of all three: 555 passed, 1 skipped (native Linux, Python 3.14). The reviews found carry-overs 15–22. |
-| Dependencies do their own work (decision 0002) | `dependency-fixes` | process change landed (#57), 2026-11-26; branch briefed and building | none (owner's direction, 2026-11-26) | fixes the release re-review's 2 FAIL; closes carry-overs 15, 17, 18 |
+| Dependencies do their own work (decision 0002) | `dependency-fixes` | landed in `staging`, 2026-11-26: process change (#57), `dependency-fixes` (#59) | none (owner's direction, 2026-11-26) | `dependency-fixes`: 0 FAIL; the architect read the production diff and corrected two doc observations before landing. Closed carry-overs 15, 17, 18. Fill 418 → 45 ms (2,000 small frames); cycle check 113 s → 18 ms (100k chain); topology 0.83–1.24 → 0.63–0.72 s. |
 | Restructuring: remove technical debt (carry-overs 1, 3, 6, 7) | none | requirement to be drafted next | to be written | owner, 2026-11-25: "The goal is removal of technical debt as a first step towards a first stable release." mypy strict (2) follows it |
 
 ## Releases
@@ -19,14 +19,14 @@ This is where the work stands. Specs say *what* (`specs/`); this file says
 |---|---|---|---|
 | (untagged) | 2026-11-21 | #50 merged `staging` into `main`: scaffolder adoption, Python 3.14–3.15. The last tag is v0.0.7 (2026-05-27). | no: macOS wheel job cancelled, see below |
 
-Next: v0.0.8, wave 1, release PR #56 (`staging` to `main`). **On hold**
-(2026-11-26): its full re-review under decision 0002 found 2 FAIL (e):
-`_fill_missing` re-implements pandas' fill, and the cycle check
-re-implements what scipy does (107 s against 0.9 ms on a 100k-vertex chain).
-`dependency-fixes` fixes both; #56 picks it up when it lands. The owner
-answered the `default_fill` question "A": pass it straight to pandas, a
-per-column mapping allowed. Its `build.yml` run is the cross-platform check,
-macOS included (owner, 2026-11-25, D1: "yes"). The owner merges and tags.
+Next: v0.0.8, wave 1, release PR #56 (`staging` to `main`), ready for the
+owner. Its full re-review under decision 0002 (2026-11-26) found 2 FAIL (e):
+`_fill_missing` re-implemented pandas' fill, and the cycle check
+re-implemented what scipy does (113 s against 18 ms on a 100k-vertex chain).
+`dependency-fixes` (#59) fixed both; the owner answered the `default_fill`
+question "A": pass it straight to pandas, a per-column mapping allowed. Its
+`build.yml` run is the cross-platform check, macOS included (owner,
+2026-11-25, D1: "yes"). The owner merges and tags.
 
 ## Standing permissions
 
