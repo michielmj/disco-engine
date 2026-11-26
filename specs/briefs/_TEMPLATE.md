@@ -16,6 +16,22 @@ each one, and record any that proves wrong as a DISCREPANCY.
 1. **<Item>** (rule n). <What must be true when it is done. Don't say how,
    unless the how is a constraint.>
 
+## Responsibility and cost
+
+<!-- Filled in by the architect before the implementer starts (decision 0002).
+Leave no line out; write "none" where it does not apply. -->
+
+- **Whose job it is:** <for each behaviour this branch touches: disco's, or a
+  dependency's (pandas, numpy, graphblas, SQLAlchemy, grpc). What is a
+  dependency's job is called, not re-implemented.>
+- **Upstream guidance read:** <the release notes, deprecation docs or issues
+  read, with links, and what they recommend. "none" only when no dependency's
+  behaviour is involved.>
+- **Data path:** <whether the change runs on a data path (graph extraction,
+  partitioning, routing, transports, the event loop). If it does: the
+  benchmark to run before and after, its configuration, and what slowdown,
+  if any, the owner has approved.>
+
 ## Where this is most likely to go wrong
 
 <!-- The architect's judgement, and the most valuable part of the brief. Each
