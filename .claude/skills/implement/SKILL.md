@@ -28,6 +28,14 @@ $ARGUMENTS
    `specs/briefs/_TEMPLATE.md`:
    - the goal: the requirement's rules, by number. Point to them; never copy
      them, or the copy drifts.
+   - responsibility and cost (decision 0002), filled in before anything
+     else: whose job each behaviour is; for a dependency's behaviour, its
+     release notes, deprecation docs and issue tracker, read by you, linked,
+     with what they recommend; and whether the change is on a data path,
+     with the benchmark it must bring. If the right fix belongs to the
+     dependency, or changes what a user sees, the brief waits for the
+     owner's answer. Never brief "same result as today" for behaviour a
+     dependency is deprecating.
    - where this is most likely to go wrong. This is where your judgement
      adds most, so spend it here, and write each item as an acceptance test.
      Keep to main paths and to rules on security, personal data or data

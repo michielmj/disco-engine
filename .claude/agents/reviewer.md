@@ -38,7 +38,11 @@ ports, a word limit, your budget, a report file) and a `<likely_wrong>` list.
 - Work in your detached worktree. A scratch mutation there, to show that a
   test fails with its rule broken, is allowed: it never leaves the worktree.
 - Start with the `<likely_wrong>` list, the architect's judgement of where
-  this diff is weakest. Then work through `REVIEW.md`'s checklist.
+  this diff is weakest. Then work through all of `REVIEW.md`'s checklist,
+  whatever the list says: it focuses your review, it does not limit it.
+  Judge the design, not only its agreement with the brief: item 8
+  (responsibility and cost) applies to every change in production code, and
+  a brief that asks for a workaround of a dependency is a finding.
 - Back each claim: a claim of absence with the command that shows it, a claim
   of behaviour with the test that asserts it or the mutation you ran.
 - Run the checks in CLAUDE.md § Commands, with tests on Linux, but not the

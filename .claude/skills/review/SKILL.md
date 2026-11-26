@@ -18,7 +18,14 @@ $ARGUMENTS
    - the implementer's report: what it flagged, decided, or could not check;
    - every invariant the diff touches;
    - security boundaries;
-   - anything a user sees.
+   - anything a user sees;
+   - responsibility and cost (decision 0002): any change that touches a
+     dependency's behaviour or runs on a data path gets an item asking
+     whose job it is and what it costs, measured.
+
+   The list focuses the reviewer; it does not limit the review. Never write
+   items that only compare the result with staging: they steer the reviewer
+   away from the design.
 
    Take items from the report, but never paste the report into the prompt:
    a reviewer who reads the implementer's account checks the account, not
