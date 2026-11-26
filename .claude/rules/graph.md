@@ -18,8 +18,9 @@ paths:
   to INT64 first with `matrix.dup(dtype=gb.dtypes.INT64)`. `.dup(dtype=...)`
   and `.apply(identity).new(dtype=...)` cast before the operation and behave
   the same. Casting a float layer to INT64 truncates its weights (0.5 becomes
-  0): when only the edges matter, drop stored zeros first and take the pattern
-  with `.select("!=", 0).apply(gb.unary.one).new(dtype=gb.dtypes.INT64)`.
+  0): when only the edges matter, drop stored zeros first with
+  `.select("!=", 0).new()` and multiply with the `any_pair` semiring
+  (`gb.semiring.any_pair`), which ignores the values and works for any dtype.
 - An empty sparse slice, such as a label with no vertices, makes
   `np.min`/`np.max` raise on a zero-size array. Guard every reduction with an
   empty check.

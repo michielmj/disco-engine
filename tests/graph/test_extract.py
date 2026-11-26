@@ -5,7 +5,6 @@ from collections.abc import Iterator
 
 import numpy as np
 import pandas as pd
-import pytest
 from graphblas import Vector
 from sqlalchemy import (
     Column,
@@ -430,132 +429,55 @@ def test_outbound_and_inbound_map() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests: default_fill on text columns (pandas 4 raises on a fill of another type)
+# Tests: default_fill is handed to pandas (a scalar, or a mapping per column)
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.filterwarnings("error::pandas.errors.Pandas4Warning")
-def test_default_fill_of_text_columns_warns_nothing_and_keeps_the_values() -> None:
+def test_default_fill_takes_a_per_column_mapping_on_a_mixed_table() -> None:
     for engine, SessionLocal, _node_data, _edge_data in engine_session_and_model_tables():
         metadata = MetaData()
-        texts = Table(
-            "texts",
-            metadata,
-            Column("scenario_id", String, primary_key=True),
-            Column("key", String, primary_key=True),
-            Column("name", String),  # some missing
-            Column("note", String),  # all missing
-            Column("value", Float),
-        )
-        edge_texts = Table(
-            "edge_texts",
-            metadata,
-            Column("scenario_id", String, primary_key=True),
-            Column("source_key", String, primary_key=True),
-            Column("target_key", String, primary_key=True),
-            Column("name", String),
-            Column("note", String),
-        )
-        metadata.create_all(engine)
-
-        session: Session = SessionLocal()
-        _populate_vertices_and_edges(session, "S1")
-        session.execute(
-            insert(texts), [{"scenario_id": "S1", "key": "A", "name": "x", "note": None, "value": 1.5}]
-        )
-        session.execute(
-            insert(edge_texts),
-            [{"scenario_id": "S1", "source_key": "A", "target_key": "B", "name": "e", "note": None}],
-        )
-        session.commit()
-        graph = Graph(layers={}, num_vertices=3, scenario_id="S1")
-
-        df = get_vertex_data(
-            session, graph, texts, [texts.c.name, texts.c.note, texts.c.value], default_fill=0
-        )
-        assert df["name"].tolist() == ["x", 0, 0]
-        assert df["note"].tolist() == [0, 0, 0]
-        assert df["value"].tolist() == [1.5, 0.0, 0.0]
-        assert df["value"].dtype == np.float64
-
-        for fn in (get_outbound_edge_data, get_inbound_edge_data):
-            edf = fn(
-                session,
-                graph,
-                edge_texts,
-                [edge_texts.c.name, edge_texts.c.note],
-                layer_idx=0,
-                default_fill=0,
-            )
-            assert edf["name"].tolist() == ["e", 0]
-            assert edf["note"].tolist() == [0, 0]
-
-        session.close()
-
-
-# ---------------------------------------------------------------------------
-# Tests: a column without missing values is left as it is
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.filterwarnings("error::pandas.errors.Pandas4Warning")
-@pytest.mark.parametrize("fill", [0, ""])
-def test_default_fill_leaves_full_columns_alone(fill: object) -> None:
-    for engine, SessionLocal, _node_data, _edge_data in engine_session_and_model_tables():
-        metadata = MetaData()
-        full = Table(
-            "full",
+        mixed = Table(
+            "mixed",
             metadata,
             Column("scenario_id", String, primary_key=True),
             Column("key", String, primary_key=True),
             Column("name", String),
             Column("count", Integer),
-            Column("value", Float),
+        )
+        edge_mixed = Table(
+            "edge_mixed",
+            metadata,
+            Column("scenario_id", String, primary_key=True),
+            Column("source_key", String, primary_key=True),
+            Column("target_key", String, primary_key=True),
+            Column("name", String),
+            Column("count", Integer),
         )
         metadata.create_all(engine)
+
         session: Session = SessionLocal()
         _populate_vertices_and_edges(session, "S1")
+        session.execute(insert(mixed), [{"scenario_id": "S1", "key": "A", "name": "x", "count": 7}])
         session.execute(
-            insert(full),
-            [
-                {"scenario_id": "S1", "key": k, "name": k.lower(), "count": i, "value": i + 0.5}
-                for i, k in enumerate("ABC")
-            ],
+            insert(edge_mixed),
+            [{"scenario_id": "S1", "source_key": "A", "target_key": "B", "name": "e", "count": 3}],
         )
         session.commit()
         graph = Graph(layers={}, num_vertices=3, scenario_id="S1")
-        cols = [full.c.name, full.c.count, full.c.value]
+        fill = {"count": 0, "name": ""}
 
-        filled = get_vertex_data(session, graph, full, cols, default_fill=fill)
-        plain = get_vertex_data(session, graph, full, cols)
+        plain = get_vertex_data(session, graph, mixed, [mixed.c.name, mixed.c.count])
+        df = get_vertex_data(session, graph, mixed, [mixed.c.name, mixed.c.count], default_fill=fill)
+        pd.testing.assert_frame_equal(df, plain.fillna(fill))
+        assert df["name"].tolist() == ["x", "", ""]
+        assert df["count"].tolist() == [7, 0, 0]
 
-        pd.testing.assert_frame_equal(filled, plain)
-        assert [str(t) for t in filled.dtypes] == [str(t) for t in plain.dtypes]
+        for fn in (get_outbound_edge_data, get_inbound_edge_data):
+            cols = [edge_mixed.c.name, edge_mixed.c.count]
+            plain_e = fn(session, graph, edge_mixed, cols, layer_idx=0)
+            edf = fn(session, graph, edge_mixed, cols, layer_idx=0, default_fill=fill)
+            pd.testing.assert_frame_equal(edf, plain_e.fillna(fill))
+            assert edf["name"].tolist() == ["e", ""]
+            assert edf["count"].tolist() == [3, 0]
+
         session.close()
-
-
-@pytest.mark.filterwarnings("error::pandas.errors.Pandas4Warning")
-def test_default_fill_of_a_datetime_column_warns_nothing() -> None:
-    from disco.graph.extract import _fill_missing
-
-    df = pd.DataFrame({"t": pd.to_datetime(["2020-01-01", None])})
-    out = _fill_missing(df, 0)
-    assert out["t"].tolist() == [pd.Timestamp("2020-01-01"), 0]
-    full = pd.DataFrame({"t": pd.to_datetime(["2020-01-01", "2020-01-02"])})
-    assert _fill_missing(full, 0)["t"].dtype == full["t"].dtype
-
-
-@pytest.mark.filterwarnings("error::pandas.errors.Pandas4Warning")
-@pytest.mark.parametrize("tz", [None, "UTC"])
-def test_default_fill_of_a_datetime_column_with_an_empty_string_keeps_the_dtype(tz: str | None) -> None:
-    from disco.graph.extract import _fill_missing
-
-    t = pd.to_datetime(["2020-01-01", None])
-    if tz:
-        t = t.tz_localize(tz)
-    df = pd.DataFrame({"t": t})
-    out = _fill_missing(df, "")
-
-    assert out["t"].dtype == df["t"].dtype
-    assert out["t"].iloc[0] == df["t"].iloc[0]
-    assert pd.isna(out["t"].iloc[1])

@@ -5,8 +5,10 @@ import pickle
 from functools import lru_cache
 from typing import Any
 
+import graphblas as gb
 import numpy as np
 from graphblas import Matrix, Vector, dtypes, monoid, op, semiring, unary
+from scipy.sparse.csgraph import connected_components
 
 
 def vstack_rows_from_coo(rows: list[Vector], *, ncols: int | None = None) -> Matrix:
@@ -60,14 +62,23 @@ def matrix_has_cycle(M: Matrix) -> bool:
     contains a directed cycle (including self-loops).
 
     - M is n x n (square).
-    - Any non-zero entry is treated as an edge (pattern-only).
+    - Only real edges count: stored zeros are not edges (they are dropped
+      here, because scipy's csgraph treats an explicitly stored zero of a
+      sparse matrix as an edge).
+
+    scipy does the work: a directed graph has a cycle iff it has fewer strongly
+    connected components than vertices, or a vertex with a self-loop.
     """
-    try:
-        longest_path_length(M)
-    except ValueError:
+    n = M.nrows
+    if M.ncols != n:
+        raise ValueError("matrix must be square")
+    A = M.select("!=", 0).new()
+    if A.diag().nvals > 0:
         return True
-    else:
-        return False
+    n_components, _ = connected_components(
+        gb.io.to_scipy_sparse(A, format="csr"), directed=True, connection="strong"
+    )
+    return bool(n_components < n)
 
 
 @lru_cache(6)

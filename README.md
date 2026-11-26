@@ -65,6 +65,11 @@ semantics, which can change your own model code:
 
 The pandas 3 release notes list the other changes.
 
+- **Filling missing rows.** `default_fill` of `get_vertex_data` and of the edge-data functions is handed to
+  `DataFrame.fillna` as it is. For a table of mixed types pass a mapping, `default_fill={"count": 0, "name": ""}`,
+  so that each column gets a value of its own type: pandas warns today when a value does not fit a column's
+  dtype, and pandas 4 raises.
+
 ### Development
 
 Development uses [uv](https://docs.astral.sh/uv/). `uv sync` installs the
