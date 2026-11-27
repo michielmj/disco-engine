@@ -28,6 +28,15 @@ question "A": pass it straight to pandas, a per-column mapping allowed. Its
 `build.yml` run is the cross-platform check, macOS included (owner,
 2026-11-25, D1: "yes"). The owner merges and tags.
 
+Since then (2026-11-27): `GraphData` offers `default_fill` (#62; owner:
+"default_fill may be included as optional argument in the respective
+GraphData methods"). The macOS job never ran since #50: GitHub refused
+`macos-14` ("The configuration 'macos-14-arm64-us-default' is not
+supported"); #61 moved both workflows to `macos-15`. The job then failed on
+the Intel wheel: numba and llvmlite publish no Intel macOS wheels for
+Python 3.14, so the owner chose "A": Apple Silicon only (#63). The next
+`Build` run on #56 is the first to test the Apple Silicon wheels.
+
 ## Standing permissions
 
 - Owner, 2026-11-25, for cloud sessions: "Branch permission granted. You are
