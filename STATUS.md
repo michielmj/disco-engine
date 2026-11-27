@@ -18,6 +18,7 @@ This is where the work stands. Specs say *what* (`specs/`); this file says
 | Version | Date | Contents | Owner verified |
 |---|---|---|---|
 | (untagged) | 2026-11-21 | #50 merged `staging` into `main`: scaffolder adoption, Python 3.14–3.15. The last tag is v0.0.7 (2026-05-27). | no: macOS wheel job cancelled, see below |
+| v0.0.8 (not tagged yet) | 2026-11-27 | #56 merged `staging` into `main` (ea2f766): wave 1, decision 0002 and `dependency-fixes`, `GraphData` `default_fill`, macOS-15 and Apple Silicon only. | Build green on Linux, Windows and macOS (run 45963449420); the owner merged. Tag: the owner's. |
 
 Next: v0.0.8, wave 1, release PR #56 (`staging` to `main`), ready for the
 owner. Its full re-review under decision 0002 (2026-11-26) found 2 FAIL (e):
