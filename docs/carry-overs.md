@@ -45,6 +45,19 @@ a first stable release."
 | 6 | scaffold-lint-layering review | The forbidden contracts in `.importlinter` list their source modules by hand, so a new module is not covered until someone adds it. | 2 (restructuring) |
 | 7 | scaffold-lint-layering | `grpc_ingress` imports `disco.worker` under `TYPE_CHECKING`. There are two import cycles, transports→runtime→router→transports and node→graph_data→model→node, and the top-level modules have no total layering. | with item 1 |
 
+## The Node interface (owner's decisions of 2026-11-27)
+
+The architect's suggestions 1–3 for the Model Developer's interface, and the
+owner's answers to them: "1 needs to be worked on together, making sure that
+we know how various use cases would be handled. 2 and 3 I would like to
+adopt."
+
+| # | Found in | Problem | Where | Priority |
+|---|---|---|---|---|
+| 28 | interface review, 2026-11-27 | A node sends to another node instance by name, so model code depends on the partitioner's allocation (`self.data.node_specs`, `incidence_matrix`, `by_node`, the sender index in a pickled header, as `examples/my-model` does). Suggested: send vectors or edge matrices over target vertices on a named flow, and let disco route. Owner: work it out together, use case by use case; it touches routing and promises, so decision 0003 applies. | `src/disco/node.py`, `graph_data.py`, `examples/my-model` | owner (design together) |
+| 29 | interface review, 2026-11-27 | One `on_events(simproc, events)` handler dispatched by `if self.active_simproc_name == ...`. Adopted (owner): one handler per simproc, checked against `model.yml` when the model loads. | `src/disco/node.py`, `runtime.py` | adopted, unscheduled |
+| 30 | interface review, 2026-11-27 | `self.data` mixes the node's own data (`vertex_data`, edge data, maps) with routing internals (`node_specs`, `incidence_matrix`, `by_node`, `node_index`). Adopted (owner): separate the two. Depends on 28 for what replaces the internals in model code. | `src/disco/graph_data.py` | adopted, after 28 |
+
 ## Data paths that do a dependency's work (decision 0002)
 
 | # | Found in | Problem | Where | Priority |
