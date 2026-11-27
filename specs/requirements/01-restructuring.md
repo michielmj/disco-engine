@@ -30,6 +30,17 @@ mypy strict, item 2, follows)"
 | 1 | Do operators see any change? A: no: the commands (`disco`, `disco-server`), the `config.toml` keys and the environment variable names stay exactly as they are. B: they may change too, documented in the README. | "A" |
 | 1 | Do the two slow data paths (carry-overs 23 and 24) join this requirement? A: no, they get their own small requirement after this one, so the restructuring changes no behaviour. B: yes. | "A" |
 
+Round 2, 2026-11-27, after the review of revision 1. The owner answered the
+first question ("What else belongs in the public interface? `GraphData` and
+`SimProcGraphData`, `Client`, `ExperimentStatus`, and the public exceptions:
+A: add them. B: keep the list as proposed.") in their own words:
+
+> Let's first think about the three types of users: the Model Developer creates a simulation model and defines data structure. The Experimentor installs the model, prepares the scenario data, and runs the simulation. The Operator installs the server and administers it.
+>
+> The Model Developer uses the disco module mostly via the Node interface. GraphData and SimProcGraphData are only accessed in a Node implementation via self.data. So none of the users has a need to import them.
+>
+> The Experimentor uses more of the disco interface. See the test_my_model.py file in the examples/my_model/tests folder. The Experimentor would use the Client. ExperimentStatus would only be used via that interface. So I think including it n the disco interface directly is not necessary.
+
 **What exists today** (surveyed 2026-11-27, at `staging` `c6364f7`):
 - **Layout.** `src/disco/` has 19 top-level modules (the largest
   `worker.py`, 1,255 lines) and nine subpackages: `cli`, `event_queue`,
