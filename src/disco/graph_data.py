@@ -58,6 +58,7 @@ class SimProcGraphData:
         columns: Sequence[ColumnElement[Any]] | Sequence[str],
         *,
         mask: GraphMask | None = None,
+        default_fill: Any | None = None,
     ) -> DataFrame:
         columns = list(_normalize_column_elements(columns, self.edge_table))
 
@@ -69,6 +70,7 @@ class SimProcGraphData:
                 columns=columns,
                 layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
+                default_fill=default_fill,
             )
 
     def inbound_edge_data(
@@ -76,6 +78,7 @@ class SimProcGraphData:
         columns: Sequence[ColumnElement[Any]],
         *,
         mask: GraphMask | None = None,
+        default_fill: Any | None = None,
     ) -> DataFrame:
         columns = list(_normalize_column_elements(columns, self.edge_table))
 
@@ -87,6 +90,7 @@ class SimProcGraphData:
                 columns=columns,
                 layer_idx=self.layer_idx,
                 mask=mask if mask is not None else self.node_mask,
+                default_fill=default_fill,
             )
 
     def outbound_map(
@@ -196,6 +200,7 @@ class GraphData:
         columns: Sequence[ColumnElement[Any]] | Sequence[str],
         *,
         mask: Vector | None = None,
+        default_fill: Any | None = None,
     ) -> DataFrame:
         columns = list(_normalize_column_elements(columns, self.node_table))
 
@@ -206,6 +211,7 @@ class GraphData:
                 vertex_table=self.node_table,
                 columns=columns,
                 mask=mask if mask is not None else self.node_mask,
+                default_fill=default_fill,
             )
 
     @property

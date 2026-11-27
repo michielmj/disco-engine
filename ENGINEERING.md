@@ -2173,8 +2173,10 @@ def get_vertex_data(
   name to value (`{"count": 0, "name": ""}`) for a table of mixed types. pandas
   decides what a value that does not fit a column's dtype does: today it warns
   and casts, and pandas 4 raises. `get_outbound_edge_data` and
-  `get_inbound_edge_data` take it the same way. `GraphData` and
-  `SimProcGraphData` do not forward it.
+  `get_inbound_edge_data` take it the same way. `GraphData.vertex_data` and
+  `SimProcGraphData.outbound_edge_data` / `inbound_edge_data` take it as an
+  optional keyword-only `default_fill` (default `None`) and pass it on unchanged:
+  no check, conversion or default of their own.
 
 Numeric vector extraction:
 

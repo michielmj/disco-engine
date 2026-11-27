@@ -65,7 +65,8 @@ semantics, which can change your own model code:
 - **Filling missing rows.** `default_fill` of `get_vertex_data` and of the edge-data functions in `disco.graph` is
   handed to `DataFrame.fillna` as it is. For a table of mixed types pass a mapping, `default_fill={"count": 0, "name": ""}`,
   so that each column gets a value of its own type: pandas warns today when a value does not fit a column's
-  dtype, and pandas 4 raises. `GraphData` does not offer `default_fill`: fill the frame it returns yourself.
+  dtype, and pandas 4 raises. `GraphData.vertex_data` and `SimProcGraphData.outbound_edge_data` / `inbound_edge_data` take the same
+  optional `default_fill` keyword and pass it on unchanged.
 
 The pandas 3 release notes list the other changes.
 
