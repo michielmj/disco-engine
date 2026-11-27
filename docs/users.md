@@ -83,6 +83,11 @@ files, and exports them to Arrow and Parquet for analysis after the run.
 > The problem is not that the crane cannot be a node of its own. In the layered DAG, it cannot be reserved, allocated, and released in the same process. Try to understand this mathematically.
 > (owner, 2026-11-27, correcting the architect, who had suggested a crane node on its own simproc)
 
+The owner's solution, as used so far:
+
+> My solution to the shared resource problem has been: two flows (layers): a production flow, and an allocation flow, opposite directions. Node B is downstream of Node A in the production flow. SharedResource node is at the end. Node A sends a request to SharedResource on production flow. Node B sends a request to SharedResource on production flow. SharedResource receives requests and calculates its earliest availability on the production flow and sends a reservation confirmation on the allocation flow to Node A and to Node B. SharedResource sends allocation confirmation to Node A on allocation flow. After a period, Node A sends a release confirmation to SharedResource on production flow. SharedResource then sends allocation confirmation to Node B on allocation flow. However, the allocation flow cannot send events to its own production flow. It can store the allocations but the production flow will have to wake-up at regular intervals to see that it got allocated the resource. The wake-up interval will determine how frequently Node A, B and SharedResource will need to synchronize their time on the production flow. If Node A knows that it will use the resource for at least an amount of time, it can make an advance promise to the next node.
+> (owner, 2026-11-27)
+
 ### Experimentor
 
 Installs the model, prepares the scenario data, and runs the simulation,
