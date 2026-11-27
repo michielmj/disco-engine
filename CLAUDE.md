@@ -80,8 +80,7 @@ A branch is done when:
 ## Where things live
 
 - `specs/requirements/`: the approved what: the owner's words and numbered rules.
-- `specs/briefs/<branch>.md`: the instruction for one branch. It is the
-  branch's first commit, and fix rounds are appended to it.
+- `specs/briefs/<branch>.md`: one branch's instruction, its first commit; fix rounds are appended.
 - `STATUS.md`: milestones in flight, releases, what waits on the owner.
 - `docs/carry-overs.md`: the backlog, every open problem, numbered.
 - `REVIEW.md`: the review standard.
@@ -98,6 +97,7 @@ introduces an exception to a stated discipline. Decide everything else
 yourself, and record it.
 
 Always escalate:
+- any change to the event and promise mechanics: only with the owner's explicit consent (decision 0003);
 - a new dependency;
 - loosening a lint rule or an import contract;
 - a change to a file format or its `version`, the wire format
@@ -194,6 +194,6 @@ has returned. Until then it is "the next free number".
 ## Code and tests
 
 Rules for code load from `.claude/rules/` when you touch matching files
-(`dependencies.md`, `python.md`, `testing.md`, `native.md`, `graph.md`,
-`transport.md`, `worker.md`). Procedures are skills: `run-tests`,
+(`mechanics.md`, `dependencies.md`, `python.md`, `testing.md`, `native.md`,
+`graph.md`, `transport.md`, `worker.md`). Procedures are skills: `run-tests`,
 `prove-a-rule`, `record-decisions`, `sync-spec`.

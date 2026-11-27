@@ -80,6 +80,9 @@ files, and exports them to Arrow and Parquet for analysis after the run.
 > I have used disco for manufacturing as well. The main challenge there is shared resources. For example, an overhead crane used in multiple processing steps. This tightly links nodes together, forcing them to stay synchronized. It requires a separate process layer for supporting reservation, allocation, and release of these resources. I have not yet thought of a good way to model this for disco.
 > (owner, 2026-11-27)
 
+> The problem is not that the crane cannot be a node of its own. In the layered DAG, it cannot be reserved, allocated, and released in the same process. Try to understand this mathematically.
+> (owner, 2026-11-27, correcting the architect, who had suggested a crane node on its own simproc)
+
 ### Experimentor
 
 Installs the model, prepares the scenario data, and runs the simulation,
