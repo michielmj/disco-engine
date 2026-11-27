@@ -34,8 +34,11 @@ GraphData methods"). The macOS job never ran since #50: GitHub refused
 `macos-14` ("The configuration 'macos-14-arm64-us-default' is not
 supported"); #61 moved both workflows to `macos-15`. The job then failed on
 the Intel wheel: numba and llvmlite publish no Intel macOS wheels for
-Python 3.14, so the owner chose "A": Apple Silicon only (#63). The next
-`Build` run on #56 is the first to test the Apple Silicon wheels.
+Python 3.14, so the owner chose "A": Apple Silicon only (#63). Build run
+45963449420 on 8a694ff passed on all three platforms: Linux, Windows and
+macOS-15 (cp314 and cp315 arm64 wheels built, the suite ran to 100% with one
+skip on each; the project's `-q -q` prints no totals). #56 is mergeable and
+waits only on the owner's merge and tag.
 
 ## Standing permissions
 
