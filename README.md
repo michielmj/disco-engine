@@ -50,6 +50,8 @@ pip install disco-engine
 
 Disco requires **Python 3.14 or later** (tested on 3.14 and 3.15). Its `disco-data-logger` dependency declares
 `<3.16`, so in practice Disco runs on 3.14 and 3.15 until that package supports a newer Python.
+On macOS, Disco supports Apple Silicon only: its dependency python-graphblas requires numba, which
+publishes no Intel macOS wheels for Python 3.14 and 3.15 today.
 
 ### For model authors: pandas 3
 
