@@ -41,6 +41,11 @@ A: add them. B: keep the list as proposed.") in their own words:
 >
 > The Experimentor uses more of the disco interface. See the test_my_model.py file in the examples/my_model/tests folder. The Experimentor would use the Client. ExperimentStatus would only be used via that interface. So I think including it n the disco interface directly is not necessary.
 
+Asked about the names that answer left open (the public exceptions,
+`AppSettings`, `SpectralClusteringPartitioner`), the owner answered:
+
+> Public Exceptions, AppSettings and SpectralClusteringPartitioner are all used by the experimentor.
+
 **What exists today** (surveyed 2026-11-27, at `staging` `c6364f7`):
 - **Layout.** `src/disco/` has 19 top-level modules (the largest
   `worker.py`, 1,255 lines) and nine subpackages: `cli`, `event_queue`,
