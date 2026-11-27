@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import numpy as np
+import pandas as pd
 from graphblas import Vector
 from sqlalchemy import (
     Column,
@@ -415,13 +416,68 @@ def test_outbound_and_inbound_map() -> None:
 
         # Check basic structure: non-zero entries in the right places
         rows, cols, vals = out_mat.to_coo()
-        entries = {(int(r), int(c)): float(v) for r, c, v in zip(rows, cols, vals, strict=False)}
+        entries = {(int(r), int(c)): float(v) for r, c, v in zip(rows, cols, vals, strict=True)}
         assert entries.get((0, 1)) == 1.5
         assert entries.get((1, 2)) == 2.5
 
         rows_i, cols_i, vals_i = in_mat.to_coo()
-        entries_i = {(int(r), int(c)): float(v) for r, c, v in zip(rows_i, cols_i, vals_i, strict=False)}
+        entries_i = {(int(r), int(c)): float(v) for r, c, v in zip(rows_i, cols_i, vals_i, strict=True)}
         assert entries_i.get((0, 1)) == 1.5
         assert entries_i.get((1, 2)) == 2.5
+
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: default_fill is handed to pandas (a scalar, or a mapping per column)
+# ---------------------------------------------------------------------------
+
+
+def test_default_fill_takes_a_per_column_mapping_on_a_mixed_table() -> None:
+    for engine, SessionLocal, _node_data, _edge_data in engine_session_and_model_tables():
+        metadata = MetaData()
+        mixed = Table(
+            "mixed",
+            metadata,
+            Column("scenario_id", String, primary_key=True),
+            Column("key", String, primary_key=True),
+            Column("name", String),
+            Column("count", Integer),
+        )
+        edge_mixed = Table(
+            "edge_mixed",
+            metadata,
+            Column("scenario_id", String, primary_key=True),
+            Column("source_key", String, primary_key=True),
+            Column("target_key", String, primary_key=True),
+            Column("name", String),
+            Column("count", Integer),
+        )
+        metadata.create_all(engine)
+
+        session: Session = SessionLocal()
+        _populate_vertices_and_edges(session, "S1")
+        session.execute(insert(mixed), [{"scenario_id": "S1", "key": "A", "name": "x", "count": 7}])
+        session.execute(
+            insert(edge_mixed),
+            [{"scenario_id": "S1", "source_key": "A", "target_key": "B", "name": "e", "count": 3}],
+        )
+        session.commit()
+        graph = Graph(layers={}, num_vertices=3, scenario_id="S1")
+        fill = {"count": 0, "name": ""}
+
+        plain = get_vertex_data(session, graph, mixed, [mixed.c.name, mixed.c.count])
+        df = get_vertex_data(session, graph, mixed, [mixed.c.name, mixed.c.count], default_fill=fill)
+        pd.testing.assert_frame_equal(df, plain.fillna(fill))
+        assert df["name"].tolist() == ["x", "", ""]
+        assert df["count"].tolist() == [7, 0, 0]
+
+        for fn in (get_outbound_edge_data, get_inbound_edge_data):
+            cols = [edge_mixed.c.name, edge_mixed.c.count]
+            plain_e = fn(session, graph, edge_mixed, cols, layer_idx=0)
+            edf = fn(session, graph, edge_mixed, cols, layer_idx=0, default_fill=fill)
+            pd.testing.assert_frame_equal(edf, plain_e.fillna(fill))
+            assert edf["name"].tolist() == ["e", ""]
+            assert edf["count"].tolist() == [3, 0]
 
         session.close()

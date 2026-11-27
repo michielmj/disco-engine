@@ -859,7 +859,7 @@ Experiment/partition status is updated through `ExperimentStore` helpers:
 Typical partition lifecycle (happy path):
 
 - `LOADED` -- prerequisites loaded (experiment, graph, partitioning, model).
-- `INITIALIZED` -- NodeRuntimes created and `initialize(**params)` completed.
+- `INITIALIZED` -- NodeRuntimes created and `initialize(params)` completed, where `params` is the experiment's `node_params`, the same dict `TestRun` passes (Ch 16).
 - `ACTIVE` -- worker enters `ACTIVE` and runners are created.
 - `FINISHED` -- all NodeRuntime runners completed and the run ends.
 
@@ -1636,6 +1636,10 @@ updated_at    TIMESTAMP NOT NULL
   random `mask_id` (UUID).
 - For each `(scenario_id, mask_id)` there are zero or more `vertex_index` rows.
 - `updated_at` is touched whenever a mask is ensured/persisted.
+- `updated_at` is a naive `DateTime` column holding UTC.
+  Cleanup compares `updated_at` with a naive UTC cutoff, so every write must
+  store naive UTC: a timezone-aware value would shift or break that
+  comparison and delete live masks.
 
 `GraphMask` is responsible for populating and maintaining this table; it is used
 from `graph.extract` and other higher‑level helpers.
@@ -1712,6 +1716,11 @@ Key fields (via `__slots__`):
     - Calls `has_self_loop` to forbid self‑loops.
     - Optionally calls `matrix_has_cycle` to detect cycles in the layer
       when `check_cycles=True`.
+      `matrix_has_cycle` is False for any acyclic layer (a chain `0→1→2` and
+      an empty graph included) and True for a cycle or a self‑loop, wherever
+      the cycle lies. Only real edges count: a stored zero is not an edge.
+      The answer is scipy's: `scipy.sparse.csgraph.connected_components`
+      (strong), fewer components than vertices means a cycle.
 
 #### 7.3.2 Structural Accessors
 
@@ -2159,7 +2168,15 @@ def get_vertex_data(
   - `"index"` → DataFrame indexed by vertex index.
   - `"key"` → DataFrame indexed by vertex key.
 
-- `default_fill` is an optional value to `fillna` for missing model rows.
+- `default_fill` is an optional value that is passed unchanged to
+  `DataFrame.fillna` for missing model rows: a scalar, or a mapping from column
+  name to value (`{"count": 0, "name": ""}`) for a table of mixed types. pandas
+  decides what a value that does not fit a column's dtype does: today it warns
+  and casts, and pandas 4 raises. `get_outbound_edge_data` and
+  `get_inbound_edge_data` take it the same way. `GraphData.vertex_data` and
+  `SimProcGraphData.outbound_edge_data` / `inbound_edge_data` take it as an
+  optional keyword-only `default_fill` (default `None`) and pass it on unchanged:
+  no check, conversion or default of their own.
 
 Numeric vector extraction:
 
@@ -3276,7 +3293,7 @@ During construction, NodeRuntime:
 
 Model code may require initialization prior to simulation start. NodeRuntime therefore exposes:
 
-- `initialize(**kwargs)`: forwards to `node.initialize(**kwargs)` and leaves the runtime in `INITIALIZED` state.
+- `initialize(params)`: takes one dict (the experiment's `node_params`), passes it to the node's `__init__` and leaves the runtime in `INITIALIZED` state.
 
 The Worker (or higher-level orchestration) is responsible for invoking `initialize` before starting the runner.
 
@@ -4396,7 +4413,8 @@ Each `NodeRuntime` receives its own `SeedSequence`. The master seed is never pas
   - sets `experiment.status = LOADED`
 
 - `initialize()`:
-  - calls `NodeRuntime.initialize(**experiment.params)` for each node in `partitioning.node_specs` order
+  - takes no argument: the params come from the experiment, as in the Worker. Calls `rt.initialize(experiment.node_params)` (one dict, `experiment.params or {}`) for each node in `partitioning.node_specs` order; `Experiment.node_params` is the one definition both TestRun and the Worker use
+  - `initialize(params)` raises `TypeError`
   - sets `experiment.status = INITIALIZED`
 
 - `run(duration)`:
@@ -4684,6 +4702,13 @@ minimising cross-partition event traffic.
    return `Partitioning.from_node_instance_spec(...)`.
 
 Node name format: `"p{part_idx}-{node_type}-{label_value_1}-..."`.
+
+**Node topology.** `Partitioning` records, per layer, a link from node `a` to
+node `b` when some real edge of the layer leaves a vertex of `a` and enters a
+vertex of `b`. A real edge is a stored entry that is not zero (a stored zero is
+not an edge); its weight, sign and dtype do not matter, so weights that cancel
+still give a link. It is computed on the layer's structure with the `any_pair`
+semiring (`incidence @ A @ incidenceᵀ`).
 
 ### 18.6 `_iter_node_instances` helper
 

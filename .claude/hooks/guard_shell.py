@@ -40,7 +40,7 @@ START = (
     r"(?:(?:sudo|nohup|time|command|builtin|exec)\s+)*"
 )
 # One shell word, quotes included: `user.name="JSN (Implementer Agent)"` is one word.
-WORD = r"""(?:[^\s"';&|]+|"[^"]*"|'[^']*')+"""
+WORD = r"""(?:[^\s"';&|]|"[^"]*"|'[^']*')+"""
 # `git` followed by any global options (-C <path>, -c <key=value>, --no-pager).
 GIT_OPTIONS = r"(?:\s+(?:-C\s+" + WORD + r"|-c\s+" + WORD + r"|--[\w-]+(?:=\S+)?))*"
 GIT = r"\bgit(?:\.exe)?" + GIT_OPTIONS + r"\s+"

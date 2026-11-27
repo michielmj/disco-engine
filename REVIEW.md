@@ -19,7 +19,12 @@ Report every finding, then classify it. A FAIL is one of these:
 - **(b)** a defect a real user can hit;
 - **(c)** a stated invariant broken on a realistic path, a rule of the brief
   not met, or a test that does not enforce its rule;
-- **(d)** a security issue on a reachable path.
+- **(d)** a security issue on a reachable path;
+- **(e)** the diff re-implements or works around a dependency's behaviour,
+  loops in Python over data where the library has a vectorised operation, or
+  slows a data path, without the owner's approval recorded in the brief
+  (decision 0002). Measure a suspected slowdown before and after; a
+  suspicion you could not measure is UNVERIFIED, not an observation.
 
 Everything else is an OBSERVATION, in one line. A FAIL needs a live
 violation; "someone could later write X" is an observation. Report
@@ -84,6 +89,15 @@ checked, for the owner".
    were taken on the code you review. A decision made silently is a finding.
 7. Nothing reads ambient host state (identity, tools, encoding) without
    supplying it.
+8. Responsibility and cost (decision 0002): for each change to production
+   code, whose job it is, disco's or a dependency's; whether a dependency's
+   documented way was used, against its release notes or deprecation docs;
+   and whether it runs on a data path, with the before-and-after numbers.
+   This holds even when the brief asked for the opposite: a brief that
+   orders a workaround is itself the finding.
+
+The architect's `<likely_wrong>` list focuses a review; it never limits it.
+Every item of this checklist applies to every branch.
 
 ## Report format
 

@@ -189,6 +189,11 @@ class Experiment:
         if self.duration <= 0:
             raise ValueError("duration must be > 0")
 
+    @property
+    def node_params(self) -> dict[str, Any]:
+        """The params every NodeRuntime is initialized with (Worker and TestRun alike)."""
+        return self.params or {}
+
     def normalize(self) -> None:
         # recompute all derived fields and enforce invariants
         for r in self.replications.values():

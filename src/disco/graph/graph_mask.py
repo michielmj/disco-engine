@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import graphblas as gb
 from graphblas import Vector
@@ -9,6 +9,14 @@ from sqlalchemy import delete, insert, select, update
 from sqlalchemy.orm import Session
 
 from .schema import vertex_masks
+
+
+def _utcnow() -> datetime:
+    """
+    The current UTC time as a naive datetime: the `updated_at` column is a naive
+    `DateTime` holding UTC, and rows already stored stay valid.
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class GraphMask:
@@ -77,7 +85,7 @@ class GraphMask:
         """
         Remove all masks whose updated_at is older than the configured age.
         """
-        cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+        cutoff = _utcnow() - timedelta(minutes=max_age_minutes)
         session.execute(delete(vertex_masks).where(vertex_masks.c.updated_at < cutoff))
 
     # ------------------------------------------------------------------ #
@@ -92,7 +100,7 @@ class GraphMask:
         - INSERT one row per *True* vertex index.
         """
         indices, values = self.vector.to_coo()
-        now = datetime.utcnow()
+        now = _utcnow()
 
         session.execute(
             delete(vertex_masks).where(
@@ -119,7 +127,7 @@ class GraphMask:
         """
         Bump updated_at for all rows of this mask to mark recent use.
         """
-        now = datetime.utcnow()
+        now = _utcnow()
         session.execute(
             update(vertex_masks)
             .where(

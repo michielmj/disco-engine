@@ -57,8 +57,8 @@ uv run python -m grpc_tools.protoc -I src --python_out=src --grpc_python_out=src
   src/disco/transports/proto/transport.proto
 ```
 
-disco ships to Linux, macOS and Windows. The tests must pass on each, and CI
-runs them on all of them; the run-tests skill says how.
+disco ships to Linux, macOS and Windows; the tests must pass on each (`test.yml`
+on Linux, cibuildwheel on all three). The run-tests skill says where and how.
 
 ## Definition of done
 
@@ -104,7 +104,9 @@ Always escalate:
   (`transport.proto`, envelopes) included;
 - a cost-versus-correctness trade where both sides are defensible;
 - anything that changes what data leaves the process;
-- finding that a documented fact is wrong.
+- finding that a documented fact is wrong;
+- re-implementing or working around a dependency's behaviour, and a measured
+  slowdown on a data path (decision 0002, `.claude/rules/dependencies.md`).
 
 A requirement that can be read two ways is a question, not an instruction.
 Read scope the narrower way, which needs no permission; treat product
@@ -192,6 +194,6 @@ has returned. Until then it is "the next free number".
 ## Code and tests
 
 Rules for code load from `.claude/rules/` when you touch matching files
-(`python.md`, `testing.md`, `native.md`, `graph.md`, `transport.md`,
-`worker.md`). Procedures are skills: `run-tests`, `prove-a-rule`,
-`record-decisions`, `sync-spec`.
+(`dependencies.md`, `python.md`, `testing.md`, `native.md`, `graph.md`,
+`transport.md`, `worker.md`). Procedures are skills: `run-tests`,
+`prove-a-rule`, `record-decisions`, `sync-spec`.
