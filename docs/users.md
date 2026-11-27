@@ -88,6 +88,19 @@ The owner's solution, as used so far:
 > My solution to the shared resource problem has been: two flows (layers): a production flow, and an allocation flow, opposite directions. Node B is downstream of Node A in the production flow. SharedResource node is at the end. Node A sends a request to SharedResource on production flow. Node B sends a request to SharedResource on production flow. SharedResource receives requests and calculates its earliest availability on the production flow and sends a reservation confirmation on the allocation flow to Node A and to Node B. SharedResource sends allocation confirmation to Node A on allocation flow. After a period, Node A sends a release confirmation to SharedResource on production flow. SharedResource then sends allocation confirmation to Node B on allocation flow. However, the allocation flow cannot send events to its own production flow. It can store the allocations but the production flow will have to wake-up at regular intervals to see that it got allocated the resource. The wake-up interval will determine how frequently Node A, B and SharedResource will need to synchronize their time on the production flow. If Node A knows that it will use the resource for at least an amount of time, it can make an advance promise to the next node.
 > (owner, 2026-11-27)
 
+And, correcting the architect's restatement:
+
+> No. A's production start is postponed each time with delta until the allocation is seen.
+> (owner, 2026-11-27)
+
+So the waiting is the model's logic: at each production wake-up A checks the
+allocation it stored from the allocation flow, and if it is not there yet,
+sets its next wake-up Δ later. The engine makes this safe: a node runtime
+handles its simprocs strictly in epoch order (earliest next epoch first, the
+higher simproc at a tie, and it waits while any simproc's next epoch is
+unknown: `runtime.py` `runner`), so the stored allocations are complete up
+to the epoch the production handler runs at.
+
 ### Experimentor
 
 Installs the model, prepares the scenario data, and runs the simulation,
